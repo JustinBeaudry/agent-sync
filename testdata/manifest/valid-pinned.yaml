@@ -1,0 +1,17 @@
+# Example aienvs workspace manifest — pinned for CI.
+version: 1
+
+canonical:
+  url: https://github.com/example/agents-config.git
+  ref: main
+  commit: 1111111111111111111111111111111111111111
+
+# Project-level trust anchor. CI fails closed if this drifts from the
+# resolved SHA above.
+trusted_sha: 1111111111111111111111111111111111111111
+
+targets:
+  - claude
+  - cursor
+
+scope: project

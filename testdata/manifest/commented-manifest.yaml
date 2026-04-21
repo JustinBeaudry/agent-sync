@@ -1,0 +1,19 @@
+# Project aienvs manifest.
+# Owned by: platform-eng@example.com
+version: 1
+
+# Canonical agent-config source.
+canonical:
+  url: https://github.com/example/agents-config.git
+  ref: main
+  # commit is filled by `aienvs init`.
+  commit: ""
+
+# Project trust anchor — must match canonical.commit post-resolve.
+trusted_sha: ""
+
+targets:
+  - claude   # primary adapter
+  - cursor   # primary adapter
+
+scope: project

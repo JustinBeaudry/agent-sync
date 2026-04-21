@@ -1,0 +1,5 @@
+version: 1
+canonical:
+  local_path: /tmp/agents-config
+targets:
+  - claude

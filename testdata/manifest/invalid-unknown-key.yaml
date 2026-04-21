@@ -1,0 +1,3 @@
+version: 1
+canonicl: # intentional typo — DisallowUnknownField must reject
+  url: https://github.com/example/agents-config.git
