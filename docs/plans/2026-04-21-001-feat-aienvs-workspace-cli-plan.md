@@ -25,15 +25,15 @@ Traceability back to origin `R#`:
 
 - R1 → Units 2, 3, 16, 17 (workspace definition, discovery, CLI + wizard surface)
 - R2 → Unit 2 (manifest schema + writer)
-- R3 → Units 8, 9, 10, 11, 20 (tiered adapters + extension contract)
+- R3 → Units 8, 8b, 9, 10, 11, 20 (tiered adapters + v1 MVP extension contract + 8b post-v1 extensions)
 - R4, R5 → Units 5, 13, 18 (sync model, offline strict, pinned-cached-succeeds)
 - R6 → Unit 5 (pin-at-init, floating opt-in)
 - R7 → Unit 4 (cache + URL canonicalization)
 - R8 → Units 1, 3, 13 (safe writes, logical discovery, cycle-safe walk)
 - R9 → Unit 19 (hooks + watch with explicit install)
-- R10 → Units 12, 13, 14 (reserved-subdir ownership, ledger, orphan/adopt flow)
-- R11 → Units 7, 8 (IR + declarative-only adapter output)
-- R12 → Units 9, 10, 11 (AGENTS.md + per-tool overlays)
+- R10 → Units 12, 12a, 13, 14 (reserved-subdir + tool-owned-file ownership, ledger, merge primitives, orphan/adopt flow)
+- R11 → Units 7, 8, 12a (IR + declarative-only adapter output + tool-owned-file merge)
+- R12 → Units 9, 10, 11, 12a (AGENTS.md + per-tool overlays via tool-owned-file merge)
 - R13 → Units 16, 17 (Go + Bubble Tea, fully spec'd wizards, flag parity)
 - R14 → Unit 16 (command surface + accessibility)
 - R15 → Units 1, 13, 21 (cross-platform via `os.Root` + CI matrix)
@@ -600,20 +600,22 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Goal:** Ship the `aienvs/v1` adapter protocol as LSP-style `Content-Length`-framed JSON-RPC 2.0 over stdin/stdout, with the full op surface (initialize/initialized lifecycle, capabilities, declared_outputs, cancel, shutdown, progress, per-op timeouts, structured errors, magic cookie, `_meta`), a subprocess runner, an in-process shim for bundled adapters, and a conformance test harness that third-party adapters can embed in their own CI. Freeze the wire protocol at the end of this unit.
 
+**v1 MVP vs Unit 8b (deferred post-v1):** MVP ships transport (`Content-Length:`/`Content-Type:` framing + JSON-RPC 2.0 envelope), `initialize` → `initialized` lifecycle, `capabilities{}`, `declared_outputs`, `shutdown`, magic-cookie handshake, JSON-RPC 2.0 standard error codes + `data.error_class` (no LSP-extension codes), reserved `_meta`, the `write_file`/`write_tool_owned`/`mkdir`/`delete`/`warning` op set, default timeouts (non-overridable), and the Go reference adapter. **Deferred to Unit 8b** (ship when a second out-of-tree adapter demonstrates concrete need): counter-propose version negotiation, `cancel` notification (`$/cancelRequest` analog), `$/progress` tokens, per-method timeout overrides in `adapter.yaml`, LSP-extension error codes (`-32800`, `-32801`, `-32803`), and the Python reference adapter. Rule-of-Three gate: don't freeze extensions before third-party usage signals the shape. All 8b additions are additive to `aienvs/v1`; no protocol-version bump — `capabilities{}` is the extension point.
+
 **Requirements:** R3, R11
 
 **Dependencies:** Units 1, 7.
 
 **Files:**
 - Create: `internal/adapter/contract/framing.go` (LSP `Content-Length:`/`Content-Type:` header reader/writer over `io.Reader`/`io.Writer`)
-- Create: `internal/adapter/contract/jsonrpc.go` (JSON-RPC 2.0 envelope: request/response/notification; ID correlator; error-code table including LSP extensions `-32800 RequestCancelled`, `-32801 ContentModified`, `-32803 RequestFailed`)
+- Create: `internal/adapter/contract/jsonrpc.go` (JSON-RPC 2.0 envelope: request/response/notification; ID correlator; error-code table. **MVP:** JSON-RPC 2.0 standard codes only. **Unit 8b:** LSP extensions `-32800 RequestCancelled`, `-32801 ContentModified`, `-32803 RequestFailed`.)
 - Create: `internal/adapter/contract/protocol.go` (method types: `initialize`, `initialized`, `emit`, `progress`, `cancel`, `shutdown`; result types; `Capabilities` struct; `DeclaredOutput` struct; reserved `_meta` field on every envelope)
 - Create: `internal/adapter/contract/schema/*.json` (per-method JSON Schemas, one file per method for readability)
 - Create: `internal/adapter/subprocess.go` (process management, magic-cookie env var `AIENVS_ADAPTER_COOKIE`, stdio pipe lifecycle, stderr capture to in-memory ring buffer, SIGTERM-after-shutdown flow, timeouts, crash classifier)
 - Create: `internal/adapter/inproc.go` (in-process shim speaking the same wire protocol over `io.Pipe` for bundled adapters)
 - Create: `internal/adapter/manifest.go` (`adapter.yaml`: `name`, `version`, `contract_version: aienvs/v1`, capabilities ref, command, per-method timeout overrides)
 - Create: `internal/adapter/discover.go` (PATH lookup `aienvs-adapter-<name>` + explicit `adapters:` in manifest + bundled)
-- Create: `internal/adapter/conformance/harness.go`, `conformance/corpus/*.json` (golden-file corpus; record/replay), `conformance/echo/` (reference "echo" adapter in Go), `conformance/echo-py/` (reference Python adapter, minimal)
+- Create: `internal/adapter/conformance/harness.go`, `conformance/corpus/*.json` (golden-file corpus; record/replay), `conformance/echo/` (reference "echo" adapter in Go). **Unit 8b:** `conformance/echo-py/` (Python reference adapter).
 - Create: `docs/spec/adapter-protocol-v1.md` (authoritative wire spec; examples; error table; versioning policy)
 - Create: `pkg/adapterkit/` (public helpers for Go authors: framing reader/writer, JSON-RPC dispatcher, capabilities builder, testing helpers)
 - Test: `internal/adapter/contract/framing_test.go`, `jsonrpc_test.go`, `protocol_test.go`; `subprocess_test.go`, `inproc_test.go`, `manifest_test.go`; `conformance/harness_test.go`
@@ -624,20 +626,20 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
   1. CLI spawns adapter with cookie env var + stdio pipes.
   2. CLI sends `initialize` request: `{jsonrpc:"2.0", id:1, method:"initialize", params:{client: "aienvs/<version>", protocol_versions:["aienvs/v1"], cookie, workspace_root, reserved_prefix, ir_version:"v1", _meta:{}}}`.
   3. Adapter responds with result: `{server:"<name>/<ver>", protocol_version:"aienvs/v1", capabilities:{concept_kinds:{rule:"supported", skill:"partial", ...}, write_tool_owned: true, progress: true}, declared_outputs:[{path, mode: "owned-subdir"|"tool-owned-entry", jsonpath?, section_id?}], _meta:{}}`.
-  4. On version mismatch, **adapter counter-proposes** its highest supported protocol (MCP rule); CLI decides to continue or refuse with `ErrAdapterProtocolMismatch`.
+  4. On version mismatch, **MVP:** CLI refuses with `ErrAdapterProtocolMismatch`. **Unit 8b:** adapter counter-proposes its highest supported protocol (MCP rule); CLI decides to continue or refuse.
   5. CLI sends `initialized` notification. Adapter must not emit real ops before receiving it.
-  6. CLI sends `emit` request per target, carrying IR. Adapter streams progress notifications (`$/progress` with `WorkDoneProgress` begin/report/end payloads keyed by a `progressToken`) and then responds with a final result listing the ops performed.
+  6. CLI sends `emit` request per target, carrying IR. **MVP:** adapter streams `write_file`/`write_tool_owned`/`mkdir`/`delete`/`warning` ops then responds with a final result listing the ops performed. **Unit 8b:** `$/progress` notifications (`WorkDoneProgress` begin/report/end keyed by a `progressToken`) for long-running emits.
   7. CLI sends `shutdown` request (Terraform `Stop` analog). Adapter drains, responds, and CLI sends SIGTERM-then-SIGKILL bounded by timeout (default 5s).
 - **`declared_outputs` as integrity gate.** Adapter declares its full planned output set in `initialize` result (Bazel `declare_file` pattern). Any emit op referencing a path outside `declared_outputs` is rejected by the CLI with `ErrUndeclaredOutput`. Deletes inside declared paths are fine; writes outside require a protocol-level `declare_additional` op (out of scope for v1 — defer).
 - **Op set (emit stream).** All ops speak JSON-RPC notifications inside the `emit` call via a streaming response pattern (CLI reads response-content incrementally):
-  - `write_file` (path, content, mode, encoding)
+  - `write_file` (path, content, mode, encoding: `utf8`|`base64`). Size cap **8 MiB per op** default (configurable via `adapter.yaml`); larger payloads rejected with `ErrPayloadTooLarge`. Base64 required for any non-UTF-8 bytes (skill assets, binary plugin payloads). CLI decodes before writing; ledger hash is over decoded bytes.
   - `write_tool_owned` (path, kind: `json-pointer`|`toml-path`|`markdown-section`, locator, content) — **new in v1**; supports the per-entry-in-tool-owned-file ownership mode (decision #25)
   - `mkdir` (path, mode)
   - `delete` (path) — for ownership-migration flows
   - `warning` (concept_id, status: `degraded`|`partial`, note)
   - `symlink` (blocked by default; requires per-adapter justification in `adapter.yaml`)
-- **Cancellation.** `cancel` notification (analog of LSP `$/cancelRequest`) carrying the JSON-RPC id of the in-flight `emit` request. CLI uses it when a sibling target fails under atomic-default mode so remaining adapters don't finish wasted work.
-- **Timeouts.** Defaults (k8s mutating-webhook convention): handshake 5s, per-emit 30s, shutdown 5s. Overridable per method in `adapter.yaml`. Timeout is enforced from CLI side; adapter has no authority to extend it.
+- **Cancellation [Unit 8b].** `cancel` notification (LSP `$/cancelRequest` analog) carrying the JSON-RPC id of the in-flight `emit` request. **MVP:** on atomic-mode sibling failure, CLI sends `shutdown` to remaining adapters (not a mid-emit cancel) and discards their staged output — acceptable since staging is cheap and no user-visible file has been swapped.
+- **Timeouts.** Defaults (k8s mutating-webhook convention): handshake 5s, per-emit 30s, shutdown 5s. **MVP:** defaults only. **Unit 8b:** per-method overrides in `adapter.yaml`. Timeout is enforced from CLI side; adapter has no authority to extend it.
 - **Errors.** JSON-RPC 2.0 error object plus `data.error_class` field naming the CLI-side class: `adapter-panic`, `adapter-timeout`, `adapter-protocol-mismatch`, `adapter-undeclared-output`, `adapter-exec-denied`, `adapter-capability-lied`. Exit-code taxonomy: adapter's own `exit_code` + `stderr_tail` attached to the error `data` on abnormal termination.
 - **Capabilities vs. protocol version.** `capabilities` grow additively without bumping `aienvs/v1` — that's what the object is for. Protocol-version bumps are reserved for breaking changes to the envelope or framing. Forbid mid-session capability changes in v1.
 - **Conformance harness.** Exposed as `aienvs adapter conformance-test <binary>`. Components:
@@ -667,7 +669,41 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 - Integration: conformance harness replay over the frozen corpus is byte-stable across OSes.
 - Security: shell-starting the adapter manually (no cookie env var) → adapter refuses on first frame.
 
-**Verification:** `docs/spec/adapter-protocol-v1.md` is authoritative and matches code; both reference adapters pass conformance; the protocol spec + JSON Schemas are frozen at unit close (any later change requires a new unit and a protocol-version bump discussion).
+**Verification:** `docs/spec/adapter-protocol-v1.md` is authoritative and matches code; Go reference adapter passes conformance; the wire frame + JSON-RPC envelope + MVP lifecycle are frozen at unit close. `capabilities{}` and `_meta` remain the additive extension points — Unit 8b additions do not bump `aienvs/v1`.
+
+- [ ] **Unit 8b: Adapter protocol extensions (post-v1 minor)**
+
+**Goal:** Ship the deferred-from-Unit-8 protocol surface once a second out-of-tree adapter demonstrates concrete need. Rule-of-Three gate: each extension ships only when a real adapter cites why the MVP surface is insufficient.
+
+**Requirements:** R3, R11 (additive only).
+
+**Dependencies:** Unit 8 frozen; at least one out-of-tree adapter beyond the Unit 20 reference demanding the extension.
+
+**Files:**
+- Update: `internal/adapter/contract/jsonrpc.go` (add LSP extension error codes `-32800 RequestCancelled`, `-32801 ContentModified`, `-32803 RequestFailed`)
+- Update: `internal/adapter/contract/protocol.go` (add `cancel` notification method; add `$/progress` notifications; add `counter_proposed_protocol_version` result field on `initialize` mismatch path)
+- Create: `internal/adapter/contract/progress.go` (`WorkDoneProgress` begin/report/end envelope)
+- Update: `internal/adapter/manifest.go` (per-method timeout overrides; schema-validated at load)
+- Create: `internal/adapter/conformance/echo-py/` (Python reference adapter using only stdlib)
+- Update: `internal/adapter/conformance/harness.go` (tag each test with the protocol features it exercises so pre-8b adapters pass without extensions)
+- Update: `docs/spec/adapter-protocol-v1.md` (document additive extensions; do not renumber; `capabilities{}` flags expose each extension so adapters advertise support)
+- Test: extension-specific scenarios below.
+
+**Approach:**
+- **All additions additive.** No protocol-version bump. `capabilities.supports_cancel`, `capabilities.supports_progress`, `capabilities.supports_counter_propose` expose each extension. Adapters that don't advertise a capability behave identically to MVP.
+- **Per-extension Rule-of-Three gate.** Ship `cancel` when a long-running adapter needs mid-emit cancellation. Ship `$/progress` when an adapter with multi-minute emit cycles ships. Ship counter-propose when a third-party adapter targets `aienvs/v2` and needs graceful downgrade.
+- **Python reference adapter** validates the wire protocol cross-language without pulling in a gRPC-sized dependency; stdlib-only.
+- **No breaking changes to MVP error data shape.** LSP extension codes added alongside JSON-RPC standard codes; `data.error_class` remains the CLI-side classifier.
+
+**Test scenarios:**
+- Counter-propose: CLI offers `aienvs/v1`, adapter replies with `counter_proposed_protocol_version: "aienvs/v0"` → CLI refuses with `ErrAdapterProtocolMismatch`; adapter replies `aienvs/v1` → accepted.
+- `cancel` mid-emit: CLI sends `cancel` with the in-flight `emit` id → adapter stops within 2s, responds with error `-32800 RequestCancelled`; CLI discards staged output.
+- `$/progress`: long emit surfaces begin/report/end to CLI progress renderer without blocking the `emit` response.
+- Python `echo-py` passes the full conformance harness with all MVP + extension capabilities declared.
+- Backward compat: MVP-only adapter (declaring no extensions) passes the harness with extension tests auto-skipped via capability tags.
+- Per-method timeout override: `adapter.yaml` sets `emit: 120s`; adapter emits for 60s → no timeout; emits for 130s → `adapter-timeout` class error.
+
+**Verification:** Unit 8's frozen corpus passes unchanged; extension tests tagged and gated by capability flags; no MVP consumer (Units 9/10/11/20) requires 8b to function.
 
 - [ ] **Unit 9: Primary adapter — claude**
 
@@ -675,7 +711,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Requirements:** R3, R11, R12
 
-**Dependencies:** Units 7, 8, 12 (per-entry ledger primitives).
+**Dependencies:** Units 7, 8, 12 (per-entry ledger primitives), 12a (tool-owned-file merge).
 
 **Files:**
 - Create: `internal/adapter/bundled/claude/adapter.go`
@@ -722,7 +758,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Requirements:** R3, R11, R12
 
-**Dependencies:** Units 7, 8, 12.
+**Dependencies:** Units 7, 8, 12, 12a.
 
 **Files:**
 - Create: `internal/adapter/bundled/cursor/adapter.go`, `capabilities.yaml`, `emit.go`
@@ -755,7 +791,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Requirements:** R3, R11, R12
 
-**Dependencies:** Units 7, 8, 12.
+**Dependencies:** Units 7, 8, 12, 12a.
 
 **Files:**
 - Create: `internal/adapter/bundled/codex/adapter.go`, `capabilities.yaml`, `emit.go`
@@ -803,7 +839,8 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 - Create: `internal/ledger/load.go`, `internal/ledger/write.go` (atomic write via `fsroot`)
 - Create: `internal/ledger/migrate.go` (schema-version upgrades gated behind `--migrate-state`)
 - Create: `internal/locks/flock.go` (bounded `TryLockContext`; PID+host sidecar; stale-PID detection via signal-0 / `OpenProcess`)
-- Test: `internal/ledger/roundtrip_test.go`, `internal/ledger/migrate_test.go`, `internal/locks/flock_test.go`
+- Create: `internal/locks/filelock.go` (per-external-file flock registry keyed by canonical absolute path; serializes concurrent writes to shared tool-owned files — workspace `AGENTS.md` written by both cursor + codex adapters, `.mcp.json` written by anything that touches it. Orthogonal to the per-target lock: an adapter holds its target lock for the whole sync, plus grabs per-file locks only across the read-merge-write atomic rename in Unit 12a.)
+- Test: `internal/ledger/roundtrip_test.go`, `internal/ledger/migrate_test.go`, `internal/locks/flock_test.go`, `internal/locks/filelock_test.go`
 
 **Approach:**
 - Ledger schema is v1; `Ledger.SchemaVersion` field explicit from day one so v2 has a migration point.
@@ -822,8 +859,78 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 - Concurrency: two syncs race for the same target lock; one wins, other bounded-times-out.
 - Stale-PID: kill process mid-hold (test scenario simulates this); next sync detects dead PID past age threshold and breaks lock with notice.
 - Error path: sidecar present, PID still alive → explicit "another sync running" error.
+- Concurrency (external file): two adapters race on workspace `AGENTS.md` via per-external-file flock → serialized; both adapters' `<!-- aienvs:begin id=… -->` sections land; user content between markers byte-identical; no torn writes.
+- Concurrency (external file, timeout): per-external-file lock held > bounded timeout → second waiter surfaces `ErrFileLockTimeout` naming the path and holding adapter.
 
-**Verification:** no ledger corruption after forced crashes; lock-break is audit-logged.
+**Verification:** no ledger corruption after forced crashes; lock-break is audit-logged; per-external-file locks cover every path the tool-owned-file merges (Unit 12a) touch.
+
+- [ ] **Unit 12a: Tool-owned-file merge — JSON / TOML / markdown-section round-trip**
+
+**Goal:** Provide the merge primitives that `write_tool_owned` depends on — insert/update/remove managed entries inside user-owned files (`.mcp.json` at workspace root, `.cursor/mcp.json`, `.codex/config.toml`, workspace-root `AGENTS.md`, `CLAUDE.md`) without corrupting user-authored content. Library choices frozen here; round-trip fixtures locked; recovery rules for malformed input specified. This is the plan's highest data-loss surface and gets its own unit instead of being spread across Units 9–11.
+
+**Requirements:** R10, R11, R12
+
+**Dependencies:** Unit 1 (`fsroot` safe-write), Unit 12 (per-external-file flock).
+
+**Files:**
+- Create: `internal/merge/locator.go` (locator types: `JSONPointer`, `TOMLPath`, `MarkdownSection`; validation + normalization)
+- Create: `internal/merge/json.go` (order-preserving surgical edits via `tidwall/sjson` + parse validation via `encoding/json` with `UseNumber`)
+- Create: `internal/merge/toml.go` (comment + table-order preservation via `github.com/pelletier/go-toml/v2` Document AST)
+- Create: `internal/merge/markdown.go` (section-marker parser; recovery rules for malformed/nested/duplicate markers)
+- Create: `docs/spec/tool-owned-merge-v1.md` (authoritative contract: what round-trips byte-identical, what normalizes, what's rejected)
+- Test: `internal/merge/json_test.go`, `toml_test.go`, `markdown_test.go`, `locator_test.go`
+- Test: `testdata/merge/json/mcp/{before,patch,expected}.json`, `testdata/merge/json/cursor-mcp/*`
+- Test: `testdata/merge/toml/codex-config/{before,patch,expected}.toml`
+- Test: `testdata/merge/markdown/agents-md/{before,patch,expected}.md`, `testdata/merge/markdown/malformed/*`
+
+**Approach:**
+
+- **JSON (`.mcp.json`, `.cursor/mcp.json`):**
+  - **Library:** `tidwall/sjson` for surgical set/delete by JSON-pointer; `encoding/json` with `json.Decoder.UseNumber()` for strict parse validation before write.
+  - **Key-order preservation:** `sjson` preserves original key order on update. Inserts append at the end of the parent object (sjson documented behavior). User's non-aienvs keys never moved.
+  - **Indentation:** probe existing file for indentation (2-space vs 4-space vs tabs) via the first whitespace after the outermost `{`; default 2-space for new files. Trailing newline preserved if present in input.
+  - **Aienvs-owned entries identified by key-name prefix** (`aienvs_<id>`). No sidecar file, no managed comment (JSON has no comments). Ledger records the JSON-pointer locator + slice hash.
+  - **Reject:** invalid JSON input (hard error, refuse to emit — never auto-fix); duplicate `aienvs_<id>` keys under the same parent (indicates ledger drift).
+- **TOML (`.codex/config.toml`):**
+  - **Library:** `github.com/pelletier/go-toml/v2` Document AST (`toml.NewDecoder(r)` + `toml.NewEncoder(w).SetIndentTables(true)`).
+  - **Comment preservation:** go-toml v2 preserves user comments on tables it doesn't touch. Aienvs-owned tables (`[mcp_servers.aienvs_<id>]`) get the managed-file header comment on emit.
+  - **Table ordering:** append aienvs-owned tables at end; user's existing tables stay in their original positions.
+  - **Reject:** invalid TOML (hard error); duplicate `[mcp_servers.aienvs_<id>]`.
+- **Markdown (workspace-root `AGENTS.md`, `CLAUDE.md` overlay):**
+  - **Section markers:** `<!-- aienvs:begin id=<id> source=<url>@<short-sha> -->` / `<!-- aienvs:end id=<id> -->`. Line-based; case-sensitive; no leading whitespace permitted on the marker line.
+  - **Recovery rules:**
+    - Well-formed matched pair → replace content between markers; user text outside untouched byte-for-byte.
+    - `begin` without matching `end` → **refuse** with `ErrMalformedManagedSection`, name the line number, recommend `aienvs unmanage <target>` or manual repair. Never guess end boundary.
+    - `end` without matching `begin` → same refuse-and-name behavior.
+    - Nested `begin` inside an open section → refuse.
+    - Duplicate `id` (two begin/end pairs with same id) → refuse; ledger invariant is one section per id.
+    - Indented marker (user wrapped marker in a blockquote or list) → treat as user content, not a marker; emit a new section at end of file; warn.
+  - **New-file emit:** create file with a top-of-file managed header ("Partially managed by aienvs — edit outside `<!-- aienvs:begin -->` / `<!-- aienvs:end -->` blocks only.") followed by the managed sections.
+- **Atomic writes (all three formats):** acquire the per-external-file flock from Unit 12, read-parse-merge-write to `<file>.aienv-tmp`, `fsync`, `rename` over the original. Ledger records `{path, locator_kind, locator_value, slice_hash}` per entry so:
+  - Orphan deletion removes individual entries without touching user slices.
+  - `validate` detects hand-edits to aienvs-owned slices separately from hand-edits to user slices.
+- **Ownership tests:** mutation harness introduces single-byte corruption in a user-content region; post-merge, user region must be byte-identical. Aienvs-owned region is authoritative and gets reset.
+
+**Patterns to follow:** `tidwall/sjson` surgical-edit semantics; `pelletier/go-toml/v2` Document round-trip idiom; HashiCorp HCL2 partial-file editing; `yq` key-preservation behavior.
+
+**Test scenarios:**
+- Happy path (JSON): merge `mcpServers.aienvs_foo` into `.mcp.json` containing 3 user-authored servers → user servers byte-identical, new entry appended, indentation preserved, trailing newline preserved.
+- Happy path (JSON remove): subsequent sync without the entry → `aienvs_foo` deleted, user entries unchanged, trailing-comma handling correct.
+- Happy path (TOML): merge `[mcp_servers.aienvs_foo]` into `.codex/config.toml` with user `[general]` + comments → comments preserved; aienvs table appended; user table position unchanged.
+- Happy path (Markdown): merge managed section between markers in `AGENTS.md` with user content before and after → user content byte-identical; managed content replaced.
+- Happy path (Markdown multi-adapter): cursor and codex each write sections with distinct ids → both present after sequential syncs; ids stable.
+- Error path (JSON): invalid JSON input → `ErrMalformedToolOwnedFile` with line/column; no write attempted.
+- Error path (Markdown): `begin` without `end` → `ErrMalformedManagedSection`; file untouched.
+- Error path (Markdown): duplicate `begin id=foo` → same error.
+- Error path (TOML): invalid TOML → `ErrMalformedToolOwnedFile`; no write.
+- Edge case (Markdown): user indented `begin` inside a blockquote → parser ignores as user content; new section appended at end; warning logged; original blockquoted line preserved.
+- Edge case (TOML): user reordered keys inside `[mcp_servers.aienvs_foo]` manually → next sync resets (aienvs-owned slice authoritative); `validate` surfaces the hand-edit.
+- Concurrency: two adapters race on `AGENTS.md` through Unit 12 per-file flock → serialized; final file has both sections; no torn writes.
+- Round-trip stability: emit → parse → re-emit with identical IR → byte-identical output (golden fixtures for each format).
+- Mutation: single-byte corruption in user content outside managed region → post-merge that region byte-identical (mutation-test gate).
+- Fuzz: randomized user content preceding/following managed section does not break parse or corrupt aienvs-owned slice.
+
+**Verification:** `docs/spec/tool-owned-merge-v1.md` is authoritative and matches code; golden fixtures cover every recovery branch; mutation test passes across all three formats; Unit 9/10/11 adapters consume this unit's API exclusively for any non-reserved-subdir emission.
 
 - [ ] **Unit 13: Atomic staging + swap + rollback — staging-under-target, single-parent `os.Root`, explicit recovery state machine**
 
@@ -1268,6 +1375,28 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 **Phase F — Extension SDK & release (Units 20–21).** SDK + conformance kit + release packaging. v1 launch.
 
 Milestone markers: end of Phase B is the first alpha (can init + materialize); end of Phase C is the first beta (can sync, unsafe); end of Phase D is the first release candidate; end of Phase F is v1.0.0.
+
+### MVP carve — `v0.1.0-alpha` (smallest useful shippable surface)
+
+The full plan is 21+ units and reads like a 3–6 month critical path. To derisk, ship a narrower MVP first that delivers 80% of the origin-doc value with ~50% of the unit count, then grow into the full v1.
+
+**MVP includes:**
+- Units 1–7 (foundation + IR decoder) — full scope.
+- Unit 8 **MVP subset only** (no Unit 8b extensions: no progress, no cancel, no counter-propose, no Python reference adapter, defaults-only timeouts).
+- Unit 9 **only** (`claude` adapter). `cursor` + `codex` adapters (Units 10, 11) **defer to v0.2**.
+- Units 12 + 12a (ledger + per-external-file lock + JSON/TOML/markdown merge).
+- Unit 13 (atomic swap + recovery state machine).
+- Unit 15 (sync summary + capability report + JSON output).
+- Unit 16 **subset**: `init` and `sync` subcommands only. Defer `validate`, `watch`, `hooks`, `adapter install`, `unmanage`, `rollback`, `status` to v0.2+.
+- Unit 6 **subset**: `trusted_sha:` in manifest + `trust.jsonl` append/read + `aienvs trust pin` / `trust verify`. Defer `trust pending` / `diff` / `promote` / `allow-new-shas` / `reset` / `revoke` / `compact` to v0.2.
+
+**MVP excludes:** Units 8b, 10, 11, 14 (orphan + adopt ship in MVP with Unit 13; *adopt-prefix UX wizard* defers), 17 (Bubble Tea wizards — MVP is flag-only), 18 (`validate`), 19 (hooks + watch), 20 (SDK + SDK docs + install-by-topic), 21 (full release packaging — MVP releases as a single tarball, not goreleaser).
+
+**MVP target profile:** single workspace, pinned canonical repo, Claude adapter only, atomic sync, capability report, no interactive wizards (all flags). Ships as `v0.1.0-alpha` to gather real-world signal before locking adapter protocol extensions, tool paths for cursor/codex, or the full UX surface.
+
+**Post-MVP path:** v0.2 adds cursor + codex adapters (Units 10, 11) + validate (Unit 18) + full Unit 6 + adopt wizard (Unit 14). v0.3 adds hooks + watch (Unit 19). v0.4 adds SDK + release packaging (Units 20, 21) + Bubble Tea wizards (Unit 17). v1.0.0 cuts when all of the above ship and protocol has seen at least one out-of-tree adapter survive for 30 days.
+
+Parallelism notes: within Phase C, Units 9/10/11 are independent after Units 7/8/12/12a land. v0.2 can fan Units 10 and 11 out to separate implementers.
 
 ## Documentation Plan
 
