@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "bbfcc5e1b643",
+  "strategy": "manual-commit",
+  "branch": "feat/manifest-workspace-cache",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/workspace/discover.go",
+    "internal/workspace/discover_test.go",
+    "internal/workspace/workspace.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/bb/fcc5e1b643/0/metadata.json",
+      "transcript": "/bb/fcc5e1b643/0/full.jsonl",
+      "content_hash": "/bb/fcc5e1b643/0/content_hash.txt",
+      "prompt": "/bb/fcc5e1b643/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 14,
+    "cache_creation_tokens": 231591,
+    "cache_read_tokens": 1890357,
+    "output_tokens": 15084,
+    "api_call_count": 9
+  }
+}
