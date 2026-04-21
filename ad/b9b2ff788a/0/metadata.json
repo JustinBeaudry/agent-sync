@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "adb9b2ff788a",
+  "session_id": "bf16b2f6-674d-4f24-b378-63d5b8e28dfa",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-21T16:54:25.789112Z",
+  "branch": "feat/manifest-workspace-cache",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "go.mod"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "d677de618665",
+  "token_usage": {
+    "input_tokens": 93,
+    "cache_creation_tokens": 388824,
+    "cache_read_tokens": 10284618,
+    "output_tokens": 68927,
+    "api_call_count": 64
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-21T16:54:25.770057Z",
+    "agent_lines": 1,
+    "agent_removed": 0,
+    "human_added": 1025,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 1027,
+    "total_lines_changed": 1027,
+    "agent_percentage": 0.09737098344693282,
+    "metric_version": 2
+  }
+}

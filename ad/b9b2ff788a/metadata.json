@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "adb9b2ff788a",
+  "strategy": "manual-commit",
+  "branch": "feat/manifest-workspace-cache",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "go.mod"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ad/b9b2ff788a/0/metadata.json",
+      "transcript": "/ad/b9b2ff788a/0/full.jsonl",
+      "content_hash": "/ad/b9b2ff788a/0/content_hash.txt",
+      "prompt": "/ad/b9b2ff788a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 93,
+    "cache_creation_tokens": 388824,
+    "cache_read_tokens": 10284618,
+    "output_tokens": 68927,
+    "api_call_count": 64
+  }
+}
