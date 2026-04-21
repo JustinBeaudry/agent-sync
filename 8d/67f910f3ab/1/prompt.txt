@@ -1,0 +1,13 @@
+Review the brainstorms and plan
+
+---
+
+skip
+
+---
+
+Should we do another /ce:plan pass?
+
+---
+
+inline edits now, then /ce:work-beta plan
