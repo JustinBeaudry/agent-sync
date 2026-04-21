@@ -1,0 +1,64 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "8d67f910f3ab",
+  "session_id": "7cb277e6-2e88-4553-9139-6889317a0b3a",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-21T16:48:26.227983Z",
+  "branch": "feat/manifest-workspace-cache",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "c669733ce743",
+  "token_usage": {
+    "input_tokens": 9,
+    "cache_creation_tokens": 20808,
+    "cache_read_tokens": 96234,
+    "output_tokens": 1510,
+    "api_call_count": 1
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-21T16:48:26.219712Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 17,
+    "total_committed": 0,
+    "total_lines_changed": 17,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 720,
+      "user_lines_removed": 17,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/agents/entire-search.md": 25,
+        ".claude/settings.json": 84,
+        ".codex/agents/entire-search.toml": 23,
+        ".codex/config.toml": 3,
+        ".codex/hooks.json": 40,
+        ".cursor/hooks.json": 40,
+        ".gemini/agents/entire-search.md": 28,
+        ".gemini/settings.json": 141,
+        "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md": 146,
+        "go.mod": 2,
+        "go.sum": 2,
+        "internal/manifest/load.go": 107,
+        "internal/manifest/schema.go": 79
+      },
+      "user_removed_per_file": {
+        "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md": 17
+      }
+    }
+  ]
+}

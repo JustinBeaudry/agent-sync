@@ -1,0 +1,246 @@
+You are the Cairn session summarizer. Write a structured session summary in markdown.
+
+OUTPUT FORMAT — produce EXACTLY this, nothing else:
+
+---
+session_id: "2026-04-21T16:01:59Z"
+status: completed
+extracted: false
+files_changed: []
+decisions: []
+open_threads: []
+tags: []
+---
+
+## Summary
+2-4 sentences summarizing what happened in this session.
+
+## Extraction Candidates
+- **<name>** (<type>) — <why it's worth keeping>
+
+RULES:
+1. Frontmatter fields files_changed, decisions, open_threads, and tags should be populated from the conversation. Use YAML list syntax.
+2. files_changed entries: {path: "<path>", action: "created|modified|deleted"}
+3. decisions entries: {choice: "<what>", reason: "<why>"}
+4. Extraction candidate types: concept, entity, source-summary, comparison, overview.
+5. Output ONLY the markdown. No commentary, no code fences wrapping the whole output.
+6. If the session is trivial (quick question, no real work), still produce the format but keep Summary to one sentence and Extraction Candidates to 'None.'
+
+SESSION TRANSCRIPT:
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+On `main`. Which Plane issue track to?
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+Read brainstorm + plan + AGENTS.md end-to-end. Review:
+
+## Brainstorm — solid
+
+- Scope tight. 1 manifest ↔ 1 repo ↔ 1 workspace model coherent.
+- Decisions explicitly attributed (user decision markers). Good.
+- Security posture hardened in-brainstorm, not deferred: TOFU + pin-at-init + declarative-only + reserved-subdir ownership + gated hooks.
+- Capability presence (not file presence) = correct success metric.
+- Outstanding-questions section empty before planning. Clean handoff.
+
+## Plan — thorough, but risk areas
+
+**Strengths**
+- R# → unit traceability section at top. Good.
+- Deepened decisions cite primary sources (Go 1.25 `os.Root`, LSP 3.17, MCP lifecycle, go#73041, renovate/gh precedents). Not hand-wavy.
+- Two-mode ownership (reserved subdir + per-entry in tool-owned file) correctly reverses origin's symmetric `.tool/aienvs/` assumption. Units 9/10/11 honest about what Claude/Cursor/Codex actually read.
+- Error taxonomy named + exit codes fixed (`ErrLocked` 32, `TrustDecisionRequired` 4, `FirstUseDenied` 5, `RevokedTrustAnchor` 3). Stable CI contract.
+- Recovery state machine enumerates impossible states defensively (unit 13).
+- `trusted_sha:` committed-in-manifest + `trust.jsonl` per-user = correct CI-vs-interactive split.
+
+**Issues — actionable**
+
+1. **Scope too big for v1**. 21 units, 6 phases. Unit 8 alone freezes full LSP-framed JSON-RPC surface (init/initialized, capabilities, declared_outputs, cancel, shutdown, progress, timeouts, cookie, `_meta`) + 2 reference adapters (Go + Python) + conformance harness. That's 4–6 weeks solo; whole plan reads like 3–6 months. No MVP bisection — "what ships in v0.1?" not answered. Phase B end = alpha, but alpha can't emit, which is 80% of the value. Add explicit MVP carve: drop progress, cancel, counter-propose, and Python reference adapter from unit 8; defer to v1.1. Ship what solves the origin problem.
+
+2. **Protocol freeze before third-party use = premature lock-in**. Rule-of-Three violated. `capabilities{}` is additive so minor bumps safe, but `declared_outputs` + LSP-extension error codes + `_meta` added with zero field usage. Cut to initialize→emit→shutdown + `capabilities{}` + `declared_outputs`. Add the rest when a real out-of-tree adapter needs it.
+
+3. **Tool-owned-file merges under-specified — biggest data-loss surface**. Decision #25 names `write_tool_owned` with json-pointer/toml-path/markdown-section locators, but:
+   - JSON: key order + indentation preservation? Which lib? Not specified.
+   - TOML: which lib (go-toml v2?)? Comments preserved round-trip? Not specified.
+   - Markdown sections: recovery when user deletes one `<!-- aienvs:end -->`? Nests a begin inside a begin? Not specified.
+   Recommend: lift tool-owned-file handling into its own unit (12a) with explicit round-trip fixtures for each format. Currently spread across units 9/10/11 with scenarios saying "merge preserves user content" but no mechanism.
+
+4. **`AGENTS.md` concurrent writes by cursor + codex adapters unlocked**. Both merge into workspace-root `AGENTS.md` in parallel staging under atomic mode. Unit 12 lock is per-target. No per-external-file lock. Section markers keyed by `<id>` solve *logical* collisions but not *write-race* collisions. Add: orthogonal per-tool-owned-file flock (path → lock) in unit 12.
+
+5. **Staging-under-target (`.claude/.aienv-staging/`) pollutes tool config tree**. Claude Code walks `.claude/`; may index half-staged files mid-sync. Prefix with dot (`.aienv-staging`) already helps, but document per-adapter skip-globs. Worth a test scenario: "Claude skill indexer sees no partial files during active swap."
+
+6. **Binary skill assets + JSON-RPC payloads unspecified**. IR `skill` has "optional assets" (images, binaries). Unit 8 `write_file` op takes `content, encoding` — no explicit base64 policy. Freeze it: `encoding: "utf8"|"base64"`; size cap per op; chunking for >N MB. Otherwise a skill with a 2MB PNG panics the framing.
+
+7. **`init --defer-resolve` + offline sync = dead end**. Unpinned manifest + no cache + no network = both pinned-cached-succeeds and `--offline` fail. Wizard screen 7 should warn: "deferred resolve requires an online first sync." Not in `docs/wizard/init-states.md` plan item.
+
+8. **No "required-unmet" upgrade gate**. Decision #21 writes the report on failure. But when an adapter upgrade flips a concept to `unsupported` or a canonical repo adds `required: true` nodes, every downstream workspace hard-fails on next sync. Add: `validate` surfaces required-unmet as a distinct drift class with remediation before sync blows up, and a `sync --allow-regression-until=<date>` escape hatch for controlled rollouts.
+
+9. **`trust.jsonl` cross-machine**: docs say teammates re-TOFU. Good. Missing: explicit rule that **non-interactive mode must not write to `trust.jsonl`** (CI consistency). Unit 6 doesn't state this.
+
+10. **Force-pushed ref caught — not tested**. Decision #6 claims "verify pinned SHA reachable from ref." Unit 5 scenario covers partial-fetch recovery, not force-push orphaning pinned commit. Add scenario.
+
+11. **Spelling: `aienvs` binary vs `.aienv.yaml` manifest**. Origin inconsistent; plan preserves. Pick: `.aienvs.yaml` for parity. If keeping singular, note in manifest-v1 spec: "suffix is singular by design."
+
+12. **Adapters in phase C are independent; no parallel-implementation note**. Units 9/10/11 can fan out to three implementers post-unit-8. Call it out in Phased Delivery for scheduling.
+
+13. **Alternatives: `renameat2(RENAME_EXCHANGE)` on Linux not considered**. Atomic dir swap without `.old` intermediate, one syscall. Not portable to Windows/macOS <16, so fine to defer — but absent from Alternatives Considered. Add one paragraph.
+
+## Priority punch list
+
+- P0: Cut unit 8 protocol to MVP (drop progress/cancel/counter-propose/Python ref); ship Go ref only. Extensions additive later.
+- P0: Extract tool-owned-file merge spec (JSON/TOML/markdown round-trip) into its own unit with explicit library choices.
+- P0: Per-external-file lock layer in unit 12 for shared `AGENTS.md` writes.
+- P1: MVP bisection — what's v0.1 alpha vs v1.0? Currently only phase boundaries, no feature cut.
+- P1: Binary-asset encoding + size limits in unit 8 op set.
+- P1: Required-unmet upgrade gate + validate surface.
+- P2: Staging-dir visibility in tool indexers — document skip globs per adapter.
+- P2: Manifest extension naming (`.aienv.yaml` vs `.aienvs.yaml`) — pick now.
+
+Plan is well-researched and honest about the asymmetries. Biggest risk is unit 8 scope creep locking a protocol before real third-party signal, and tool-owned-file merge fidelity under-specified relative to its data-loss potential.
+## Assistant
+
+## Assistant
+Targeted pass, not full re-plan.
+
+**Why not full `/ce:plan`**: deepened decisions (#6, #8, #9, #20, #25) already cite primary sources. Re-running risks noise + re-deepening solid work.
+
+**What I'd do instead**:
+
+- **Inline edits to existing plan** for P0s:
+  - Unit 8: cut protocol to MVP surface (init/initialized/emit/shutdown + capabilities + declared_outputs). Move progress/cancel/counter-propose/Python-ref-adapter to a new Unit 8b (post-v1).
+  - New Unit 12a: tool-owned-file merge spec — pick libs (goccy JSON preserve-order? go-toml v2? which markdown?), round-trip fixtures, per-format recovery.
+  - Unit 12: add per-external-file flock layer alongside per-target lock.
+  - Unit 8 op set: freeze `encoding: utf8|base64` + size cap.
+  - Add MVP-vs-full-v1 feature cut to Phased Delivery.
+
+- **Skip re-plan** for P1/P2s — handle during implementation PRs with plan-update-first discipline (AGENTS.md invariant).
+
+**When to do full `/ce:plan` pass**: if you want independent second opinion that doesn't anchor on current plan. Useful before Phase C (Units 8–11) since that's where design lock-in concentrates. Not useful now before Phase A/B which are mechanical.
+
+Recommendation: inline edits now (30 min), start Phase A implementation, reconsider full re-plan only if Unit 7 IR decoding reveals structural issues with the IR concept set.
+## Assistant
+
+## Assistant
+Plan: 5 inline edits, then invoke `/ce:work-beta plan`.
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+Now Unit 12 — add per-external-file flock.
+## Assistant
+
+## Assistant
+
+## Assistant
+Insert Unit 12a between Unit 12 and Unit 13.
+## Assistant
+
+## Assistant
+Unit 9/10/11 dependencies need updating to include 12a.
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+Now Unit 8b stub. Insert after Unit 8's verification line.
+## Assistant
+
+## Assistant
+Now Phased Delivery MVP carve.
+## Assistant
+
+## Assistant
+Verify plan still parses + lint-clean.
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+Requirements Trace needs 8b + 12a references.
+## Assistant
+
+## Assistant
+
+## Assistant
+Edits done. Summary of what changed:
+
+- Unit 8: MVP/8b split callout at top; inline `[MVP]`/`[Unit 8b]` marks on counter-propose, cancel, progress, timeouts override, LSP error codes, Python ref adapter.
+- Unit 8 op set: `write_file` encoding (`utf8`|`base64`) + 8 MiB size cap.
+- **Unit 8b** inserted: deferred protocol extensions, Rule-of-Three-gated, additive only.
+- Unit 12: per-external-file flock registry added (`internal/locks/filelock.go`); concurrency test scenarios.
+- **Unit 12a** inserted: tool-owned-file merge spec — `tidwall/sjson` (JSON), `pelletier/go-toml/v2` (TOML), custom markdown section parser; recovery rules; round-trip + mutation tests.
+- Units 9/10/11: dependencies extended with 12a.
+- Requirements Trace: R3/R10/R11/R12 updated.
+- Phased Delivery: MVP carve added — `v0.1.0-alpha` = Units 1–7 + Unit 8 MVP + Unit 9 only + 12/12a/13/15/16-subset/6-subset. Growth roadmap v0.2→v1.0.0.
+
+Plan grew 1344→1473 lines. Now invoking `/ce:work-beta plan`.
+## Assistant
+
+## Assistant
+
+## Assistant
+Phase 0: input is `plan` — resolving to the plan we just edited. Delegation off (no tokens, no config). Skipping to Phase 1.
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+
+## Assistant
+Untracked `internal/manifest/` suggests Unit 2 work started. Checking.
+## Assistant
+
+## Assistant
+
+## Assistant
+Unit 2 has WIP uncommitted (schema.go + load.go, no tests/write.go/spec). Unit 1 shipped.
+## Assistant
+
+## Assistant
