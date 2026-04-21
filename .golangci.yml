@@ -1,0 +1,61 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - misspell
+    - unconvert
+    - revive
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - nilerr
+    - unparam
+    - usestdlibvars
+
+  settings:
+    gosec:
+      excludes:
+        # G304: file inclusion via variable — aienvs deliberately opens
+        # user-specified paths; safety is enforced via os.Root containment
+        # (see internal/fsroot), not by refusing variables.
+        - G304
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+    staticcheck:
+      checks:
+        - all
+        - "-ST1000" # package comment requirement handled per-package
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/aienvs/aienvs
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -1,0 +1,30 @@
+# Build output
+/bin/
+/dist/
+/aienvs
+/aienvs.exe
+
+# Go tooling
+*.test
+*.out
+*.prof
+coverage.txt
+coverage.html
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+!.vscode/settings.json.example
+
+# Local overrides — aienvs working directories
+.aienv-staging/
+.aienv-local.yaml
+
+# Env files — never commit
+.env
+.env.*
+!.env.example
