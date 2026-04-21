@@ -1,0 +1,13 @@
+# Canonicalize equivalence classes. Every URL in a blank-line-delimited
+# block must map to the same canonical form. Blank lines separate
+# classes; lines starting with # are comments.
+https://github.com/foo/bar
+https://github.com/foo/bar.git
+https://github.com/foo/bar/
+https://GITHUB.com/foo/bar
+https://github.com:443/foo/bar.git
+
+ssh://git@github.com/foo/bar.git
+ssh://git@github.com:22/foo/bar.git
+git@github.com:foo/bar.git
+git@github.com:foo/bar

@@ -1,0 +1,18 @@
+# Canonicalize golden fixtures. Format: "<input>\t<expected canonical>".
+# Lines starting with # are comments; empty lines are ignored.
+https://github.com/foo/bar	https://github.com/foo/bar.git
+https://github.com/foo/bar.git	https://github.com/foo/bar.git
+https://GITHUB.com/Foo/Bar	https://github.com/Foo/Bar.git
+https://github.com/foo/bar/	https://github.com/foo/bar.git
+https://github.com/foo//bar	https://github.com/foo/bar.git
+https://github.com:443/foo/bar.git	https://github.com/foo/bar.git
+http://example.com:80/foo/bar.git	http://example.com/foo/bar.git
+https://user:token@github.com/foo/bar.git	https://github.com/foo/bar.git
+https://TOKEN@github.com/foo/bar.git	https://github.com/foo/bar.git
+ssh://git@github.com/foo/bar.git	ssh://git@github.com/foo/bar.git
+ssh://git@github.com:22/foo/bar.git	ssh://git@github.com/foo/bar.git
+git@github.com:foo/bar.git	ssh://git@github.com/foo/bar.git
+git@github.com:foo/bar	ssh://git@github.com/foo/bar.git
+deploy-bot@git.example.internal:org/repo.git	ssh://deploy-bot@git.example.internal/org/repo.git
+ssh://git@github.com/foo/bar.git?ref=main#frag	ssh://git@github.com/foo/bar.git
+git://github.com:9418/foo/bar.git	git://github.com/foo/bar.git
