@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "50702151681b",
+  "strategy": "manual-commit",
+  "branch": "feat/manifest-workspace-cache",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/cache/canonicalize.go",
+    "internal/cache/canonicalize_test.go",
+    "internal/cache/key.go",
+    "internal/cache/key_test.go",
+    "internal/cache/location.go",
+    "testdata/urls/equivalent-sets.txt",
+    "testdata/urls/golden.txt",
+    "testdata/urls/unsupported.txt"
+  ],
+  "sessions": [
+    {
+      "metadata": "/50/702151681b/0/metadata.json",
+      "transcript": "/50/702151681b/0/full.jsonl",
+      "content_hash": "/50/702151681b/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 16,
+    "cache_creation_tokens": 23863,
+    "cache_read_tokens": 4060288,
+    "output_tokens": 16936,
+    "api_call_count": 16
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "50702151681b",
+  "session_id": "bf16b2f6-674d-4f24-b378-63d5b8e28dfa",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-21T17:06:10.666452Z",
+  "branch": "feat/manifest-workspace-cache",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/cache/canonicalize.go",
+    "internal/cache/key.go",
+    "internal/cache/location.go",
+    "testdata/urls/golden.txt",
+    "testdata/urls/equivalent-sets.txt",
+    "testdata/urls/unsupported.txt",
+    "internal/cache/canonicalize_test.go",
+    "internal/cache/key_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "03f40ffbcc05",
+  "checkpoint_transcript_start": 351,
+  "transcript_lines_at_start": 351,
+  "token_usage": {
+    "input_tokens": 16,
+    "cache_creation_tokens": 23863,
+    "cache_read_tokens": 4060288,
+    "output_tokens": 16936,
+    "api_call_count": 16
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-21T17:06:10.643175Z",
+    "agent_lines": 773,
+    "agent_removed": 0,
+    "human_added": 18,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 791,
+    "total_lines_changed": 792,
+    "agent_percentage": 97.6010101010101,
+    "metric_version": 2
+  }
+}
