@@ -372,4 +372,3 @@ func TestFind_StopAtFilesystemRoot(t *testing.T) {
 		t.Errorf("manifest path = %q, want %q", ws.ManifestPath, manifest)
 	}
 }
-
