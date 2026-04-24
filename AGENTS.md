@@ -12,6 +12,11 @@ Before making non-trivial changes, read — in order:
 2. [`docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md`](docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md) — how we decided to build it.
 3. This file for the invariants the plan assumes.
 
+Cross-cutting lessons (cross-platform pitfalls, migration gotchas, workflow
+patterns) accumulate under `docs/solutions/`, organized by category with YAML
+frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or
+debugging in documented areas.
+
 If code disagrees with the plan, update the plan **first** in the same PR,
 or stop and surface the disagreement. Silent drift from the plan is a bug.
 

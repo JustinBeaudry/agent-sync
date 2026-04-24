@@ -32,6 +32,10 @@ Thumbs.db
 .gemini/
 .entire/
 
+# Compound-engineering transient artifacts (ce:review run outputs, etc).
+# Useful locally for debugging; not committed.
+.context/
+
 # Env files — never commit
 .env
 .env.*
