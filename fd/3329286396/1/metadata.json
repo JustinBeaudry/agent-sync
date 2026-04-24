@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "fd3329286396",
+  "session_id": "bf16b2f6-674d-4f24-b378-63d5b8e28dfa",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-24T23:07:34.684405Z",
+  "branch": "feat/git-layer",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "4f13cc06a72e",
+  "token_usage": {
+    "input_tokens": 385,
+    "cache_creation_tokens": 1565711,
+    "cache_read_tokens": 48332774,
+    "output_tokens": 226695,
+    "api_call_count": 232
+  },
+  "session_metrics": {
+    "turn_count": 21
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-24T23:07:34.62439Z",
+    "agent_lines": 1,
+    "agent_removed": 1,
+    "human_added": 2226,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2227,
+    "total_lines_changed": 2229,
+    "agent_percentage": 0.08972633467922835,
+    "metric_version": 2
+  }
+}

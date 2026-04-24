@@ -1,0 +1,326 @@
+/compound-engineering:ce-review
+
+---
+
+Where are we at?
+
+---
+
+finish the review
+
+---
+
+1
+
+---
+
+Do the suggested default
+
+---
+
+1
+
+---
+
+/compound-engineering:resolve-pr-feedback
+
+---
+
+/compound-engineering:resolve-pr-feedback
+
+---
+
+<task-notification>
+<task-id>ad5a3baea1e795393</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/18e69f88-b87a-466a-8d3c-8339a606cc12/tasks/ad5a3baea1e795393.output</output-file>
+<status>completed</status>
+<summary>Agent "Resolve location.go fsync durability" completed</summary>
+<result>Both pass cleanly. Here is the structured summary:
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TD5F
+feedback_type: review_thread
+reply_text: |
+  &gt; `stagedWriteCache` fsyncs the temp file but does not fsync the directory after `Rename`. If the intent is the same crash-safety/durability guarantee as `fsroot.Root.StagedWrite`, consider syncing the directory handle (best-effort) after the rename so the audit entry is durable across a power loss/crash.
+
+  Addressed: Added a best-effort directory fsync after the rename in `stagedWriteCache`, mirroring the `fsyncParent` pattern in `fsroot.StagedWrite`. We open `"."` through the existing `os.Root` handle and call `Sync()` on it; both the `Open` error and `Sync` error are intentionally ignored (Windows and some network filesystems return errors when syncing a directory handle, and the file data itself is already durable by this point). A comment explains the crash-safety rationale and the best-effort semantics.
+files_changed:
+  - /Users/justinbeaudry/Projects/aienvs/internal/cache/location.go
+reason: The reviewer's concern was valid — the temp file was fsynced but the directory was not synced after rename, leaving a durability gap relative to fsroot.StagedWrite. Fixed by adding a best-effort dir-sync using the already-open os.Root handle.</result>
+<usage><total_tokens>36395</total_tokens><tool_uses>12</tool_uses><duration_ms>44354</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a7cd5a5d496664ea8</task-id>
+<tool-use-id>toolu_01HutEmkCCtEus5CDKhUnz36</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/18e69f88-b87a-466a-8d3c-8339a606cc12/tasks/a7cd5a5d496664ea8.output</output-file>
+<status>completed</status>
+<summary>Agent "Resolve canonicalize.go scp dead code" completed</summary>
+<result>Both checks pass clean. Here is the structured summary:
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TD5P
+feedback_type: review_thread
+reply_text: |
+  &gt; `scpToSSH` claims to accept and strip a leading "/" after the colon (e.g. `git@host:/owner/repo.git`), but `scpPattern` currently rejects any path that starts with `/`, so that branch is unreachable and those inputs will be rejected by `Canonicalize`. Either adjust the regex to allow an optional leading `/` in the scp path, or remove the comment/strip logic so the implementation and docs agree.
+
+  Addressed: Removed the dead `strings.TrimPrefix(path, "/")` call and its misleading comment from `scpToSSH`. The regex (`[^:/]` as the first character of the path group) already enforces that no path starting with `/` can reach this function, so the strip logic was unreachable. Replaced the comment with a note that clarifies only relative paths are accepted, consistent with the existing `scpPattern` doc comment. No golden fixture used the `:/path` form. Tests and linter pass clean.
+files_changed:
+  - /Users/justinbeaudry/Projects/aienvs/internal/cache/canonicalize.go
+reason: Dead code removed — `TrimPrefix("/")` in `scpToSSH` was unreachable because `scpPattern` already rejects paths starting with `/`; comment and strip logic now agree with the actual behaviour.</result>
+<usage><total_tokens>32775</total_tokens><tool_uses>12</tool_uses><duration_ms>44051</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a15e1eb5515f6b6f5</task-id>
+<tool-use-id>toolu_01E52Y6vibXDEW5oQzEZeqfv</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/18e69f88-b87a-466a-8d3c-8339a606cc12/tasks/a15e1eb5515f6b6f5.output</output-file>
+<status>completed</status>
+<summary>Agent "Resolve discover.go validation cluster" completed</summary>
+<result>Everything is good. Here is the structured summary:
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TD4i
+feedback_type: review_thread
+reply_text:
+&gt; `ErrManifestNotRegular` is documented to cover a dangling symlink at `.aienv.yaml`, but the current `os.Stat` call treats a dangling symlink as `ErrNotExist` and continues walking to an ancestor manifest.
+
+Addressed: Replaced `os.Stat` in the walk loop with a new `validateManifestFile` helper that calls `os.Lstat` first. When the entry is a symlink, it follows with `os.Stat`; if that yields `ErrNotExist`, the function returns `ErrManifestNotRegular` rather than nil/false. Added `TestFind_DanglingSymlinkReturnsError` covering this case.
+files_changed: [internal/workspace/discover.go, internal/workspace/discover_test.go]
+reason: Dangling symlink was silently treated as ErrNotExist and skipped; now correctly returns ErrManifestNotRegular.
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TE-O
+feedback_type: review_thread
+reply_text:
+&gt; Treat dangling manifest symlink as an explicit error. The discovery loop uses `os.Stat` and treats `ENOENT` as "no manifest here," but a dangling `.aienv.yaml` symlink also yields `ENOENT`.
+
+Addressed: Same fix as the paired thread — the walk now uses `validateManifestFile` which leads with `os.Lstat`, detects the symlink case, and returns `ErrManifestNotRegular` for a dangling target rather than falling through to an ancestor walk. `TestFind_DanglingSymlinkReturnsError` verifies the behavior.
+files_changed: [internal/workspace/discover.go, internal/workspace/discover_test.go]
+reason: Root cause was identical to Thread 1 (PRRT_kwDOSIQ0HM59TD4i); same fix resolves both.
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TD5e
+feedback_type: review_thread
+reply_text:
+&gt; The StopAt ancestor check breaks when StopAt is the filesystem root (e.g. "/" on Unix): `stopAbs+sep` becomes "//", so `HasPrefix(cwdAbs+sep, stopAbs+sep)` is false and valid inputs are rejected.
+
+Addressed: Replaced the `strings.HasPrefix` ancestor check with `filepath.Rel(stopAbs, cwdAbs)`. When `stopAbs` is `/`, `filepath.Rel("/", "/some/path")` returns `"some/path"` — no `..` prefix — correctly passing the check. `TestFind_StopAtFilesystemRoot` verifies that `StopAt: "/"` allows normal discovery below root.
+files_changed: [internal/workspace/discover.go, internal/workspace/discover_test.go]
+reason: `stopAbs+sep` when stopAbs is "/" produced "//" which broke the HasPrefix check; filepath.Rel handles the root case correctly.
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TE-Q
+feedback_type: review_thread
+reply_text:
+&gt; When `--workspace` points directly to a `.aienv.yaml` path, `resolveExplicit` returns success without verifying the target is a regular file. FIFOs/sockets/devices with that basename are accepted, and later manifest reads can block or fail unpredictably.
+
+Addressed: The direct-manifest branch in `resolveExplicit` now calls `validateManifestFile` instead of returning the path unchecked. The same helper is used by the upward walk, keeping logic DRY. A FIFO named `.aienv.yaml` now yields `ErrManifestNotRegular`. `TestFind_ExplicitWorkspaceToFIFO` (Unix only via `syscall.Mkfifo`) verifies this.
+files_changed: [internal/workspace/discover.go, internal/workspace/discover_test.go]
+reason: The explicit-path branch skipped file-type validation; now validated consistently through the shared validateManifestFile helper.
+
+---
+
+cluster_assessment: All four threads were symptoms of the same structural gap: file-existence checks at manifest paths were done with `os.Stat` only (or skipped entirely), with no code path that handled symlinks as a distinct case. The fix was systemic — the old `regularFileExists(bool, error)` helper was replaced with `validateManifestFile(*Workspace, bool, error)` which uses `os.Lstat`-first semantics, detects dangling symlinks explicitly, and consolidates all three call sites (upward walk, explicit-directory branch, explicit-file branch) into a single validated path. The StopAt root bug was coincidentally co-located but had a distinct cause (string-prefix arithmetic failing at the filesystem root), and was fixed independently with `filepath.Rel`. Three new tests were added covering each gap: `TestFind_DanglingSymlinkReturnsError`, `TestFind_StopAtFilesystemRoot`, and `TestFind_ExplicitWorkspaceToFIFO`.</result>
+<usage><total_tokens>42654</total_tokens><tool_uses>16</tool_uses><duration_ms>117511</duration_ms></usage>
+</task-notification>
+
+---
+
+merge
+
+---
+
+Now, pull main, and cleanup
+
+---
+
+continue merging PR #1 once CI is green
+
+---
+
+whatever you think
+
+---
+
+/compound-engineering:ce-compound
+
+---
+
+<task-notification>
+<task-id>a57dd65f85bb0f3d0</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/18e69f88-b87a-466a-8d3c-8339a606cc12/tasks/a57dd65f85bb0f3d0.output</output-file>
+<status>completed</status>
+<summary>Agent "Solution Extractor" completed</summary>
+<result>This is a knowledge-track document (`best_practice`). Here is the full section content:
+
+---
+
+## Context
+
+Cross-platform Go CI revealed three distinct compile-time and test-time failures when a Windows matrix was added to a project that had only been validated on Linux/macOS. All three failures share a single underlying cause: the assumption that a runtime guard (`if runtime.GOOS == "windows" { t.Skip() }`) provides the same protection as a structural or build-time guarantee. It does not. Runtime checks execute at test time; build tags and path-normalization are enforced earlier — at compile time and at the type level, respectively. When these are confused, code that looks safe on Unix silently breaks the moment a different OS tries to compile or run it.
+
+---
+
+## Guidance
+
+### Rule 1: Use build tags for files that import platform-specific packages
+
+`t.Skip` is a runtime operation. If a file unconditionally imports a package that does not exist on a target platform, the compiler rejects the entire file before any test logic runs. The skip is never reached.
+
+**Before** — compiles fine on Linux, fails `go vet` on Windows:
+
+```go
+// internal/workspace/discover_test.go
+import (
+    "runtime"
+    "syscall"          // syscall.Mkfifo does not exist on Windows
+)
+
+func TestFind_ExplicitWorkspaceToFIFO(t *testing.T) {
+    if runtime.GOOS == "windows" {
+        t.Skip("FIFOs are not available on Windows")  // never reached — file won't compile
+    }
+    if err := syscall.Mkfifo(fifoPath, 0o644); err != nil {
+        t.Fatalf("mkfifo: %v", err)
+    }
+}
+```
+
+**After** — split into a build-tagged file, no runtime skip required:
+
+```go
+// internal/workspace/discover_unix_test.go
+//go:build !windows
+
+package workspace_test
+
+import (
+    "path/filepath"
+    "syscall"
+    "testing"
+)
+
+func TestFind_ExplicitWorkspaceToFIFO(t *testing.T) {
+    tmp := t.TempDir()
+    fifoPath := filepath.Join(tmp, workspace.ManifestName)
+    if err := syscall.Mkfifo(fifoPath, 0o644); err != nil {
+        t.Fatalf("mkfifo: %v", err)
+    }
+    // ... unchanged body
+}
+```
+
+Remove the `syscall` import and the original function from the shared test file entirely. The build tag is the enforcement point; no runtime conditional is needed inside the tagged file.
+
+### Rule 2: `filepath.IsAbs` is not sufficient to validate relative paths
+
+`filepath.IsAbs` is platform-aware in the wrong direction for security purposes. On Unix, `/etc/passwd` is absolute and `filepath.IsAbs` returns `true`. On Windows, the same string returns `false` because Windows requires a drive letter (`C:\...`) for an absolute path — but a leading `/` still means "root of the current drive" and must not be accepted as a safe relative path.
+
+**Before** — passes the Unix safety check but admits rooted paths on Windows:
+
+```go
+func ValidateRelPath(relPath string) error {
+    if filepath.IsAbs(relPath) {
+        return fmt.Errorf("%w: absolute path %q", ErrUnsafeRelPath, relPath)
+    }
+    return nil  // "/etc/passwd" reaches here on Windows
+}
+```
+
+**After** — add an explicit leading-separator check independent of `filepath.IsAbs`:
+
+```go
+func ValidateRelPath(relPath string) error {
+    if filepath.IsAbs(relPath) {
+        return fmt.Errorf("%w: absolute path %q", ErrUnsafeRelPath, relPath)
+    }
+    // Reject bare-rooted paths like "/etc/passwd" on Windows where
+    // filepath.IsAbs returns false but the leading separator still resolves
+    // to the root of the current drive.
+    if strings.HasPrefix(relPath, "/") || strings.HasPrefix(relPath, `\`) {
+        return fmt.Errorf("%w: rooted path %q", ErrUnsafeRelPath, relPath)
+    }
+    return nil
+}
+```
+
+This makes the definition of "safe relative path" explicit and portable rather than delegating it to OS-specific semantics.
+
+### Rule 3: Normalize separators before comparing path strings
+
+`filepath.Join` produces OS-native separators. Path constants defined with forward slashes (the portable convention) will not match OS-joined paths on Windows when compared with `strings.HasSuffix` or `strings.Contains`.
+
+**Before** — assertion passes on Linux, fails on Windows:
+
+```go
+const DirName = "aienvs/repos"          // forward slash — fine on Unix
+
+loc.Root = filepath.Join(override, DirName)  // "C:\...\aienvs\repos" on Windows
+
+// WRONG: "C:\...\aienvs\repos" does not have suffix "aienvs/repos"
+if !strings.HasSuffix(loc.Root, cache.DirName) {
+    t.Errorf("root %q missing DirName suffix", loc.Root)
+}
+```
+
+**After** — normalize to forward slash before the string comparison:
+
+```go
+if !strings.HasSuffix(filepath.ToSlash(loc.Root), cache.DirName) {
+    t.Errorf("root %q missing DirName suffix", loc.Root)
+}
+```
+
+Alternatively, build the constant from `filepath.Join` segments at definition time so both sides use OS separators consistently. The key invariant is that both operands of a path comparison must use the same separator convention.
+
+---
+
+## Why This Matters
+
+These failures share a deceptive quality: the code looks defensive. It has a runtime skip, it calls an OS-aware stdlib function, it uses a named constant. Each of those choices is locally reasonable on the platform where the code was written. The problem only manifests when a second platform is introduced, and by then the assumption is deeply embedded.
+
+The deeper principle is that Go's portability guarantee covers syntax and most of the standard library, but not syscall surface area, not platform-specific path semantics, and not string-level representations of OS-joined paths. In all three cases, the fix moves the enforcement to an earlier, structural level — the build system, an explicit invariant, or a normalization step — rather than relying on runtime branching to paper over a compile-time or semantic mismatch.
+
+---
+
+## When to Apply
+
+- Any test file that imports `syscall`, `golang.org/x/sys/unix`, or any other package with known platform-specific availability. Split the file with `//go:build` rather than wrapping the body in a runtime check.
+- Any validation function that must reject non-relative paths, particularly in security-sensitive code (path traversal, safe-filesystem layers). Do not rely on `filepath.IsAbs` alone; also reject strings with leading `/` or `\`.
+- Any test or assertion that compares an OS-joined path (produced by `filepath.Join`, `os.UserCacheDir`, etc.) against a string constant defined with forward slashes. Normalize with `filepath.ToSlash` before comparing, or keep both sides in the same convention.
+- When adding a new CI matrix entry (especially Windows). Run `go vet ./...` and `go build ./...` on Windows before declaring a build passing — `go vet` catches missing symbols that runtime skips miss entirely.
+
+---
+
+## Examples
+
+All three manifestations occurred in the same PR while adding a Windows CI matrix:
+
+| # | Location | Failure mode | Enforcement level | Fix |
+|---|----------|--------------|-------------------|-----|
+| 1 | `internal/workspace/discover_test.go` | `syscall.Mkfifo` compile error on `windows/amd64` | Compile-time | Split into `discover_unix_test.go` with `//go:build !windows` |
+| 2 | `internal/fsroot/root.go` `ValidateRelPath` | `/etc/passwd` accepted as relative path on Windows | Runtime / semantic | Add `strings.HasPrefix(relPath, "/")` check alongside `filepath.IsAbs` |
+| 3 | `internal/cache/location.go` + test | `strings.HasSuffix` fails because `filepath.Join` produces `\` on Windows | Test assertion | Wrap `loc.Root` in `filepath.ToSlash` before suffix comparison |
+
+The single sentence that unifies all three: **runtime checks protect execution paths, but they cannot substitute for build-tag isolation, explicit semantic invariants, or separator normalization.**</result>
+<usage><total_tokens>24853</total_tokens><tool_uses>3</tool_uses><duration_ms>44803</duration_ms></usage>
+</task-notification>
