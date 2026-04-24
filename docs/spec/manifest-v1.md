@@ -54,10 +54,7 @@ trusted_sha: 1111111111111111111111111111111111111111
 
 # --- Optional ---------------------------------------------------------
 
-# Explicit opt-in to floating-ref mode. Must be accompanied by the
-# `--floating` flag on `aienvs init`/`sync`. When true, `commit` may be
-# absent and each sync re-resolves from `ref`.
-floating: false
+# floating: reserved; not yet in the v1 schema. Will be added by Unit 5/6.
 
 # Target adapters active for this workspace. Inactive adapters emit
 # nothing.
@@ -76,18 +73,15 @@ cache:
   override: /custom/workspace-local/cache
 
 # Adapter source pins (reserved for Unit 20; v1 bundled adapters ignore
-# this section).
+# this section). `pin` and `trusted_sha` on adapters are reserved; not
+# yet in the v1 schema. Will be added by Unit 20.
 adapters:
   - name: claude
     source: github.com/example/aienvs-adapter-claude
-    pin: true
-    trusted_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-# Reserved for future use. `require_attestation` is ignored in v1; the
-# cooldown window is defined but only acted on by Unit 6.
+# trust: reserved; not yet in the v1 schema. Fields `require_attestation`
+# and `allow_new_shas_until` will be added by Unit 5/6.
 trust:
-  require_attestation: false
-  allow_new_shas_until: 2026-06-01T00:00:00Z
 
 # --- Forward-compat extension keys ------------------------------------
 
@@ -114,6 +108,8 @@ The loader enforces these at parse time. Any violation returns
 | `scope` not in `{"", user, project, global}` | `scope must be one of user|project|global` |
 | Non-interactive + `canonical.commit` set but `trusted_sha` empty | `non-interactive mode requires trusted_sha when canonical.commit is set` |
 | `version != 1` (and not 0) | `unsupported manifest version N (want 1)` |
+| `cache.override` is non-empty and not absolute | `cache.override must be absolute` |
+| `cache.override` contains `..` segments | `cache.override must not contain .. segments` |
 
 Rules that are **deliberately** not enforced at load:
 
@@ -154,10 +150,10 @@ alongside `canonical.commit`. CI's `aienvs trust verify` fails closed if
 this drifts from the resolved SHA. **Must** mirror `canonical.commit`
 exactly when both are set.
 
-### `floating` (bool, default false)
+### `floating` (reserved — not yet in v1 schema)
 
-Explicit opt-in to floating-ref mode. Must be paired with a CLI
-`--floating` flag at init/sync (enforced at sync, not load).
+Will be added by Unit 5/6. Explicit opt-in to floating-ref mode. Must be
+paired with a CLI `--floating` flag at init/sync (enforced at sync, not load).
 
 ### `targets` (seq of string, optional)
 
@@ -184,11 +180,9 @@ adapters ignore this section.
 
 ### `trust` (mapping, optional)
 
-- `trust.require_attestation` (bool, reserved): ignored in v1; placeholder
-  for supply-chain attestation verification (post-v1).
-- `trust.allow_new_shas_until` (RFC3339 timestamp, optional): cooldown
-  window within which new resolved SHAs auto-promote without manual
-  review. Consumed by Unit 6's trust flow.
+The `trust` mapping is present in the schema as a placeholder but contains
+no active fields in v1. Fields `require_attestation` and `allow_new_shas_until`
+are reserved and will be added by Unit 5/6.
 
 ## Extension keys (`x-*`)
 

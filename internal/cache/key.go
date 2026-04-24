@@ -22,14 +22,3 @@ func Key(canonical string) string {
 	sum := sha256.Sum256([]byte(KeyPrefix + canonical))
 	return hex.EncodeToString(sum[:])
 }
-
-// KeyFromRaw is a convenience wrapper around Canonicalize + Key. The
-// two-step form is exposed separately because most callers have the
-// canonical form already (manifest load, audit file).
-func KeyFromRaw(rawURL string) (string, error) {
-	c, err := Canonicalize(rawURL)
-	if err != nil {
-		return "", err
-	}
-	return Key(c), nil
-}

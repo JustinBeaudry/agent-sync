@@ -42,6 +42,12 @@ var (
 	// override that does not resolve to a directory containing a
 	// manifest.
 	ErrInvalidOptions = errors.New("invalid workspace discovery options")
+
+	// ErrManifestNotRegular is returned when a path matching the manifest
+	// filename exists but is not a regular file (e.g. a directory, symlink
+	// to a missing target, or device node). The walk stops immediately
+	// rather than skipping, so the user sees an actionable error.
+	ErrManifestNotRegular = errors.New("workspace: manifest is not a regular file")
 )
 
 // Workspace is the resolved binding of a manifest to a directory.
@@ -78,6 +84,8 @@ type Options struct {
 	StopAt string
 
 	// MaxHops caps the upward walk. Zero means DefaultMaxHops.
+	// Maximum number of directories to inspect during the upward walk
+	// (cwd counts as the first).
 	MaxHops int
 }
 

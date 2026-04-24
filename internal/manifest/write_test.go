@@ -115,7 +115,8 @@ func TestWriteResolvedSHA_RejectsBadSHA(t *testing.T) {
 }
 
 func TestWriteResolvedSHA_NoOpReturnsCopy(t *testing.T) {
-	orig := readFixture(t, "valid-minimal.yaml")
+	// valid-template-unresolved has both canonical.commit and trusted_sha keys.
+	orig := readFixture(t, "valid-template-unresolved.yaml")
 	out, err := manifest.WriteResolvedSHA(orig, "", "")
 	if err != nil {
 		t.Fatalf("write: %v", err)
@@ -129,6 +130,18 @@ func TestWriteResolvedSHA_NoOpReturnsCopy(t *testing.T) {
 		if orig[0] == 'X' {
 			t.Error("output aliases input buffer")
 		}
+	}
+}
+
+func TestWriteResolvedSHA_NoOpStillValidatesKeys(t *testing.T) {
+	// A manifest without trusted_sha must fail even when both args are empty.
+	src := []byte("version: 1\ncanonical:\n  url: https://example.com/x.git\n  commit: \"\"\n")
+	_, err := manifest.WriteResolvedSHA(src, "", "")
+	if err == nil {
+		t.Fatal("expected ErrKeyMissing; got nil")
+	}
+	if !errors.Is(err, manifest.ErrKeyMissing) {
+		t.Errorf("expected ErrKeyMissing, got %v", err)
 	}
 }
 

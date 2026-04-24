@@ -217,6 +217,47 @@ func TestFind_NotFoundAtFilesystemRoot(t *testing.T) {
 	}
 }
 
+func TestFind_ManifestIsDirectoryReturnsError(t *testing.T) {
+	// Create .aienv.yaml as a directory rather than a regular file.
+	tmp := t.TempDir()
+	manifestDir := filepath.Join(tmp, workspace.ManifestName)
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatalf("mkdir manifest-as-dir: %v", err)
+	}
+
+	_, err := workspace.Find(tmp, workspace.Options{})
+	if err == nil {
+		t.Fatal("expected ErrManifestNotRegular; got nil")
+	}
+	if !errors.Is(err, workspace.ErrManifestNotRegular) {
+		t.Errorf("expected ErrManifestNotRegular, got %v", err)
+	}
+}
+
+func TestFind_StopAtOutsideAncestorChain(t *testing.T) {
+	// StopAt is an unrelated directory — not an ancestor of cwd.
+	// This is always a user mistake and must be rejected.
+	tmp := t.TempDir()
+	cwd := filepath.Join(tmp, "a", "b")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+	writeManifest(t, filepath.Join(tmp, "a"))
+
+	unrelated := filepath.Join(tmp, "unrelated")
+	if err := os.MkdirAll(unrelated, 0o755); err != nil {
+		t.Fatalf("mkdir unrelated: %v", err)
+	}
+
+	_, err := workspace.Find(cwd, workspace.Options{StopAt: unrelated})
+	if err == nil {
+		t.Fatal("expected ErrInvalidOptions for out-of-chain StopAt")
+	}
+	if !errors.Is(err, workspace.ErrInvalidOptions) {
+		t.Errorf("expected ErrInvalidOptions, got %v", err)
+	}
+}
+
 func TestOptionsFromEnv(t *testing.T) {
 	t.Setenv("AIENVS_WORKSPACE_STOP_AT", "/tmp/stop-here")
 	opts := workspace.OptionsFromEnv()

@@ -1,0 +1,5 @@
+version: 1
+canonical:
+  url: https://github.com/foo/bar.git
+cache:
+  override: /home/alice/../../etc

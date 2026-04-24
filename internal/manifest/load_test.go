@@ -2,6 +2,7 @@ package manifest_test
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -184,6 +185,106 @@ func TestLoadBytes_EmptyDocument(t *testing.T) {
 	_, err := manifest.LoadBytes([]byte(""), manifest.LoadOptions{})
 	if err == nil {
 		t.Fatal("empty manifest should fail validation (no canonical source)")
+	}
+}
+
+func TestValidate_TrimsScalarValues(t *testing.T) {
+	// Leading/trailing whitespace in commit and trusted_sha must be
+	// stripped so downstream callers see clean 40-hex strings.
+	const hex40 = "abcdef1234abcdef1234abcdef1234abcdef1234"
+	src := []byte("version: 1\ncanonical:\n  url: https://example.com/x.git\n  commit: \" " + hex40 + " \"\ntrusted_sha: \" " + hex40 + " \"\n")
+	m, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if m.Canonical.Commit != hex40 {
+		t.Errorf("Commit = %q, want %q (no whitespace)", m.Canonical.Commit, hex40)
+	}
+	if m.TrustedSHA != hex40 {
+		t.Errorf("TrustedSHA = %q, want %q (no whitespace)", m.TrustedSHA, hex40)
+	}
+}
+
+func TestValidate_WrapsErrInvalidManifest(t *testing.T) {
+	bad := manifest.Manifest{}
+	err := manifest.Validate(&bad, manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected error for empty manifest")
+	}
+	if !errors.Is(err, manifest.ErrInvalidManifest) {
+		t.Errorf("Validate error not ErrInvalidManifest: %v", err)
+	}
+}
+
+func TestLoad_InvalidBadTrustedSHA(t *testing.T) {
+	_, err := loadFixture(t, "invalid-bad-trusted-sha.yaml", manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected error for invalid trusted_sha hex")
+	}
+	if !errors.Is(err, manifest.ErrInvalidManifest) {
+		t.Errorf("error not ErrInvalidManifest: %v", err)
+	}
+	if !strings.Contains(err.Error(), "trusted_sha") {
+		t.Errorf("error does not mention trusted_sha; got: %v", err)
+	}
+}
+
+func TestLoad_InvalidCacheOverrideRelative(t *testing.T) {
+	_, err := loadFixture(t, "invalid-cache-override-relative.yaml", manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected ErrInvalidManifest for relative cache.override")
+	}
+	if !errors.Is(err, manifest.ErrInvalidManifest) {
+		t.Errorf("expected ErrInvalidManifest, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "absolute") {
+		t.Errorf("error does not mention 'absolute'; got: %v", err)
+	}
+}
+
+func TestLoad_InvalidCacheOverrideTraversal(t *testing.T) {
+	_, err := loadFixture(t, "invalid-cache-override-traversal.yaml", manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected ErrInvalidManifest for traversal cache.override")
+	}
+	if !errors.Is(err, manifest.ErrInvalidManifest) {
+		t.Errorf("expected ErrInvalidManifest, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "..") {
+		t.Errorf("error does not mention '..'; got: %v", err)
+	}
+}
+
+func TestLoadFile_MissingFileReturnsNotExist(t *testing.T) {
+	_, err := manifest.LoadFile(filepath.Join(t.TempDir(), "nonexistent.yaml"), manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("expected fs.ErrNotExist in chain; got: %v", err)
+	}
+}
+
+func TestLoadFile_RejectsOversizedManifest(t *testing.T) {
+	// Write a file slightly over 1 MiB.
+	big := make([]byte, manifest.MaxManifestSize+100)
+	// Fill with a YAML comment character so it isn't binary garbage.
+	for i := range big {
+		big[i] = '#'
+	}
+	p := filepath.Join(t.TempDir(), "big.yaml")
+	if err := os.WriteFile(p, big, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	_, err := manifest.LoadFile(p, manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected error for oversized manifest")
+	}
+	if !errors.Is(err, manifest.ErrInvalidManifest) {
+		t.Errorf("error not ErrInvalidManifest: %v", err)
+	}
+	if !strings.Contains(err.Error(), "bytes") {
+		t.Errorf("error should mention byte count; got: %v", err)
 	}
 }
 

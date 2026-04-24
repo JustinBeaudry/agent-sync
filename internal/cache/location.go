@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -53,9 +55,22 @@ type ResolveOptions struct {
 // Resolve computes the on-disk Location for a canonical URL. It does
 // NOT create the directory — callers (the git layer in unit 5) create
 // the parent lazily when they actually clone.
+//
+// canonical must already be in canonical form (as returned by Canonicalize).
+// If it is not, Resolve returns ErrUnsupportedURL wrapping the form invariant.
+// This prevents forged or un-cleaned URLs from generating audit entries with
+// credentials or non-normalized forms.
 func Resolve(canonical string, opts ResolveOptions) (*Location, error) {
 	if canonical == "" {
 		return nil, fmt.Errorf("%w: empty canonical URL", ErrUnsupportedURL)
+	}
+
+	recanon, err := Canonicalize(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("%w: input not in canonical form: %w", ErrUnsupportedURL, err)
+	}
+	if recanon != canonical {
+		return nil, fmt.Errorf("%w: input not in canonical form (got %q, canonical form is %q)", ErrUnsupportedURL, canonical, recanon)
 	}
 
 	root, err := rootDir(opts)
@@ -74,31 +89,77 @@ func Resolve(canonical string, opts ResolveOptions) (*Location, error) {
 	}, nil
 }
 
-// ResolveFromRaw is a convenience wrapper: canonicalize then resolve.
-func ResolveFromRaw(rawURL string, opts ResolveOptions) (*Location, error) {
-	c, err := Canonicalize(rawURL)
-	if err != nil {
-		return nil, err
-	}
-	return Resolve(c, opts)
-}
-
 // WriteAudit writes (or overwrites) the audit file recording the plain
 // canonical URL inside an already-existing cache directory. Callers
 // typically invoke this once at materialization time so the plain URL
 // is visible in the directory alongside the bare clone.
 //
-// The write goes through os.WriteFile (not fsroot) because the cache
-// directory is outside the workspace — fsroot's containment would
-// reject an absolute path.
+// Three invariants are enforced:
+//  1. Integrity: Key(l.Canonical) must match l.Key — prevents forged Locations.
+//  2. Atomicity: the write is staged via a unique temp file + rename so
+//     concurrent writers never produce a torn read.
+//  3. Symlink hardening: the write goes through os.Root so any symlink
+//     planted at AuditPath cannot redirect writes outside Dir.
 func (l *Location) WriteAudit() error {
 	if l == nil {
 		return errors.New("cache: nil Location")
 	}
+	// Integrity check: the Location must be self-consistent.
+	if Key(l.Canonical) != l.Key {
+		return fmt.Errorf("audit: canonical %q does not match key %q", l.Canonical, l.Key)
+	}
 	if err := os.MkdirAll(l.Dir, 0o750); err != nil {
 		return fmt.Errorf("cache: mkdir %q: %w", l.Dir, err)
 	}
-	return os.WriteFile(l.AuditPath, []byte(l.Canonical+"\n"), fs.FileMode(0o644))
+	return stagedWriteCache(l.Dir, AuditFileName, []byte(l.Canonical+"\n"), 0o644)
+}
+
+// stagedWriteCache writes content atomically to dir/name by creating a
+// unique sibling temp file, fsyncing, and renaming into place. It uses
+// os.Root so any symlink at the destination cannot escape dir.
+func stagedWriteCache(dir, name string, content []byte, mode fs.FileMode) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return fmt.Errorf("cache: open root %q: %w", dir, err)
+	}
+	defer func() { _ = root.Close() }()
+
+	// Generate a unique temp filename inside dir.
+	var randBytes [8]byte
+	if _, err := rand.Read(randBytes[:]); err != nil {
+		return fmt.Errorf("cache: rand: %w", err)
+	}
+	tmpName := "." + name + ".tmp." + hex.EncodeToString(randBytes[:])
+
+	tmpFile, err := root.OpenFile(tmpName, os.O_CREATE|os.O_WRONLY|os.O_EXCL, mode)
+	if err != nil {
+		return fmt.Errorf("cache: create temp %q: %w", tmpName, err)
+	}
+	// Clean up the temp file on any error path.
+	cleanupTmp := true
+	defer func() {
+		if cleanupTmp {
+			_ = root.Remove(tmpName)
+		}
+	}()
+
+	if _, err := tmpFile.Write(content); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("cache: write temp: %w", err)
+	}
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("cache: sync temp: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("cache: close temp: %w", err)
+	}
+
+	if err := root.Rename(tmpName, name); err != nil {
+		return fmt.Errorf("cache: rename temp to %q: %w", name, err)
+	}
+	cleanupTmp = false
+	return nil
 }
 
 // rootDir returns the top-level cache directory, honoring an override

@@ -177,8 +177,10 @@ func TestCanonicalize_PathCasePreserved(t *testing.T) {
 	}
 
 	// A differently-cased path must produce a different cache key.
-	k1, _ := cache.KeyFromRaw("https://github.com/Foo/Bar")
-	k2, _ := cache.KeyFromRaw("https://github.com/foo/bar")
+	c1, _ := cache.Canonicalize("https://github.com/Foo/Bar")
+	c2, _ := cache.Canonicalize("https://github.com/foo/bar")
+	k1 := cache.Key(c1)
+	k2 := cache.Key(c2)
 	if k1 == k2 {
 		t.Errorf("expected distinct keys for case-different paths (GitHub is case-sensitive)")
 	}

@@ -47,15 +47,26 @@ func WriteResolvedSHA(orig []byte, commit, trustedSHA string) ([]byte, error) {
 	if trustedSHA != "" && !reHex40.MatchString(trustedSHA) {
 		return nil, fmt.Errorf("%w: trusted_sha must be 40 lowercase hex (got %q)", ErrWriteInvalid, trustedSHA)
 	}
-	if commit == "" && trustedSHA == "" {
-		out := make([]byte, len(orig))
-		copy(out, orig)
-		return out, nil
-	}
-
 	file, err := parser.ParseBytes(orig, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parse: %w", ErrWriteInvalid, err)
+	}
+
+	// Always verify both target keys exist, even when both args are empty
+	// (no-op path). This prevents the caller from mistakenly treating a
+	// missing key as a silent success.
+	if err := probeKey(file, "$.canonical.commit"); err != nil {
+		return nil, fmt.Errorf("update canonical.commit: %w", err)
+	}
+	if err := probeKey(file, "$.trusted_sha"); err != nil {
+		return nil, fmt.Errorf("update trusted_sha: %w", err)
+	}
+
+	if commit == "" && trustedSHA == "" {
+		// Both keys present; no-op. Return a copy of the original bytes.
+		out := make([]byte, len(orig))
+		copy(out, orig)
+		return out, nil
 	}
 
 	if commit != "" {
@@ -107,6 +118,22 @@ func WriteFile(path string, content []byte) error {
 	return root.StagedWrite(base, content, fs.FileMode(0o644))
 }
 
+// probeKey checks that path exists in file without modifying it. If the
+// path is missing, ErrKeyMissing is returned.
+func probeKey(file *ast.File, path string) error {
+	p, err := yaml.PathString(path)
+	if err != nil {
+		return fmt.Errorf("bad path %q: %w", path, err)
+	}
+	if _, err := p.FilterFile(file); err != nil {
+		if errors.Is(err, yaml.ErrNotFoundNode) {
+			return fmt.Errorf("%w: yaml path %q not found", ErrKeyMissing, path)
+		}
+		return fmt.Errorf("%w: yaml path %q: %w", ErrWriteInvalid, path, err)
+	}
+	return nil
+}
+
 // replaceScalar locates path inside file and replaces its scalar value
 // with the given string. If path does not resolve to an existing node,
 // ErrKeyMissing is returned.
@@ -116,7 +143,10 @@ func replaceScalar(file *ast.File, path, value string) error {
 		return fmt.Errorf("bad path %q: %w", path, err)
 	}
 	if _, err := p.FilterFile(file); err != nil {
-		return fmt.Errorf("%w: %s", ErrKeyMissing, strings.TrimSpace(err.Error()))
+		if errors.Is(err, yaml.ErrNotFoundNode) {
+			return fmt.Errorf("%w: yaml path %q not found", ErrKeyMissing, path)
+		}
+		return fmt.Errorf("%w: yaml path %q: %w", ErrWriteInvalid, path, err)
 	}
 	if err := p.ReplaceWithReader(file, strings.NewReader(value)); err != nil {
 		return fmt.Errorf("replace %q: %w", path, err)

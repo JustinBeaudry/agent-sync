@@ -16,3 +16,8 @@ git@github.com:foo/bar	ssh://git@github.com/foo/bar.git
 deploy-bot@git.example.internal:org/repo.git	ssh://deploy-bot@git.example.internal/org/repo.git
 ssh://git@github.com/foo/bar.git?ref=main#frag	ssh://git@github.com/foo/bar.git
 git://github.com:9418/foo/bar.git	git://github.com/foo/bar.git
+https://[::1]/foo/bar	https://[::1]/foo/bar.git
+https://[::1]:443/foo/bar	https://[::1]/foo/bar.git
+https://[::1]:8080/foo/bar	https://[::1]:8080/foo/bar.git
+ssh://git@[fe80::1]/foo/bar	ssh://git@[fe80::1]/foo/bar.git
+ssh://git@[fe80::1]:22/foo/bar	ssh://git@[fe80::1]/foo/bar.git

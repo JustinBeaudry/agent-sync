@@ -1,7 +1,5 @@
 package manifest
 
-import "time"
-
 // Manifest is the v1 schema for `.aienv.yaml`.
 //
 // NOTE: This is a strict schema. Unknown keys are rejected at load time,
@@ -10,10 +8,6 @@ type Manifest struct {
 	Version int `yaml:"version"`
 
 	Canonical CanonicalSource `yaml:"canonical"`
-
-	// Floating controls whether `canonical.ref` may remain floating at sync
-	// time. Pinning is the default; floating must be explicitly opted into.
-	Floating bool `yaml:"floating,omitempty"`
 
 	// Targets is an optional list of tool targets to compile to. Empty means
 	// "no targets" (a valid state for a workspace that is not yet configured).
@@ -59,20 +53,7 @@ type AdapterDecl struct {
 	// Source may point to an out-of-tree adapter implementation. Bundled
 	// adapters use an implicit source.
 	Source string `yaml:"source,omitempty"`
-
-	// Pin requests that adapter sources be pinned. Reserved for later units.
-	Pin bool `yaml:"pin,omitempty"`
-
-	// TrustedSHA optionally pins the adapter source itself. Reserved for later units.
-	TrustedSHA string `yaml:"trusted_sha,omitempty"`
 }
 
 type TrustConfig struct {
-	// RequireAttestation is reserved for v2+.
-	RequireAttestation bool `yaml:"require_attestation,omitempty"`
-
-	// AllowNewSHAsUntil optionally allows a cooldown window where new SHAs
-	// can be accepted without manual promotion. Reserved; the v1 trust model
-	// uses explicit trust commands.
-	AllowNewSHAsUntil *time.Time `yaml:"allow_new_shas_until,omitempty"`
 }

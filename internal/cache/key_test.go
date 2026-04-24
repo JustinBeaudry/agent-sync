@@ -1,9 +1,12 @@
 package cache_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -22,36 +25,18 @@ func TestKey_Deterministic(t *testing.T) {
 	}
 }
 
-func TestKeyFromRaw_MatchesCanonicalize(t *testing.T) {
-	c, err := cache.Canonicalize("https://github.com/Foo/Bar")
-	if err != nil {
-		t.Fatalf("canon: %v", err)
-	}
-	want := cache.Key(c)
-	got, err := cache.KeyFromRaw("https://github.com/Foo/Bar")
-	if err != nil {
-		t.Fatalf("KeyFromRaw: %v", err)
-	}
-	if got != want {
-		t.Errorf("KeyFromRaw = %s, Key(Canonicalize) = %s", got, want)
-	}
-}
-
 func TestKeyPrefix_Participates(t *testing.T) {
-	// The prefix must be part of the hash input (hashing the raw URL
-	// alone would silently collide with any future cache shape).
-	keyed := cache.Key("https://github.com/foo/bar.git")
-
-	// Hash the same string without the prefix would produce a
-	// different SHA — confirm by hashing "git:<url>" manually and
-	// checking that Key matches that, not the bare URL.
-	//
-	// We verify the prefix matters by showing two different prefixes
-	// produce different keys (we use Key only; different rawURLs with
-	// the same shape but different canonical prefixes would collide
-	// if the prefix were absent).
-	if strings.Contains(keyed, " ") {
-		t.Error("key should be hex-only")
+	const url = "https://github.com/foo/bar.git"
+	sum := sha256.Sum256([]byte(cache.KeyPrefix + url))
+	want := hex.EncodeToString(sum[:])
+	got := cache.Key(url)
+	if got != want {
+		t.Fatalf("Key(%q) = %q, want %q (prefix+url must be hashed)", url, got, want)
+	}
+	// Also verify that bare url hash differs from prefixed hash
+	bareSum := sha256.Sum256([]byte(url))
+	if hex.EncodeToString(bareSum[:]) == got {
+		t.Error("Key appears to ignore KeyPrefix")
 	}
 }
 
@@ -108,19 +93,126 @@ func TestResolve_XDGDefault(t *testing.T) {
 	}
 }
 
-func TestResolveFromRaw_PairsCanonicalizeAndResolve(t *testing.T) {
+func TestResolve_RejectsNonCanonicalInput(t *testing.T) {
 	tmp := t.TempDir()
-	loc1, err := cache.ResolveFromRaw("https://github.com/Foo/Bar", cache.ResolveOptions{Override: tmp})
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"with-credentials", "https://user:token@github.com/foo/bar.git"},
+		{"trailing-slash", "https://github.com/foo/bar/"},
+		{"uppercase-host", "https://GITHUB.COM/foo/bar.git"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := cache.Resolve(tc.url, cache.ResolveOptions{Override: tmp})
+			if err == nil {
+				t.Fatalf("expected rejection of non-canonical input %q", tc.url)
+			}
+			if !errors.Is(err, cache.ErrUnsupportedURL) {
+				t.Errorf("expected ErrUnsupportedURL, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "canonical") {
+				t.Errorf("error should mention canonical: %v", err)
+			}
+		})
+	}
+}
+
+func TestWriteAudit_RejectsForgedCanonical(t *testing.T) {
+	tmp := t.TempDir()
+	// Construct a Location where Key does not match what Key(Canonical) would produce.
+	locA, err := cache.Resolve("https://a.example.com/x.git", cache.ResolveOptions{Override: tmp})
+	if err != nil {
+		t.Fatalf("resolve A: %v", err)
+	}
+	locB, err := cache.Resolve("https://b.example.com/x.git", cache.ResolveOptions{Override: tmp})
+	if err != nil {
+		t.Fatalf("resolve B: %v", err)
+	}
+	// Forge: use locB's key with locA's canonical URL.
+	forged := &cache.Location{
+		Root:      locA.Root,
+		Dir:       locB.Dir,
+		AuditPath: locB.AuditPath,
+		Key:       locB.Key,
+		Canonical: locA.Canonical,
+	}
+	if err := forged.WriteAudit(); err == nil {
+		t.Fatal("expected error for forged Location; got nil")
+	} else if !strings.Contains(err.Error(), "does not match") {
+		t.Errorf("error should mention 'does not match': %v", err)
+	}
+}
+
+func TestWriteAudit_ConcurrentWrites(t *testing.T) {
+	tmp := t.TempDir()
+	loc, err := cache.Resolve("https://github.com/foo/bar.git", cache.ResolveOptions{Override: tmp})
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	loc2, err := cache.ResolveFromRaw("https://github.com/Foo/Bar.git", cache.ResolveOptions{Override: tmp})
-	if err != nil {
-		t.Fatalf("resolve 2: %v", err)
+	// Pre-create the directory; concurrent WriteAudit callers expect it to exist.
+	if err := os.MkdirAll(loc.Dir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
 	}
-	// With and without `.git` must land in the same directory.
-	if loc1.Dir != loc2.Dir {
-		t.Errorf("%q and %q resolved to distinct dirs: %q vs %q", "https://github.com/Foo/Bar", "https://github.com/Foo/Bar.git", loc1.Dir, loc2.Dir)
+
+	const n = 8
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			errs <- loc.WriteAudit()
+		}()
+	}
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("concurrent WriteAudit: %v", err)
+		}
+	}
+
+	// Final content must be the canonical URL followed by a newline.
+	got, err := os.ReadFile(loc.AuditPath)
+	if err != nil {
+		t.Fatalf("read audit: %v", err)
+	}
+	want := loc.Canonical + "\n"
+	if string(got) != want {
+		t.Errorf("audit content = %q, want %q (possible torn write)", got, want)
+	}
+}
+
+func TestWriteAudit_RefusesSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Root symlink semantics on Windows differ; skipped")
+	}
+	tmp := t.TempDir()
+	loc, err := cache.Resolve("https://github.com/foo/bar.git", cache.ResolveOptions{Override: tmp})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if err := os.MkdirAll(loc.Dir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Create a symlink target outside Dir, then plant it at AuditPath.
+	target := filepath.Join(tmp, "outside-target.txt")
+	if err := os.WriteFile(target, []byte("original\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if err := os.Symlink(target, loc.AuditPath); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	// WriteAudit must either error cleanly (os.Root rejects symlink
+	// traversal) OR land the file inside Dir without following the symlink.
+	// In either case, the symlink target must NOT be overwritten.
+	_ = loc.WriteAudit()
+
+	gotTarget, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read symlink target: %v", err)
+	}
+	if string(gotTarget) != "original\n" {
+		t.Errorf("symlink target was overwritten: %q (os.Root must prevent this)", gotTarget)
 	}
 }
 

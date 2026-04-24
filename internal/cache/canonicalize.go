@@ -78,10 +78,17 @@ func Canonicalize(rawURL string) (string, error) {
 	if host == "" {
 		return "", fmt.Errorf("%w: missing host: %q", ErrUnsupportedURL, rawURL)
 	}
+	// Wrap IPv6 literals in brackets so the URL remains valid after
+	// reassigning u.Host. u.Hostname() strips the brackets; we must
+	// restore them when the host contains a colon.
+	hostForAssign := host
+	if strings.Contains(host, ":") {
+		hostForAssign = "[" + host + "]"
+	}
 	if port := u.Port(); port != "" && !isDefaultPort(scheme, port) {
-		u.Host = host + ":" + port
+		u.Host = hostForAssign + ":" + port
 	} else {
-		u.Host = host
+		u.Host = hostForAssign
 	}
 
 	switch scheme {
@@ -98,15 +105,29 @@ func Canonicalize(rawURL string) (string, error) {
 	u.RawQuery = ""
 	u.RawFragment = ""
 
+	// Reject empty or root-only paths — there is no repository component.
+	if u.Path == "" || u.Path == "/" {
+		return "", fmt.Errorf("%w: URL has no repository path", ErrUnsupportedURL)
+	}
+
+	// Reject path traversal segments.
+	for _, seg := range strings.Split(strings.Trim(u.Path, "/"), "/") {
+		if seg == ".." || seg == "." {
+			return "", fmt.Errorf("%w: path contains traversal segment", ErrUnsupportedURL)
+		}
+	}
+
 	u.Path = normalizeGitPath(u.Path)
 
 	return u.String(), nil
 }
 
 // scpPattern matches scp-style Git URLs: user@host:path. The path must
-// be non-empty; we intentionally do not match `host:path` without a
-// user (too ambiguous against drive letters on Windows).
-var scpPattern = regexp.MustCompile(`^([A-Za-z0-9._-]+)@([A-Za-z0-9.-]+):([^:].*)$`)
+// be non-empty, must not start with '/' (scp-style paths are relative),
+// and must not contain ':' (a second colon would be ambiguous).
+// We intentionally do not match `host:path` without a user (too
+// ambiguous against drive letters on Windows).
+var scpPattern = regexp.MustCompile(`^([A-Za-z0-9._-]+)@([A-Za-z0-9.-]+):([^:/][^:]*)$`)
 
 // scpToSSH rewrites scp-style SSH into a proper ssh:// URL. Returns
 // "" for inputs that aren't scp-style. See canonicalize rule #1.

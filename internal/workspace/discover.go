@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Find resolves a workspace from cwd (or the process cwd if cwd == "")
@@ -43,21 +44,31 @@ func Find(cwd string, opts Options) (*Workspace, error) {
 		stopAbs = s
 	}
 
+	if stopAbs != "" {
+		sep := string(os.PathSeparator)
+		if cwdAbs != stopAbs && !strings.HasPrefix(cwdAbs+sep, stopAbs+sep) {
+			return nil, fmt.Errorf("%w: StopAt %q is not an ancestor of cwd %q", ErrInvalidOptions, stopAbs, cwdAbs)
+		}
+	}
+
 	budget := opts.MaxHops
 	if budget <= 0 {
 		budget = DefaultMaxHops
 	}
 
 	dir := cwdAbs
-	for hops := 0; hops <= budget; hops++ {
-		manifest := filepath.Join(dir, ManifestName)
-		ok, err := regularFileExists(manifest)
-		if err != nil {
-			return nil, fmt.Errorf("workspace: stat %q: %w", manifest, err)
+	for hops := 0; hops < budget; hops++ {
+		manifestPath := filepath.Join(dir, ManifestName)
+		fi, statErr := os.Stat(manifestPath)
+		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return nil, fmt.Errorf("workspace: stat %q: %w", manifestPath, statErr)
 		}
-		if ok {
+		if statErr == nil {
+			if !fi.Mode().IsRegular() {
+				return nil, fmt.Errorf("%w: %q is %s", ErrManifestNotRegular, manifestPath, modeLabel(fi.Mode()))
+			}
 			return &Workspace{
-				ManifestPath: manifest,
+				ManifestPath: manifestPath,
 				Root:         dir,
 				LogicalCwd:   logical,
 			}, nil
@@ -120,7 +131,7 @@ func absLogical(p string) (string, error) {
 	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getwd: %w", err)
 	}
 	return filepath.Clean(filepath.Join(wd, p)), nil
 }
@@ -138,4 +149,23 @@ func regularFileExists(path string) (bool, error) {
 		return false, err
 	}
 	return fi.Mode().IsRegular(), nil
+}
+
+// modeLabel returns a human-readable description of a non-regular file mode
+// for use in ErrManifestNotRegular messages.
+func modeLabel(mode os.FileMode) string {
+	switch {
+	case mode.IsDir():
+		return "a directory"
+	case mode&os.ModeSymlink != 0:
+		return "a symlink"
+	case mode&os.ModeDevice != 0:
+		return "a device"
+	case mode&os.ModeNamedPipe != 0:
+		return "a named pipe"
+	case mode&os.ModeSocket != 0:
+		return "a socket"
+	default:
+		return "a non-regular file"
+	}
 }

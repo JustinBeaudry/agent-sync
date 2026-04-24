@@ -5,3 +5,6 @@ ftp://example.com/foo/bar
 file:///local/path
 ://missing-scheme
 https:///no-host-here
+https://github.com
+https://github.com/
+https://github.com/../secrets.git
