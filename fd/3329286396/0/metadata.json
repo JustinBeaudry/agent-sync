@@ -1,0 +1,64 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "fd3329286396",
+  "session_id": "b4ba6541-1e18-448f-b946-4b090e6ba597",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-24T23:07:33.857921Z",
+  "branch": "feat/git-layer",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md",
+    "go.mod",
+    "go.sum",
+    "internal/git/helpers_test.go",
+    "internal/git/materialize.go",
+    "internal/git/materialize_test.go",
+    "internal/git/read.go",
+    "internal/git/read_test.go",
+    "internal/git/resolve.go",
+    "internal/git/resolve_test.go",
+    "internal/git/shell.go",
+    "internal/git/shell_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "61844d224f59",
+  "token_usage": {
+    "input_tokens": 116,
+    "cache_creation_tokens": 187951,
+    "cache_read_tokens": 9035380,
+    "output_tokens": 57386,
+    "api_call_count": 92
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-24T23:07:33.846212Z",
+    "agent_lines": 2227,
+    "agent_removed": 2,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2227,
+    "total_lines_changed": 2229,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2227,
+      "agent_lines_removed": 2
+    }
+  ]
+}

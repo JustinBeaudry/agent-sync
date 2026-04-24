@@ -1,0 +1,5 @@
+Whats next in the plan?
+
+---
+
+no time tracking, but do create a branch, if we have a plan for whats next lets work on the plan, otherwise lets create that plan
