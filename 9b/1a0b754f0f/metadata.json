@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "9b1a0b754f0f",
+  "strategy": "manual-commit",
+  "branch": "feat/manifest-workspace-cache",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/spec/manifest-v1.md",
+    "internal/cache/canonicalize.go",
+    "internal/cache/canonicalize_test.go",
+    "internal/cache/key.go",
+    "internal/cache/key_test.go",
+    "internal/cache/location.go",
+    "internal/manifest/load.go",
+    "internal/manifest/load_test.go",
+    "internal/manifest/schema.go",
+    "internal/manifest/write.go",
+    "internal/manifest/write_test.go",
+    "internal/workspace/discover.go",
+    "internal/workspace/discover_test.go",
+    "internal/workspace/workspace.go",
+    "testdata/manifest/invalid-bad-trusted-sha.yaml",
+    "testdata/manifest/invalid-cache-override-relative.yaml",
+    "testdata/manifest/invalid-cache-override-traversal.yaml",
+    "testdata/urls/golden.txt",
+    "testdata/urls/unsupported.txt"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9b/1a0b754f0f/0/metadata.json",
+      "transcript": "/9b/1a0b754f0f/0/full.jsonl",
+      "content_hash": "/9b/1a0b754f0f/0/content_hash.txt",
+      "prompt": "/9b/1a0b754f0f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 72,
+    "cache_creation_tokens": 300416,
+    "cache_read_tokens": 4128544,
+    "output_tokens": 56070,
+    "api_call_count": 30
+  }
+}

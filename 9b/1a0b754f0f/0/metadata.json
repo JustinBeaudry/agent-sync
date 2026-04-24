@@ -1,0 +1,90 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "9b1a0b754f0f",
+  "session_id": "bf16b2f6-674d-4f24-b378-63d5b8e28dfa",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-24T04:51:00.548657Z",
+  "branch": "feat/manifest-workspace-cache",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/spec/manifest-v1.md",
+    "internal/cache/canonicalize.go",
+    "internal/cache/canonicalize_test.go",
+    "internal/cache/key.go",
+    "internal/cache/key_test.go",
+    "internal/cache/location.go",
+    "internal/manifest/load.go",
+    "internal/manifest/load_test.go",
+    "internal/manifest/schema.go",
+    "internal/manifest/write.go",
+    "internal/manifest/write_test.go",
+    "internal/workspace/discover.go",
+    "internal/workspace/discover_test.go",
+    "internal/workspace/workspace.go",
+    "testdata/manifest/invalid-bad-trusted-sha.yaml",
+    "testdata/manifest/invalid-cache-override-relative.yaml",
+    "testdata/manifest/invalid-cache-override-traversal.yaml",
+    "testdata/urls/golden.txt",
+    "testdata/urls/unsupported.txt"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "e9763ade6e21",
+  "checkpoint_transcript_start": 422,
+  "transcript_lines_at_start": 422,
+  "token_usage": {
+    "input_tokens": 72,
+    "cache_creation_tokens": 300416,
+    "cache_read_tokens": 4128544,
+    "output_tokens": 56070,
+    "api_call_count": 30
+  },
+  "session_metrics": {
+    "turn_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-24T04:51:00.505921Z",
+    "agent_lines": 545,
+    "agent_removed": 139,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 545,
+    "total_lines_changed": 684,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 1123,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".context/compound-engineering/ce-review/20260421-131203-a748e9ab/adversarial.json": 273,
+        ".context/compound-engineering/ce-review/20260421-131203-a748e9ab/api-contract.json": 106,
+        ".context/compound-engineering/ce-review/20260421-131203-a748e9ab/correctness.json": 140,
+        ".context/compound-engineering/ce-review/20260421-131203-a748e9ab/maintainability.json": 168,
+        ".context/compound-engineering/ce-review/20260421-131203-a748e9ab/project-standards.json": 73,
+        ".context/compound-engineering/ce-review/20260421-131203-a748e9ab/reliability.json": 146,
+        ".context/compound-engineering/ce-review/20260421-131203-a748e9ab/security.json": 53,
+        ".context/compound-engineering/ce-review/20260421-131203-a748e9ab/testing.json": 164
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1252,
+      "agent_lines_removed": 37
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1680,
+      "agent_lines_removed": 139
+    }
+  ]
+}
