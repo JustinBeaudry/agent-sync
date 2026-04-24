@@ -447,7 +447,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 ### Phase B — Git materialization & Trust
 
-- [ ] **Unit 5: Hybrid Git layer + pin resolution + floating/offline handling**
+- [x] **Unit 5: Hybrid Git layer + pin resolution + floating/offline handling**
 
 **Goal:** Materialize the canonical source (via shelling to `git`) and expose a read API (via go-git v5.17). Implement `init`'s pin-at-init resolve, `--defer-resolve`, `--floating`, and the pinned-cached-succeeds offline rule.
 
