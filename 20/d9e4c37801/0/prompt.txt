@@ -77,3 +77,67 @@ files_changed:
 reason: Dead code removed — `TrimPrefix("/")` in `scpToSSH` was unreachable because `scpPattern` already rejects paths starting with `/`; comment and strip logic now agree with the actual behaviour.</result>
 <usage><total_tokens>32775</total_tokens><tool_uses>12</tool_uses><duration_ms>44051</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>a15e1eb5515f6b6f5</task-id>
+<tool-use-id>toolu_01E52Y6vibXDEW5oQzEZeqfv</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/18e69f88-b87a-466a-8d3c-8339a606cc12/tasks/a15e1eb5515f6b6f5.output</output-file>
+<status>completed</status>
+<summary>Agent "Resolve discover.go validation cluster" completed</summary>
+<result>Everything is good. Here is the structured summary:
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TD4i
+feedback_type: review_thread
+reply_text:
+&gt; `ErrManifestNotRegular` is documented to cover a dangling symlink at `.aienv.yaml`, but the current `os.Stat` call treats a dangling symlink as `ErrNotExist` and continues walking to an ancestor manifest.
+
+Addressed: Replaced `os.Stat` in the walk loop with a new `validateManifestFile` helper that calls `os.Lstat` first. When the entry is a symlink, it follows with `os.Stat`; if that yields `ErrNotExist`, the function returns `ErrManifestNotRegular` rather than nil/false. Added `TestFind_DanglingSymlinkReturnsError` covering this case.
+files_changed: [internal/workspace/discover.go, internal/workspace/discover_test.go]
+reason: Dangling symlink was silently treated as ErrNotExist and skipped; now correctly returns ErrManifestNotRegular.
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TE-O
+feedback_type: review_thread
+reply_text:
+&gt; Treat dangling manifest symlink as an explicit error. The discovery loop uses `os.Stat` and treats `ENOENT` as "no manifest here," but a dangling `.aienv.yaml` symlink also yields `ENOENT`.
+
+Addressed: Same fix as the paired thread — the walk now uses `validateManifestFile` which leads with `os.Lstat`, detects the symlink case, and returns `ErrManifestNotRegular` for a dangling target rather than falling through to an ancestor walk. `TestFind_DanglingSymlinkReturnsError` verifies the behavior.
+files_changed: [internal/workspace/discover.go, internal/workspace/discover_test.go]
+reason: Root cause was identical to Thread 1 (PRRT_kwDOSIQ0HM59TD4i); same fix resolves both.
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TD5e
+feedback_type: review_thread
+reply_text:
+&gt; The StopAt ancestor check breaks when StopAt is the filesystem root (e.g. "/" on Unix): `stopAbs+sep` becomes "//", so `HasPrefix(cwdAbs+sep, stopAbs+sep)` is false and valid inputs are rejected.
+
+Addressed: Replaced the `strings.HasPrefix` ancestor check with `filepath.Rel(stopAbs, cwdAbs)`. When `stopAbs` is `/`, `filepath.Rel("/", "/some/path")` returns `"some/path"` — no `..` prefix — correctly passing the check. `TestFind_StopAtFilesystemRoot` verifies that `StopAt: "/"` allows normal discovery below root.
+files_changed: [internal/workspace/discover.go, internal/workspace/discover_test.go]
+reason: `stopAbs+sep` when stopAbs is "/" produced "//" which broke the HasPrefix check; filepath.Rel handles the root case correctly.
+
+---
+
+verdict: fixed
+feedback_id: PRRT_kwDOSIQ0HM59TE-Q
+feedback_type: review_thread
+reply_text:
+&gt; When `--workspace` points directly to a `.aienv.yaml` path, `resolveExplicit` returns success without verifying the target is a regular file. FIFOs/sockets/devices with that basename are accepted, and later manifest reads can block or fail unpredictably.
+
+Addressed: The direct-manifest branch in `resolveExplicit` now calls `validateManifestFile` instead of returning the path unchecked. The same helper is used by the upward walk, keeping logic DRY. A FIFO named `.aienv.yaml` now yields `ErrManifestNotRegular`. `TestFind_ExplicitWorkspaceToFIFO` (Unix only via `syscall.Mkfifo`) verifies this.
+files_changed: [internal/workspace/discover.go, internal/workspace/discover_test.go]
+reason: The explicit-path branch skipped file-type validation; now validated consistently through the shared validateManifestFile helper.
+
+---
+
+cluster_assessment: All four threads were symptoms of the same structural gap: file-existence checks at manifest paths were done with `os.Stat` only (or skipped entirely), with no code path that handled symlinks as a distinct case. The fix was systemic — the old `regularFileExists(bool, error)` helper was replaced with `validateManifestFile(*Workspace, bool, error)` which uses `os.Lstat`-first semantics, detects dangling symlinks explicitly, and consolidates all three call sites (upward walk, explicit-directory branch, explicit-file branch) into a single validated path. The StopAt root bug was coincidentally co-located but had a distinct cause (string-prefix arithmetic failing at the filesystem root), and was fixed independently with `filepath.Rel`. Three new tests were added covering each gap: `TestFind_DanglingSymlinkReturnsError`, `TestFind_StopAtFilesystemRoot`, and `TestFind_ExplicitWorkspaceToFIFO`.</result>
+<usage><total_tokens>42654</total_tokens><tool_uses>16</tool_uses><duration_ms>117511</duration_ms></usage>
+</task-notification>
