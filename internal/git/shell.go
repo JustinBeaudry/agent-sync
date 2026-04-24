@@ -217,12 +217,17 @@ func runCapture(cmd *exec.Cmd, label string) ([]byte, []byte, error) {
 }
 
 // LsRemote returns the 40-char lowercase-hex SHA that `ref` resolves to
-// on `url`. `ref` may be a branch, tag, or literal SHA; `git ls-remote`
-// returns the same value for either.
+// on `url`. `ref` may be a branch or tag; literal SHAs are short-
+// circuited by [ResolveRef] before reaching this entry point.
 //
-// The underlying command is `git ls-remote --exit-code -- <url> <ref>`.
-// --exit-code ensures that a ref returning no matches becomes a clean
-// [ErrRefNotFound] rather than a silent empty output.
+// The underlying command is
+// `git ls-remote --exit-code -- <url> <ref> <ref>^{}`. The `^{}` peel
+// pattern is included so that annotated tags return both the tag-object
+// SHA and the dereferenced commit SHA, letting [firstShaFromLsRemote]
+// pick the commit. For branches and lightweight tags the peel pattern
+// matches nothing and is silently ignored. --exit-code still ensures
+// that a ref returning no matches becomes a clean [ErrRefNotFound]
+// rather than a silent empty output.
 func LsRemote(ctx context.Context, rawURL, ref string) (string, error) {
 	if err := checkInlineCredential(rawURL); err != nil {
 		return "", err
@@ -231,7 +236,7 @@ func LsRemote(ctx context.Context, rawURL, ref string) (string, error) {
 		return "", fmt.Errorf("git: ls-remote: empty ref")
 	}
 
-	cmd, err := gitCmd(ctx, "", "ls-remote", "--exit-code", "--", rawURL, ref)
+	cmd, err := gitCmd(ctx, "", "ls-remote", "--exit-code", "--", rawURL, ref, ref+"^{}")
 	if err != nil {
 		return "", err
 	}
@@ -259,21 +264,36 @@ func LsRemote(ctx context.Context, rawURL, ref string) (string, error) {
 	return sha, nil
 }
 
-// firstShaFromLsRemote extracts the SHA from the first parseable line of
-// `git ls-remote` output. Lines that do not begin with a 40-char SHA are
-// skipped to tolerate warnings printed to stdout on some git builds.
+// firstShaFromLsRemote extracts the SHA from `git ls-remote` output.
+// Lines that do not begin with a 40-char SHA are skipped to tolerate
+// warnings printed to stdout on some git builds.
+//
+// Annotated-tag handling: `git ls-remote` reports an annotated tag on
+// two lines — first the tag *object* SHA (which is not a commit), then
+// the dereferenced commit SHA suffixed with `^{}`. Downstream
+// [Repository.ReadTree] resolves SHAs through `CommitObject`, which
+// fails for tag-object SHAs, so when a peeled (`^{}`) line is present
+// we prefer it. For lightweight tags, branches, and SHA queries (single
+// line, no peel) we fall back to the first matched SHA.
 func firstShaFromLsRemote(stdout []byte) string {
+	var firstSHA string
 	for _, line := range strings.Split(string(stdout), "\n") {
 		line = strings.TrimSpace(line)
 		if len(line) < 40 {
 			continue
 		}
 		candidate := strings.ToLower(line[:40])
-		if shaPattern.MatchString(candidate) {
+		if !shaPattern.MatchString(candidate) {
+			continue
+		}
+		if strings.HasSuffix(line, "^{}") {
 			return candidate
 		}
+		if firstSHA == "" {
+			firstSHA = candidate
+		}
 	}
-	return ""
+	return firstSHA
 }
 
 // networkFailurePatterns is a small allowlist of substrings that strongly
@@ -326,7 +346,11 @@ func Clone(ctx context.Context, rawURL, dst string) error {
 		return fmt.Errorf("git: clone: mkdir parent of %q: %w", dst, err)
 	}
 
-	cmd, err := gitCmd(ctx, "", "clone", "--bare", "--quiet", "--no-tags", "--", rawURL, dst)
+	// Tags are fetched on the initial clone (default git behavior — no
+	// `--no-tags`) so a tag-pinned manifest can be materialized on a
+	// fresh cache. This matches [Fetch], which uses `--tags` to keep
+	// the mirror's tag namespace current on subsequent syncs.
+	cmd, err := gitCmd(ctx, "", "clone", "--bare", "--quiet", "--", rawURL, dst)
 	if err != nil {
 		return err
 	}

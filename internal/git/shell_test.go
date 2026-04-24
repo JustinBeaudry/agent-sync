@@ -68,14 +68,20 @@ func TestLsRemote_Tag(t *testing.T) {
 
 	// Annotated tag: ls-remote reports the tag object's SHA in the
 	// primary line; the dereferenced commit is reported with the `^{}`
-	// suffix. The first SHA we see in output is the tag object, not
-	// the commit.
+	// suffix. LsRemote must return the dereferenced commit SHA so
+	// downstream [Repository.ReadTree] (which goes through
+	// CommitObject) can resolve it. r.TagSHA is the commit SHA the
+	// annotated tag points at — that is what we expect back, NOT the
+	// tag object SHA.
 	sha, err := LsRemote(testCtx(t), r.Path, r.TagName)
 	if err != nil {
 		t.Fatalf("LsRemote tag: %v", err)
 	}
 	if !shaPattern.MatchString(sha) {
 		t.Fatalf("LsRemote tag returned non-SHA: %q", sha)
+	}
+	if sha != r.TagSHA {
+		t.Fatalf("LsRemote tag SHA = %q (likely the tag object), want commit SHA %q", sha, r.TagSHA)
 	}
 }
 
@@ -243,15 +249,43 @@ func TestIsAncestor_False(t *testing.T) {
 }
 
 func TestFirstShaFromLsRemote(t *testing.T) {
+	const (
+		tagObjectSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		commitSHA    = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		mainSHA      = "1234567890abcdef1234567890abcdef12345678"
+	)
 	cases := []struct {
 		name    string
 		in      string
 		wantSHA string
 	}{
-		{"simple", "1234567890abcdef1234567890abcdef12345678\trefs/heads/main\n", "1234567890abcdef1234567890abcdef12345678"},
-		{"skip_short_line", "short\n1234567890abcdef1234567890abcdef12345678\trefs/heads/main\n", "1234567890abcdef1234567890abcdef12345678"},
+		{"simple", mainSHA + "\trefs/heads/main\n", mainSHA},
+		{"skip_short_line", "short\n" + mainSHA + "\trefs/heads/main\n", mainSHA},
 		{"empty", "", ""},
-		{"uppercase_normalized", strings.ToUpper("1234567890abcdef1234567890abcdef12345678") + "\trefs/heads/main\n", "1234567890abcdef1234567890abcdef12345678"},
+		{"uppercase_normalized", strings.ToUpper(mainSHA) + "\trefs/heads/main\n", mainSHA},
+		// Annotated tag: two lines, the second is the dereferenced
+		// commit SHA suffixed with `^{}`. The peel must win so
+		// downstream callers receive the commit SHA, not the tag
+		// object SHA.
+		{
+			"annotated_tag_prefers_peel",
+			tagObjectSHA + "\trefs/tags/v1\n" + commitSHA + "\trefs/tags/v1^{}\n",
+			commitSHA,
+		},
+		// Peel-after-trailing-newline: the peeled line is last and
+		// followed by a trailing newline. Same expectation.
+		{
+			"annotated_tag_with_trailing_newline",
+			tagObjectSHA + "\trefs/tags/v1\n" + commitSHA + "\trefs/tags/v1^{}\n\n",
+			commitSHA,
+		},
+		// Lightweight tag / branch: a single line with no peel.
+		// Falls back to the first matched SHA.
+		{
+			"lightweight_tag_uses_first_sha",
+			commitSHA + "\trefs/tags/v1\n",
+			commitSHA,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

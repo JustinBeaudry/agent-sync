@@ -360,6 +360,65 @@ func TestMaterialize_PinMismatchAfterFetch(t *testing.T) {
 	}
 }
 
+func TestMaterialize_TagPinnedFreshCache(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	src := makeRepo(t)
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, src.Path)
+
+	// Tag-pinned manifest on a fresh cache: PinnedSHA is the commit the
+	// annotated tag points at, Ref is the tag name. The reachability
+	// check resolves Ref locally on the bare clone, so the clone must
+	// have fetched tags. If `--no-tags` were still set on `Clone`, this
+	// path would fail at the IsAncestor step because `v1` would not be
+	// present in the local refs.
+	res, err := Materialize(testCtx(t), Input{
+		CanonicalURL: src.Path,
+		Cache:        loc,
+		PinnedSHA:    src.TagSHA,
+		Ref:          src.TagName,
+	})
+	if err != nil {
+		t.Fatalf("Materialize tag-pinned: %v", err)
+	}
+	if res.ResolvedSHA != src.TagSHA {
+		t.Fatalf("ResolvedSHA = %q, want %q", res.ResolvedSHA, src.TagSHA)
+	}
+	if res.FromCache {
+		t.Fatal("FromCache must be false on fresh clone")
+	}
+}
+
+func TestMaterialize_TagFloatingFreshCache(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	src := makeRepo(t)
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, src.Path)
+
+	// Floating manifest pointed at an annotated tag: Materialize must
+	// resolve the tag via ls-remote (returning the dereferenced commit
+	// SHA, not the tag object SHA) and confirm the commit landed in the
+	// fresh cache. Both fixes are exercised here:
+	//   - firstShaFromLsRemote must prefer the `^{}` peel,
+	//   - Clone must materialize tags so the commit is fetched.
+	res, err := Materialize(testCtx(t), Input{
+		CanonicalURL: src.Path,
+		Cache:        loc,
+		Ref:          src.TagName,
+		Floating:     true,
+	})
+	if err != nil {
+		t.Fatalf("Materialize tag-floating: %v", err)
+	}
+	if res.ResolvedSHA != src.TagSHA {
+		t.Fatalf("ResolvedSHA = %q, want commit SHA %q (tag-object SHA would indicate firstShaFromLsRemote regression)", res.ResolvedSHA, src.TagSHA)
+	}
+}
+
 func TestMaterialize_NilCache(t *testing.T) {
 	withDetectReset(t)
 

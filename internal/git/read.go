@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"slices"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -197,16 +198,9 @@ func (r *Repository) BlobContent(commitSHA, relPath string) ([]byte, error) {
 }
 
 // sortEntries sorts TreeEntries by Path in ascending lexicographic order.
-// Isolated here so the caller doesn't pull in sort.Slice inline in
-// ReadTree; the ordering is part of the public contract.
+// The ordering is part of ReadTree's public contract.
 func sortEntries(entries []TreeEntry) {
-	// Small insertion sort — tree sizes are expected to be O(hundreds)
-	// for aienvs canonical repos. Avoid the reflect-based sort.Slice.
-	for i := 1; i < len(entries); i++ {
-		j := i
-		for j > 0 && entries[j-1].Path > entries[j].Path {
-			entries[j-1], entries[j] = entries[j], entries[j-1]
-			j--
-		}
-	}
+	slices.SortFunc(entries, func(a, b TreeEntry) int {
+		return strings.Compare(a.Path, b.Path)
+	})
 }
