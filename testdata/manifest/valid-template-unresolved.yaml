@@ -1,0 +1,14 @@
+# aienvs init template — `commit:` and `trusted_sha:` are placeholders that
+# `aienvs init` fills in once the remote ref resolves. The keys must exist
+# (even empty) so WriteResolvedSHA has somewhere to write without ambiguity.
+version: 1
+
+canonical:
+  url: https://github.com/example/agents-config.git
+  ref: main
+  commit: ""
+
+trusted_sha: ""
+
+targets:
+  - claude

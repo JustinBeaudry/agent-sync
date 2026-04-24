@@ -1,0 +1,5 @@
+version: 1
+canonical:
+  url: https://github.com/example/agents-config.git
+  ref: main
+trusted_sha: 2222222222222222222222222222222222222222

@@ -1,0 +1,4 @@
+version: 1
+canonical:
+  url: https://github.com/example/agents-config.git
+  local_path: /tmp/agents-config

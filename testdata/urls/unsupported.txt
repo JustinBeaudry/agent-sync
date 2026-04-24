@@ -1,0 +1,10 @@
+# Inputs Canonicalize must reject with ErrUnsupportedURL.
+# (Empty input, unsupported schemes, malformed URLs, missing hosts.)
+
+ftp://example.com/foo/bar
+file:///local/path
+://missing-scheme
+https:///no-host-here
+https://github.com
+https://github.com/
+https://github.com/../secrets.git
