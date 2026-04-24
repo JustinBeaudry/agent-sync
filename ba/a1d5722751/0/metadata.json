@@ -1,0 +1,51 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "baa1d5722751",
+  "session_id": "b4ba6541-1e18-448f-b946-4b090e6ba597",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-24T23:18:14.675171Z",
+  "branch": "feat/git-layer",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/git/materialize_test.go",
+    "internal/git/read.go",
+    "internal/git/shell.go",
+    "internal/git/shell_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "523315bd6e2f",
+  "checkpoint_transcript_start": 294,
+  "transcript_lines_at_start": 294,
+  "token_usage": {
+    "input_tokens": 26,
+    "cache_creation_tokens": 35746,
+    "cache_read_tokens": 2315765,
+    "output_tokens": 8419,
+    "api_call_count": 12
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-24T23:18:14.660146Z",
+    "agent_lines": 139,
+    "agent_removed": 28,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 139,
+    "total_lines_changed": 167,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
