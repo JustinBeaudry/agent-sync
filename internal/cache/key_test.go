@@ -49,7 +49,7 @@ func TestResolve_UsesOverride(t *testing.T) {
 	if !strings.HasPrefix(loc.Root, tmp) {
 		t.Errorf("root %q not under override %q", loc.Root, tmp)
 	}
-	if !strings.HasSuffix(loc.Root, cache.DirName) {
+	if !strings.HasSuffix(filepath.ToSlash(loc.Root), cache.DirName) {
 		t.Errorf("root %q missing DirName suffix", loc.Root)
 	}
 	if loc.Dir != filepath.Join(loc.Root, loc.Key) {
@@ -88,7 +88,7 @@ func TestResolve_XDGDefault(t *testing.T) {
 	if !filepath.IsAbs(loc.Root) {
 		t.Errorf("XDG-resolved root should be absolute: %q", loc.Root)
 	}
-	if !strings.HasSuffix(loc.Root, cache.DirName) {
+	if !strings.HasSuffix(filepath.ToSlash(loc.Root), cache.DirName) {
 		t.Errorf("root %q missing DirName suffix", loc.Root)
 	}
 }

@@ -145,6 +145,13 @@ func ValidateRelPath(relPath string) error {
 	if filepath.IsAbs(relPath) {
 		return fmt.Errorf("%w: absolute path %q", ErrUnsafeRelPath, relPath)
 	}
+	// Reject bare-rooted paths like "/etc/passwd" on Windows where
+	// filepath.IsAbs is false (Windows absolute paths require a drive
+	// letter) but the leading separator still means "root of the current
+	// drive" and must not be accepted as a relative path.
+	if strings.HasPrefix(relPath, "/") || strings.HasPrefix(relPath, `\`) {
+		return fmt.Errorf("%w: rooted path %q", ErrUnsafeRelPath, relPath)
+	}
 	cleaned := filepath.ToSlash(relPath)
 	for _, seg := range strings.Split(cleaned, "/") {
 		switch seg {
