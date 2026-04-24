@@ -146,6 +146,33 @@ func TestMaterialize_FloatingOffline(t *testing.T) {
 	}
 }
 
+// TestMaterialize_OfflineWithoutPin asserts that the defer-resolve +
+// offline shape (PinnedSHA empty, Floating false, Offline true) is
+// rejected at the input boundary. Without a pin, Materialize would have
+// to ls-remote to discover the SHA — which Offline forbids — so this
+// state can never be satisfied and must fail fast with a clear validation
+// error rather than falling through to clone/fetch/resolve.
+func TestMaterialize_OfflineWithoutPin(t *testing.T) {
+	withDetectReset(t)
+
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, "https://example.invalid/r.git")
+
+	_, err := Materialize(testCtx(t), Input{
+		CanonicalURL: "https://example.invalid/r.git",
+		Cache:        loc,
+		Ref:          "main",
+		Offline:      true,
+	})
+	if err == nil {
+		t.Fatal("expected error for Offline + defer-resolve (no pin, not floating)")
+	}
+	// Validation error, not the cache-miss sentinel.
+	if errors.Is(err, ErrUnresolvablePinOffline) {
+		t.Fatalf("defer-resolve + offline should not surface as ErrUnresolvablePinOffline (that sentinel is for pin-set-but-cache-miss): %v", err)
+	}
+}
+
 func TestMaterialize_FloatingAndPinnedMutuallyExclusive(t *testing.T) {
 	withDetectReset(t)
 
@@ -271,6 +298,73 @@ func TestMaterialize_ReachabilityCheck_ForcePushedRef(t *testing.T) {
 	})
 	if !errors.Is(err, ErrReachabilityCheckFailed) {
 		t.Fatalf("expected ErrReachabilityCheckFailed after force-push, got %v", err)
+	}
+}
+
+// TestMaterialize_ReachabilityCheck_TagShadowsBranch verifies that the
+// reachability check disambiguates a bare ref name to its branch form
+// rather than falling back to git's DWIM resolution. Without
+// disambiguation, a repository that has both `refs/heads/<name>` and
+// `refs/tags/<name>` would let `git merge-base --is-ancestor` pick the
+// tag — meaning a legitimate branch-pinned manifest would fail
+// reachability with ErrReachabilityCheckFailed because the tag points at
+// a different commit. This test creates exactly that ambiguity (tag
+// `main` at InitialSHA, branch `main` at SecondSHA), pins the branch
+// commit, and asserts Materialize succeeds.
+func TestMaterialize_ReachabilityCheck_TagShadowsBranch(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	src := makeRepo(t)
+	// Tag `main` at InitialSHA so the bare name `main` is ambiguous
+	// between `refs/heads/main` (SecondSHA) and `refs/tags/main`
+	// (InitialSHA) on the source repo. The mirror clone inherits both.
+	src.addShadowingTag(t)
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, src.Path)
+
+	// Pin the branch tip with a bare ref name. The reachability check
+	// must qualify this to refs/heads/main and succeed; under git's DWIM
+	// rules the tag would win and the call would fail.
+	res, err := Materialize(testCtx(t), Input{
+		CanonicalURL: src.Path,
+		Cache:        loc,
+		PinnedSHA:    src.SecondSHA,
+		Ref:          src.HeadBranch,
+	})
+	if err != nil {
+		t.Fatalf("Materialize with shadowing tag: %v", err)
+	}
+	if res.ResolvedSHA != src.SecondSHA {
+		t.Fatalf("ResolvedSHA = %q, want %q", res.ResolvedSHA, src.SecondSHA)
+	}
+}
+
+// TestMaterialize_ReachabilityCheck_TagPinnedSucceeds verifies the
+// fallback half of resolveReachabilityRef: when no branch by the given
+// name exists, the helper qualifies to `refs/tags/<name>` and the
+// reachability check succeeds for a tag-pinned manifest. This guards
+// against a regression that would only qualify to refs/heads and fail
+// for legitimately tag-pinned canonical sources.
+func TestMaterialize_ReachabilityCheck_TagPinnedSucceeds(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	src := makeRepo(t)
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, src.Path)
+
+	res, err := Materialize(testCtx(t), Input{
+		CanonicalURL: src.Path,
+		Cache:        loc,
+		PinnedSHA:    src.TagSHA,
+		Ref:          src.TagName,
+	})
+	if err != nil {
+		t.Fatalf("Materialize tag-pinned reachability: %v", err)
+	}
+	if res.ResolvedSHA != src.TagSHA {
+		t.Fatalf("ResolvedSHA = %q, want %q", res.ResolvedSHA, src.TagSHA)
 	}
 }
 

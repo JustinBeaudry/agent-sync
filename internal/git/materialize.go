@@ -105,6 +105,17 @@ func Materialize(ctx context.Context, in Input) (*Result, error) {
 	if in.Floating && in.Offline {
 		return nil, errors.New("git: materialize: floating manifests cannot satisfy offline mode")
 	}
+	// Defer-resolve + offline is also unsatisfiable: with no PinnedSHA and
+	// no Floating flag, the only way to discover the SHA is to consult the
+	// remote, which Offline forbids. Catch this at the input boundary so
+	// we never fall through to clone/fetch/resolve and surface a transport
+	// failure instead of a deterministic offline error. This is a plain
+	// validation error, not ErrUnresolvablePinOffline — that sentinel is
+	// reserved for "pin set but cache miss" (a runtime cache state), while
+	// this is a request shape that can never satisfy the offline contract.
+	if in.Offline && in.PinnedSHA == "" && !in.Floating {
+		return nil, errors.New("git: materialize: Offline requires a pinned SHA (defer-resolve cannot run offline)")
+	}
 	if err := checkInlineCredential(in.CanonicalURL); err != nil {
 		return nil, err
 	}
@@ -175,7 +186,11 @@ func Materialize(ctx context.Context, in Input) (*Result, error) {
 	// the mirror. A force-push that rewrote the ref's history would
 	// leave the pin orphaned; this check catches that case.
 	if in.PinnedSHA != "" && strings.TrimSpace(in.Ref) != "" {
-		ok, err := IsAncestor(ctx, in.Cache.Dir, targetSHA, refDescriptor(in.Ref))
+		descriptor, err := resolveReachabilityRef(ctx, in.Cache.Dir, in.Ref)
+		if err != nil {
+			return nil, err
+		}
+		ok, err := IsAncestor(ctx, in.Cache.Dir, targetSHA, descriptor)
 		if err != nil {
 			return nil, err
 		}
@@ -315,21 +330,43 @@ func cacheHasSha(dir, sha string) (bool, error) {
 	return repo.HasCommit(sha)
 }
 
-// refDescriptor turns a user-supplied ref (branch or tag) into the full
-// ref path merge-base expects. Already-qualified refs (`refs/...`) pass
-// through unchanged; bare names are probed in the conventional order
-// (remote branch, tag, local branch) by falling through to `refs/heads`
-// as the default because `git fetch origin +refs/heads/*:refs/heads/*`
-// mirrors remote branches under local heads.
-func refDescriptor(ref string) string {
+// resolveReachabilityRef turns a user-supplied ref (branch or tag) into
+// the fully-qualified ref path the reachability check needs.
+//
+// Already-qualified refs (`refs/...`) pass through unchanged. Bare names
+// are disambiguated against the local mirror in the order branch then
+// tag: `refs/heads/<name>` wins if it exists, falling back to
+// `refs/tags/<name>` if not. Both forms are probed explicitly with
+// [HasRef] rather than letting `git merge-base` apply its DWIM rules,
+// because for an ambiguous name git's resolver may pick the tag — at
+// which point the reachability check evaluates the wrong ref and the
+// force-push defense produces a false pass or false fail.
+//
+// If neither form exists locally the ref is returned unchanged so the
+// downstream `merge-base` call surfaces a real "unknown revision" error
+// instead of this helper inventing one.
+func resolveReachabilityRef(ctx context.Context, repoPath, ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	if strings.HasPrefix(ref, "refs/") {
-		return ref
+		return ref, nil
 	}
-	// Callers usually mean a branch. Tags are handled via a fall-back
-	// search in `git merge-base`'s resolver, so passing the shortest
-	// unambiguous name works for most repos. For full rigor unit 12
-	// will add explicit tag handling when tag-pinned canonical sources
-	// ship.
-	return ref
+	branchRef := "refs/heads/" + ref
+	branchExists, err := HasRef(ctx, repoPath, branchRef)
+	if err != nil {
+		return "", err
+	}
+	if branchExists {
+		return branchRef, nil
+	}
+	tagRef := "refs/tags/" + ref
+	tagExists, err := HasRef(ctx, repoPath, tagRef)
+	if err != nil {
+		return "", err
+	}
+	if tagExists {
+		return tagRef, nil
+	}
+	// Neither form exists. Fall through to the bare name and let
+	// `merge-base` produce the canonical error.
+	return ref, nil
 }

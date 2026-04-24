@@ -92,15 +92,20 @@ var (
 func DetectGit() error {
 	detectOnce.Do(func() {
 		if override := strings.TrimSpace(os.Getenv("AIENVS_GIT_EXECUTABLE")); override != "" {
-			// gosec G304/G703: the override is an explicit opt-in env var
+			// gosec G204/G304: the override is an explicit opt-in env var
 			// for CI hosts that need to pin `git` to a known location.
-			// The stat is only used to produce an early, clear error; the
-			// path is not opened or executed here.
-			if _, err := os.Stat(override); err != nil { //nolint:gosec
+			// exec.LookPath validates that the override resolves to a
+			// runnable executable: it rejects directories, non-regular
+			// files, and (on Unix) files without the executable bit; on
+			// Windows it requires a PATHEXT match. This makes
+			// misconfigurations fail here with ErrGitNotFound rather than
+			// later at exec time with a less specific error.
+			p, err := exec.LookPath(override) //nolint:gosec
+			if err != nil {
 				detectErr = fmt.Errorf("%w: AIENVS_GIT_EXECUTABLE=%q: %w", ErrGitNotFound, override, err)
 				return
 			}
-			gitPath = override
+			gitPath = p
 			return
 		}
 		p, err := exec.LookPath("git")
@@ -395,6 +400,13 @@ func Fetch(ctx context.Context, repoPath string) error {
 // force-pushed refs: after fetching, callers verify the pinned SHA is
 // reachable from the configured ref.
 //
+// Pass fully-qualified refs (`refs/heads/<name>`, `refs/tags/<name>`) for
+// `descendant` whenever a ref name could be ambiguous. `git merge-base
+// --is-ancestor` resolves bare names through git's DWIM rules, which
+// silently prefer tags over branches in some cases — leaving the
+// reachability check evaluating the wrong ref. Use [HasRef] to probe for
+// the qualified form before calling this function.
+//
 // A clean "false" answer is returned on exit code 1; any other exit is
 // wrapped as [ErrShellFailed].
 func IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (bool, error) {
@@ -419,4 +431,40 @@ func IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (boo
 		}
 	}
 	return false, fmt.Errorf("%w: is-ancestor %s..%s: %w: %s", ErrShellFailed, ancestor, descendant, err, strings.TrimSpace(stderr.String()))
+}
+
+// HasRef reports whether `ref` resolves to an object in the repository
+// at repoPath. The check uses `git rev-parse --verify --quiet <ref>`,
+// which exits 0 when the ref exists and 1 when it does not. Any other
+// exit is wrapped as [ErrShellFailed].
+//
+// Pass fully-qualified refs (`refs/heads/<name>`, `refs/tags/<name>`,
+// etc.) — the whole point of this helper is to disambiguate names that
+// would otherwise be subject to git's DWIM resolution. Bare names "work"
+// here too but defeat the purpose.
+func HasRef(ctx context.Context, repoPath, ref string) (bool, error) {
+	if !filepath.IsAbs(repoPath) {
+		return false, fmt.Errorf("git: has-ref: repo path must be absolute, got %q", repoPath)
+	}
+	if strings.TrimSpace(ref) == "" {
+		return false, fmt.Errorf("git: has-ref: empty ref")
+	}
+	cmd, err := gitCmd(ctx, repoPath, "rev-parse", "--verify", "--quiet", ref)
+	if err != nil {
+		return false, err
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		switch exitErr.ExitCode() {
+		case 1:
+			return false, nil
+		}
+	}
+	return false, fmt.Errorf("%w: rev-parse --verify %q: %w: %s", ErrShellFailed, ref, err, strings.TrimSpace(stderr.String()))
 }

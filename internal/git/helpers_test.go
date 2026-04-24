@@ -85,6 +85,17 @@ func makeRepo(t *testing.T) testRepo {
 	}
 }
 
+// addShadowingTag creates a lightweight tag whose name matches the
+// repo's primary branch (`HeadBranch`) but points at the initial commit.
+// After this runs the repository has both `refs/heads/<name>` (at the
+// branch tip, e.g. SecondSHA) and `refs/tags/<name>` (at InitialSHA), so
+// the bare name is ambiguous to `git merge-base --is-ancestor`. Used by
+// the reachability tag-shadow regression test.
+func (r *testRepo) addShadowingTag(t *testing.T) {
+	t.Helper()
+	mustGit(t, r.Path, "tag", r.HeadBranch, r.InitialSHA)
+}
+
 // forcePush rewrites the given branch to a new commit that is NOT an
 // ancestor of the previous tip. This simulates a force-push for the
 // reachability-check test.

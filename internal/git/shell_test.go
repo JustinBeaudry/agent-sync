@@ -33,6 +33,25 @@ func TestDetectGit_OverrideMissing(t *testing.T) {
 	}
 }
 
+// TestDetectGit_OverrideDirectory confirms that the override is validated
+// as runnable, not merely existent. Pointing AIENVS_GIT_EXECUTABLE at a
+// directory must fail at detection time with ErrGitNotFound rather than
+// deferring the failure to exec time. Under an `os.Stat` implementation
+// this would erroneously succeed (directories stat fine); exec.LookPath
+// refuses non-executables on Unix and PATHEXT-mismatches on Windows.
+func TestDetectGit_OverrideDirectory(t *testing.T) {
+	withDetectReset(t)
+	t.Setenv("AIENVS_GIT_EXECUTABLE", t.TempDir())
+
+	err := DetectGit()
+	if err == nil {
+		t.Fatal("expected error pointing override at a directory, got nil")
+	}
+	if !errors.Is(err, ErrGitNotFound) {
+		t.Fatalf("expected ErrGitNotFound, got %v", err)
+	}
+}
+
 func TestDetectGit_Idempotent(t *testing.T) {
 	requireGit(t)
 	withDetectReset(t)
@@ -245,6 +264,81 @@ func TestIsAncestor_False(t *testing.T) {
 	}
 	if ok {
 		t.Fatalf("expected second SHA NOT to be ancestor of initial SHA")
+	}
+}
+
+func TestHasRef_BranchExists(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	r := makeRepo(t)
+	dst := filepath.Join(t.TempDir(), "out")
+	if err := Clone(testCtx(t), r.Path, dst); err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+
+	ok, err := HasRef(testCtx(t), dst, "refs/heads/"+r.HeadBranch)
+	if err != nil {
+		t.Fatalf("HasRef: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected refs/heads/%s to exist after clone", r.HeadBranch)
+	}
+}
+
+func TestHasRef_TagExists(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	r := makeRepo(t)
+	dst := filepath.Join(t.TempDir(), "out")
+	if err := Clone(testCtx(t), r.Path, dst); err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+
+	ok, err := HasRef(testCtx(t), dst, "refs/tags/"+r.TagName)
+	if err != nil {
+		t.Fatalf("HasRef: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected refs/tags/%s to exist after clone (Clone fetches tags)", r.TagName)
+	}
+}
+
+func TestHasRef_Missing(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	r := makeRepo(t)
+	dst := filepath.Join(t.TempDir(), "out")
+	if err := Clone(testCtx(t), r.Path, dst); err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+
+	ok, err := HasRef(testCtx(t), dst, "refs/heads/does-not-exist")
+	if err != nil {
+		t.Fatalf("HasRef: %v", err)
+	}
+	if ok {
+		t.Fatal("expected refs/heads/does-not-exist to be absent")
+	}
+}
+
+func TestHasRef_RelativeRepoPathRejected(t *testing.T) {
+	withDetectReset(t)
+
+	_, err := HasRef(testCtx(t), "relative/path", "refs/heads/main")
+	if err == nil {
+		t.Fatal("expected error for relative repo path")
+	}
+}
+
+func TestHasRef_EmptyRef(t *testing.T) {
+	withDetectReset(t)
+
+	_, err := HasRef(testCtx(t), filepath.Join(t.TempDir(), "x"), "")
+	if err == nil {
+		t.Fatal("expected error for empty ref")
 	}
 }
 
