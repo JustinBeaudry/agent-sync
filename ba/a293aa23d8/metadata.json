@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "baa293aa23d8",
+  "strategy": "manual-commit",
+  "branch": "feat/git-layer",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "go.mod",
+    "go.sum",
+    "internal/git/helpers_test.go",
+    "internal/git/materialize.go",
+    "internal/git/materialize_test.go",
+    "internal/git/shell.go",
+    "internal/git/shell_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ba/a293aa23d8/0/metadata.json",
+      "transcript": "/ba/a293aa23d8/0/full.jsonl",
+      "content_hash": "/ba/a293aa23d8/0/content_hash.txt",
+      "prompt": "/ba/a293aa23d8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 188,
+    "cache_creation_tokens": 671390,
+    "cache_read_tokens": 17717718,
+    "output_tokens": 86339,
+    "api_call_count": 136
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "baa293aa23d8",
+  "session_id": "b4ba6541-1e18-448f-b946-4b090e6ba597",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-24T23:28:04.230225Z",
+  "branch": "feat/git-layer",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "go.mod",
+    "go.sum",
+    "internal/git/helpers_test.go",
+    "internal/git/materialize.go",
+    "internal/git/materialize_test.go",
+    "internal/git/shell.go",
+    "internal/git/shell_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "523315bd6e2f",
+  "token_usage": {
+    "input_tokens": 188,
+    "cache_creation_tokens": 671390,
+    "cache_read_tokens": 17717718,
+    "output_tokens": 86339,
+    "api_call_count": 136
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-24T23:28:04.211843Z",
+    "agent_lines": 335,
+    "agent_removed": 25,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 335,
+    "total_lines_changed": 360,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
