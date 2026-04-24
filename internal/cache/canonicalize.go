@@ -131,15 +131,15 @@ var scpPattern = regexp.MustCompile(`^([A-Za-z0-9._-]+)@([A-Za-z0-9.-]+):([^:/][
 
 // scpToSSH rewrites scp-style SSH into a proper ssh:// URL. Returns
 // "" for inputs that aren't scp-style. See canonicalize rule #1.
+//
+// Only relative paths are accepted (scpPattern rejects any path that
+// starts with '/'), so no leading-slash stripping is needed here.
 func scpToSSH(raw string) string {
 	m := scpPattern.FindStringSubmatch(raw)
 	if m == nil {
 		return ""
 	}
 	user, host, path := m[1], m[2], m[3]
-	// Strip leading "/" that might be in the path; scp-style paths
-	// don't include one conventionally but users sometimes paste them.
-	path = strings.TrimPrefix(path, "/")
 	return "ssh://" + user + "@" + host + "/" + path
 }
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/aienvs/aienvs/internal/workspace"
@@ -327,5 +328,69 @@ func TestFind_LogicalPathPreservedThroughSymlink(t *testing.T) {
 	// path, so it should be linkDir (not realDir).
 	if ws.Root != linkDir {
 		t.Errorf("Root = %q, want %q (logical path discovery)", ws.Root, linkDir)
+	}
+}
+
+func TestFind_DanglingSymlinkReturnsError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink semantics differ on Windows")
+	}
+	// Create a .aienv.yaml symlink pointing at a nonexistent target.
+	// Find must return ErrManifestNotRegular, not silently walk to an ancestor.
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, workspace.ManifestName)
+	if err := os.Symlink(filepath.Join(tmp, "nonexistent-target"), manifestPath); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	_, err := workspace.Find(tmp, workspace.Options{})
+	if err == nil {
+		t.Fatal("expected ErrManifestNotRegular for dangling symlink; got nil")
+	}
+	if !errors.Is(err, workspace.ErrManifestNotRegular) {
+		t.Errorf("expected ErrManifestNotRegular, got %v", err)
+	}
+}
+
+func TestFind_StopAtFilesystemRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem root semantics differ on Windows")
+	}
+	// StopAt "/" should be a valid ancestor of any path. The walk should
+	// proceed normally and find the manifest somewhere below root.
+	tmp := t.TempDir()
+	leaf := filepath.Join(tmp, "a", "b")
+	if err := os.MkdirAll(leaf, 0o755); err != nil {
+		t.Fatalf("mkdir leaf: %v", err)
+	}
+	manifest := writeManifest(t, tmp)
+
+	ws, err := workspace.Find(leaf, workspace.Options{StopAt: "/"})
+	if err != nil {
+		t.Fatalf("Find with StopAt=\"/\" should not reject a valid path: %v", err)
+	}
+	if ws.ManifestPath != manifest {
+		t.Errorf("manifest path = %q, want %q", ws.ManifestPath, manifest)
+	}
+}
+
+func TestFind_ExplicitWorkspaceToFIFO(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("FIFOs are not available on Windows")
+	}
+	// --workspace pointing directly at a FIFO named .aienv.yaml must
+	// return ErrManifestNotRegular, not hang or silently succeed.
+	tmp := t.TempDir()
+	fifoPath := filepath.Join(tmp, workspace.ManifestName)
+	if err := syscall.Mkfifo(fifoPath, 0o644); err != nil {
+		t.Fatalf("mkfifo: %v", err)
+	}
+
+	_, err := workspace.Find(tmp, workspace.Options{Workspace: fifoPath})
+	if err == nil {
+		t.Fatal("expected error for FIFO manifest path; got nil")
+	}
+	if !errors.Is(err, workspace.ErrManifestNotRegular) {
+		t.Errorf("expected ErrManifestNotRegular, got %v", err)
 	}
 }

@@ -27,10 +27,18 @@ var (
 const MaxManifestSize = 1 << 20
 
 func LoadFile(path string, opts LoadOptions) (*Manifest, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("manifest: stat %q: %w", path, err)
+	}
+	if info.Size() > MaxManifestSize {
+		return nil, fmt.Errorf("%w: manifest exceeds %d bytes (got %d)", ErrInvalidManifest, MaxManifestSize, info.Size())
+	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("manifest: read %q: %w", path, err)
 	}
+	// Defense-in-depth: file could grow between stat and read.
 	if len(b) > MaxManifestSize {
 		return nil, fmt.Errorf("%w: manifest exceeds %d bytes (got %d)", ErrInvalidManifest, MaxManifestSize, len(b))
 	}
@@ -117,9 +125,17 @@ func Validate(m *Manifest, opts LoadOptions) error {
 		if !filepath.IsAbs(override) {
 			return fmt.Errorf("%w: cache.override must be absolute, got %q", ErrInvalidManifest, override)
 		}
-		if strings.Contains(override, "..") {
-			return fmt.Errorf("%w: cache.override must not contain .. segments, got %q", ErrInvalidManifest, override)
+		// Check the original (pre-Clean) path segments for ".." to reject
+		// explicit traversal intent (e.g. "/home/alice/../../etc") even when
+		// filepath.Clean would collapse it to a valid-looking path.
+		// strings.Contains(override, "..") is intentionally NOT used: it would
+		// also reject legitimate names like "/var/..cache".
+		for _, seg := range strings.Split(override, string(filepath.Separator)) {
+			if seg == ".." {
+				return fmt.Errorf("%w: cache.override must not contain .. segments, got %q", ErrInvalidManifest, override)
+			}
 		}
+		m.Cache.Override = filepath.Clean(override)
 	}
 
 	return nil

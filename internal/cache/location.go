@@ -159,6 +159,18 @@ func stagedWriteCache(dir, name string, content []byte, mode fs.FileMode) error 
 		return fmt.Errorf("cache: rename temp to %q: %w", name, err)
 	}
 	cleanupTmp = false
+
+	// Best-effort directory fsync for crash-safety parity with
+	// fsroot.StagedWrite. Syncing the directory makes the rename durable
+	// across a power loss or crash; the file data itself is already
+	// fsync'd above. Errors are intentionally ignored: Windows and some
+	// network filesystems return errors when syncing a directory handle,
+	// and the audit file data is already durable at this point.
+	if df, err := root.Open("."); err == nil {
+		_ = df.Sync()
+		_ = df.Close()
+	}
+
 	return nil
 }
 

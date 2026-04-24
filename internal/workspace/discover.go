@@ -3,6 +3,7 @@ package workspace
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,8 +46,8 @@ func Find(cwd string, opts Options) (*Workspace, error) {
 	}
 
 	if stopAbs != "" {
-		sep := string(os.PathSeparator)
-		if cwdAbs != stopAbs && !strings.HasPrefix(cwdAbs+sep, stopAbs+sep) {
+		rel, relErr := filepath.Rel(stopAbs, cwdAbs)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			return nil, fmt.Errorf("%w: StopAt %q is not an ancestor of cwd %q", ErrInvalidOptions, stopAbs, cwdAbs)
 		}
 	}
@@ -59,19 +60,14 @@ func Find(cwd string, opts Options) (*Workspace, error) {
 	dir := cwdAbs
 	for hops := 0; hops < budget; hops++ {
 		manifestPath := filepath.Join(dir, ManifestName)
-		fi, statErr := os.Stat(manifestPath)
-		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-			return nil, fmt.Errorf("workspace: stat %q: %w", manifestPath, statErr)
+		ws, found, err := validateManifestFile(manifestPath)
+		if err != nil {
+			return nil, err
 		}
-		if statErr == nil {
-			if !fi.Mode().IsRegular() {
-				return nil, fmt.Errorf("%w: %q is %s", ErrManifestNotRegular, manifestPath, modeLabel(fi.Mode()))
-			}
-			return &Workspace{
-				ManifestPath: manifestPath,
-				Root:         dir,
-				LogicalCwd:   logical,
-			}, nil
+		if found {
+			ws.Root = dir
+			ws.LogicalCwd = logical
+			return ws, nil
 		}
 
 		// Terminus: user-supplied stop.
@@ -102,22 +98,32 @@ func resolveExplicit(path, logical string) (*Workspace, error) {
 
 	if st.IsDir() {
 		manifest := filepath.Join(abs, ManifestName)
-		ok, err := regularFileExists(manifest)
+		ws, found, err := validateManifestFile(manifest)
 		if err != nil {
-			return nil, fmt.Errorf("%w: stat %q: %w", ErrInvalidOptions, manifest, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidOptions, err)
 		}
-		if !ok {
+		if !found {
 			return nil, fmt.Errorf("%w: %s not present under %q", ErrInvalidOptions, ManifestName, abs)
 		}
-		return &Workspace{ManifestPath: manifest, Root: abs, LogicalCwd: logical}, nil
+		ws.Root = abs
+		ws.LogicalCwd = logical
+		return ws, nil
 	}
 
 	// Treat as a direct manifest path.
 	if filepath.Base(abs) != ManifestName {
 		return nil, fmt.Errorf("%w: %q is not a directory nor a %s file", ErrInvalidOptions, path, ManifestName)
 	}
-	root := filepath.Dir(abs)
-	return &Workspace{ManifestPath: abs, Root: root, LogicalCwd: logical}, nil
+	ws, found, err := validateManifestFile(abs)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidOptions, err)
+	}
+	if !found {
+		return nil, fmt.Errorf("%w: manifest %q does not exist", ErrInvalidOptions, abs)
+	}
+	ws.Root = filepath.Dir(abs)
+	ws.LogicalCwd = logical
+	return ws, nil
 }
 
 // absLogical returns filepath.Abs(p) without resolving symlinks. The
@@ -136,19 +142,47 @@ func absLogical(p string) (string, error) {
 	return filepath.Clean(filepath.Join(wd, p)), nil
 }
 
-// regularFileExists returns true iff path resolves to a regular file.
-// Symlinks to regular files are followed (os.Stat) — this is expected
-// for a user who has symlinked .aienv.yaml into place. Safety during
-// writes is enforced by fsroot at a lower layer, not here.
-func regularFileExists(path string) (bool, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
+// validateManifestFile checks whether path is a valid (regular) manifest.
+// It uses Lstat first so that a dangling symlink is detected and reported
+// as ErrManifestNotRegular rather than silently treated as "not found."
+//
+// Return values:
+//   - (*Workspace, true, nil)  — path is a regular file (or a symlink to one);
+//     ManifestPath is set, Root and LogicalCwd are left empty for the caller to fill.
+//   - (nil, false, nil)        — path does not exist at all; caller continues walk.
+//   - (nil, false, err)        — dangling symlink, non-regular file, or I/O error;
+//     caller must propagate the error.
+func validateManifestFile(path string) (*Workspace, bool, error) {
+	linfo, err := os.Lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		// Truly no entry — continue the walk.
+		return nil, false, nil
 	}
-	return fi.Mode().IsRegular(), nil
+	if err != nil {
+		return nil, false, fmt.Errorf("workspace: lstat %q: %w", path, err)
+	}
+
+	if linfo.Mode()&os.ModeSymlink != 0 {
+		// Symlink present — follow it to check the target.
+		info, err := os.Stat(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			// Dangling symlink: the entry exists but the target does not.
+			return nil, false, fmt.Errorf("%w: %q is a dangling symlink", ErrManifestNotRegular, path)
+		}
+		if err != nil {
+			return nil, false, fmt.Errorf("workspace: stat %q: %w", path, err)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, false, fmt.Errorf("%w: %q is a symlink to %s", ErrManifestNotRegular, path, modeLabel(info.Mode()))
+		}
+		// Symlink to a regular file is accepted.
+		return &Workspace{ManifestPath: path}, true, nil
+	}
+
+	if !linfo.Mode().IsRegular() {
+		return nil, false, fmt.Errorf("%w: %q is %s", ErrManifestNotRegular, path, modeLabel(linfo.Mode()))
+	}
+	return &Workspace{ManifestPath: path}, true, nil
 }
 
 // modeLabel returns a human-readable description of a non-regular file mode
