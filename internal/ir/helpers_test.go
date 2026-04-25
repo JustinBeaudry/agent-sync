@@ -1,0 +1,110 @@
+package ir
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/aienvs/aienvs/internal/git"
+)
+
+// canonicalRepo is a populated canonical-repo fixture for decoder tests.
+// Path is on-disk; SHA is the resolved commit hash; Repo is opened against
+// Path so test bodies can pass it directly to Decode.
+type canonicalRepo struct {
+	Path string
+	SHA  string
+	Repo *git.Repository
+}
+
+// canonicalFile describes one file to materialize inside the fixture.
+// Mode defaults to 0o644 when zero.
+type canonicalFile struct {
+	Path    string // posix-style relative path within the canonical repo
+	Content string
+}
+
+// makeCanonicalRepo builds a fresh canonical-repo fixture in t.TempDir().
+// Each file is written, all are committed in one git commit, and the
+// repo is opened via internal/git.Open. The git.Repository is closed
+// automatically via t.Cleanup.
+//
+// File order in the slice is irrelevant — the caller can pass any order;
+// the resulting tree's git-blob-keyed order is decoder-determined.
+//
+// requireGit() is called automatically; tests skip on hosts without git.
+func makeCanonicalRepo(t *testing.T, files []canonicalFile) canonicalRepo {
+	t.Helper()
+	requireGit(t)
+
+	dir := t.TempDir()
+	mustGit(t, dir, "init", "--initial-branch=main", "--quiet")
+	mustGit(t, dir, "config", "user.email", "test@aienvs.invalid")
+	mustGit(t, dir, "config", "user.name", "aienvs-test")
+	mustGit(t, dir, "config", "init.defaultBranch", "main")
+
+	for _, f := range files {
+		full := filepath.Join(dir, filepath.FromSlash(f.Path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", full, err)
+		}
+		if err := os.WriteFile(full, []byte(f.Content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", full, err)
+		}
+		mustGit(t, dir, "add", "--", filepath.FromSlash(f.Path))
+	}
+
+	if len(files) > 0 {
+		mustGit(t, dir, "commit", "--quiet", "-m", "fixture")
+	} else {
+		// An empty repo can't easily be tested via the same Open path —
+		// Decode never gets called for an empty fixture. Make an empty
+		// commit so the test still has a valid SHA.
+		mustGit(t, dir, "commit", "--allow-empty", "--quiet", "-m", "empty")
+	}
+	sha := mustGit(t, dir, "rev-parse", "HEAD")
+
+	repo, err := git.Open(dir)
+	if err != nil {
+		t.Fatalf("git.Open(%q): %v", dir, err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	return canonicalRepo{Path: dir, SHA: sha, Repo: repo}
+}
+
+// mustGit runs `git <args>` in dir with hermetic env. Test identity is
+// pinned so host config can't bleed in. Mirrors the helper in
+// internal/git/helpers_test.go (per institutional memory:
+// test_harness_pattern).
+func mustGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=aienvs-test",
+		"GIT_AUTHOR_EMAIL=test@aienvs.invalid",
+		"GIT_COMMITTER_NAME=aienvs-test",
+		"GIT_COMMITTER_EMAIL=test@aienvs.invalid",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_TERMINAL_PROMPT=0",
+		"LC_ALL=C",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// requireGit skips the test if `git` is not on PATH. Most CI runners
+// have git; this is a belt-and-suspenders guard for development hosts.
+func requireGit(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available on PATH: %v", err)
+	}
+}
