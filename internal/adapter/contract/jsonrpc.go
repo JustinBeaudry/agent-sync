@@ -397,6 +397,14 @@ func ParseMessage(raw []byte) (Message, error) {
 	if err := dec.Decode(&fields); err != nil {
 		return Message{}, fmt.Errorf("contract: parse envelope: %w", err)
 	}
+	// JSON-RPC 2.0 frames carry exactly one envelope. Trailing bytes
+	// after the closing brace indicate either concatenated frames
+	// (which the framing layer should have split) or smuggled content;
+	// either way, surface as ErrInvalidEnvelope rather than silently
+	// discard.
+	if dec.More() {
+		return Message{}, fmt.Errorf("%w: trailing bytes after envelope", ErrInvalidEnvelope)
+	}
 
 	versionRaw, ok := fields["jsonrpc"]
 	if !ok {
@@ -460,6 +468,13 @@ func ParseMessage(raw []byte) (Message, error) {
 	switch {
 	case hasResult && hasError:
 		return Message{}, fmt.Errorf("%w: response has both result and error", ErrInvalidEnvelope)
+	case (hasResult || hasError) && hasMethod:
+		// JSON-RPC 2.0 separates request/notification frames (which
+		// carry method) from response frames (which carry result or
+		// error). A frame with both is shape-invalid; ParseMessage
+		// must surface this rather than silently classify as Response
+		// and drop the method.
+		return Message{}, fmt.Errorf("%w: envelope has both method and result/error", ErrInvalidEnvelope)
 	case hasResult || hasError:
 		if !msg.HasID {
 			return Message{}, fmt.Errorf("%w: response missing id", ErrInvalidEnvelope)

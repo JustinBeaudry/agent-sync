@@ -3,6 +3,7 @@ package contract
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -204,6 +205,48 @@ func TestReadFrame_ToleratesHeaderWhitespace(t *testing.T) {
 	}
 	if string(got) != "payload" {
 		t.Fatalf("body mismatch: want %q got %q", "payload", got)
+	}
+}
+
+func TestReadFrame_RejectsOverlongHeaderLine(t *testing.T) {
+	// A peer that buffers without sending '\n' must not exhaust memory
+	// in the parser. The cap fires well before any frame-size check.
+	t.Parallel()
+
+	overlongValue := strings.Repeat("x", 10*1024) // > maxHeaderLineBytes (8 KiB)
+	raw := "Content-Length: 0\r\nX-Garbage: " + overlongValue + "\r\n\r\n"
+	_, err := ReadFrame(strings.NewReader(raw), DefaultMaxFrameBytes)
+	if !errors.Is(err, ErrHeaderLineTooLong) {
+		t.Fatalf("want ErrHeaderLineTooLong, got %v", err)
+	}
+}
+
+func TestReadFrame_RejectsHeaderWithoutNewline(t *testing.T) {
+	// A peer that sends a long header line and never terminates it must
+	// be rejected before memory is exhausted.
+	t.Parallel()
+
+	overlong := strings.Repeat("x", 10*1024)
+	_, err := ReadFrame(strings.NewReader(overlong), DefaultMaxFrameBytes)
+	if !errors.Is(err, ErrHeaderLineTooLong) {
+		t.Fatalf("want ErrHeaderLineTooLong, got %v", err)
+	}
+}
+
+func TestReadFrame_RejectsTooManyHeaders(t *testing.T) {
+	// A peer that floods the header block with short unknown headers
+	// must be rejected before the per-line allocations exhaust memory.
+	t.Parallel()
+
+	var b strings.Builder
+	b.WriteString("Content-Length: 0\r\n")
+	for i := 0; i < 100; i++ { // > maxHeaderLines (32)
+		fmt.Fprintf(&b, "X-Filler-%d: y\r\n", i)
+	}
+	b.WriteString("\r\n")
+	_, err := ReadFrame(strings.NewReader(b.String()), DefaultMaxFrameBytes)
+	if !errors.Is(err, ErrTooManyHeaders) {
+		t.Fatalf("want ErrTooManyHeaders, got %v", err)
 	}
 }
 

@@ -261,6 +261,31 @@ func TestParseMessage_AcceptsNullIDOnErrorResponse(t *testing.T) {
 	}
 }
 
+func TestParseMessage_RejectsTrailingBytes(t *testing.T) {
+	// Concatenated frames or smuggled trailing content must not pass
+	// silently — the framing layer is responsible for one envelope per
+	// frame.
+	t.Parallel()
+
+	raw := []byte(`{"jsonrpc":"2.0","method":"initialized"}{"extra":1}`)
+	_, err := ParseMessage(raw)
+	if !errors.Is(err, ErrInvalidEnvelope) {
+		t.Fatalf("want ErrInvalidEnvelope, got %v", err)
+	}
+}
+
+func TestParseMessage_RejectsMixedMethodAndResultEnvelope(t *testing.T) {
+	// JSON-RPC 2.0 separates request/notification (carries method) from
+	// response (carries result/error). A frame with both is invalid.
+	t.Parallel()
+
+	raw := []byte(`{"jsonrpc":"2.0","id":1,"method":"emit","result":42}`)
+	_, err := ParseMessage(raw)
+	if !errors.Is(err, ErrInvalidEnvelope) {
+		t.Fatalf("want ErrInvalidEnvelope, got %v", err)
+	}
+}
+
 func TestParseMessage_AcceptsNullResultAsResponse(t *testing.T) {
 	// A result:null response is a valid void return. It must classify
 	// as MessageKindResponse, not be rejected as "no method/result/error".

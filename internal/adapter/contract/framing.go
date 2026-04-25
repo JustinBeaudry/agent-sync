@@ -4,8 +4,9 @@
 // management, lifecycle orchestration) lives in higher-level packages.
 //
 // The protocol is LSP-style Content-Length-framed JSON-RPC 2.0 over
-// stdio. See docs/spec/adapter-protocol-v1.md for the authoritative wire
-// spec; this package's tests are the executable contract.
+// stdio. The authoritative wire spec ships with PR 3 of Unit 8 at
+// docs/spec/adapter-protocol-v1.md; until then this package's tests
+// and the IR-v1 plan section are the executable contract.
 package contract
 
 import (
@@ -30,6 +31,24 @@ const MediaType = "application/aienvs-v1+json"
 // in Unit 8 plan), with headroom for envelope + base64 expansion.
 const DefaultMaxFrameBytes = 16 * 1024 * 1024
 
+// maxHeaderLineBytes caps the bytes a single header line may consume
+// before the LSP CRLF terminator. Without this, a peer that never sends
+// a newline could exhaust memory inside bufio.ReadString long before
+// DefaultMaxFrameBytes fires (which only checks the body length, not
+// the header block).
+//
+// 8 KiB is generous: the only headers we care about are Content-Length
+// and Content-Type, both of which fit in well under 200 bytes. The cap
+// exists as a defense-in-depth measure for hostile peers, not a real
+// constraint on cooperative peers.
+const maxHeaderLineBytes = 8 * 1024
+
+// maxHeaderLines caps the total number of header lines (including
+// unknowns) in a single frame's header block. Without this, a peer
+// could send millions of short unknown headers and exhaust memory via
+// the per-line allocations in the parsing loop.
+const maxHeaderLines = 32
+
 // Wire-level sentinel errors. Callers branch with errors.Is.
 var (
 	// ErrMissingContentLength is returned when a frame's header block has
@@ -51,6 +70,16 @@ var (
 	// ErrFrameTooLarge is returned when Content-Length exceeds the
 	// caller-supplied maxBytes ceiling.
 	ErrFrameTooLarge = errors.New("contract: frame exceeds maximum allowed size")
+
+	// ErrHeaderLineTooLong is returned when a header line exceeds
+	// maxHeaderLineBytes before its CRLF terminator is seen. Defends
+	// against memory exhaustion from a peer that never sends '\n'.
+	ErrHeaderLineTooLong = errors.New("contract: frame header line exceeds maximum length")
+
+	// ErrTooManyHeaders is returned when a frame's header block contains
+	// more lines than maxHeaderLines. Defends against memory exhaustion
+	// from a peer that floods the header block with short unknown lines.
+	ErrTooManyHeaders = errors.New("contract: frame contains too many header lines")
 )
 
 // WriteFrame emits one LSP-framed message: a header block followed by
@@ -125,14 +154,18 @@ func (fr *FrameReader) Read(maxBytes int64) ([]byte, error) {
 	}
 
 	contentLength := int64(-1)
+	headerCount := 0
 
 	for {
-		line, err := br.ReadString('\n')
+		if headerCount >= maxHeaderLines {
+			return nil, fmt.Errorf("%w: %d", ErrTooManyHeaders, maxHeaderLines)
+		}
+		line, err := readBoundedLine(br, maxHeaderLineBytes)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil, fmt.Errorf("contract: truncated header: %w", io.ErrUnexpectedEOF)
 			}
-			return nil, fmt.Errorf("contract: read header line: %w", err)
+			return nil, err
 		}
 		// Headers must end CRLF; tolerate bare LF for lenient peers but
 		// require at least the trailing newline.
@@ -140,6 +173,7 @@ func (fr *FrameReader) Read(maxBytes int64) ([]byte, error) {
 		if line == "" {
 			break // end of header block
 		}
+		headerCount++
 
 		colon := strings.IndexByte(line, ':')
 		if colon <= 0 {
@@ -187,4 +221,32 @@ func (fr *FrameReader) Read(maxBytes int64) ([]byte, error) {
 		return nil, fmt.Errorf("contract: read body: %w", err)
 	}
 	return body, nil
+}
+
+// readBoundedLine reads up to maxBytes bytes from br, returning the
+// line including its trailing '\n'. Returns ErrHeaderLineTooLong when
+// no '\n' is seen within the cap — defends against memory exhaustion
+// by a peer that buffers without ever terminating a line.
+//
+// Returns io.EOF when nothing has been read; io.ErrUnexpectedEOF when
+// the reader closed mid-line.
+func readBoundedLine(br *bufio.Reader, maxBytes int) (string, error) {
+	buf := make([]byte, 0, 128)
+	for i := 0; i <= maxBytes; i++ {
+		b, err := br.ReadByte()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				if len(buf) == 0 {
+					return "", io.EOF
+				}
+				return "", io.ErrUnexpectedEOF
+			}
+			return "", fmt.Errorf("contract: read header line: %w", err)
+		}
+		buf = append(buf, b)
+		if b == '\n' {
+			return string(buf), nil
+		}
+	}
+	return "", fmt.Errorf("%w: %d bytes without terminator", ErrHeaderLineTooLong, maxBytes)
 }

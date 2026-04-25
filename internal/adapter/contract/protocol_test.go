@@ -90,7 +90,7 @@ func TestInitializeResult_CarriesCapabilitiesAndDeclaredOutputs(t *testing.T) {
 		},
 		DeclaredOutputs: []DeclaredOutput{
 			{Path: ".claude/rules", Mode: OutputModeOwnedSubdir},
-			{Path: ".mcp.json", Mode: OutputModeToolOwnedEntry, JSONPath: stringPtr("$.mcpServers.echo")},
+			{Path: ".mcp.json", Mode: OutputModeToolOwnedEntry, JSONPointer: stringPtr("/mcpServers/echo")},
 		},
 	}
 	raw, err := json.Marshal(src)
@@ -112,8 +112,8 @@ func TestInitializeResult_CarriesCapabilitiesAndDeclaredOutputs(t *testing.T) {
 	if len(dst.DeclaredOutputs) != 2 {
 		t.Fatalf("declared_outputs len: want 2 got %d", len(dst.DeclaredOutputs))
 	}
-	if dst.DeclaredOutputs[1].JSONPath == nil || *dst.DeclaredOutputs[1].JSONPath != "$.mcpServers.echo" {
-		t.Errorf("json_path mismatch: %v", dst.DeclaredOutputs[1].JSONPath)
+	if dst.DeclaredOutputs[1].JSONPointer == nil || *dst.DeclaredOutputs[1].JSONPointer != "/mcpServers/echo" {
+		t.Errorf("json_pointer mismatch: %v", dst.DeclaredOutputs[1].JSONPointer)
 	}
 }
 
@@ -474,6 +474,33 @@ func TestOpWarning_RoundTrip(t *testing.T) {
 	got, ok := decoded.(OpWarning)
 	if !ok || got.ConceptID != "rule:no-pr-friday" || got.Status != WarningStatusPartial {
 		t.Errorf("round-trip mismatch: %T %+v", decoded, decoded)
+	}
+}
+
+func TestDecodeOp_RejectsMissingEncoding(t *testing.T) {
+	// Wire schemas mark "encoding" as required for content-bearing ops.
+	// Accepting omission would let schema-invalid ops slip past Go-side
+	// decoding, breaking PR 3 conformance against schema-validating
+	// adapters.
+	t.Parallel()
+
+	wire := []byte(`{"op":"write_file","path":"p","mode":420,"content":"hello"}`)
+	_, err := DecodeOp(wire)
+	if !errors.Is(err, ErrMissingEncoding) {
+		t.Fatalf("want ErrMissingEncoding, got %v", err)
+	}
+}
+
+func TestDecodeOp_RejectsUnknownEncoding(t *testing.T) {
+	t.Parallel()
+
+	wire := []byte(`{"op":"write_file","path":"p","mode":420,"encoding":"gzip","content":"hello"}`)
+	_, err := DecodeOp(wire)
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if errors.Is(err, ErrMissingEncoding) {
+		t.Fatalf("want unknown-encoding error, got missing-encoding")
 	}
 }
 

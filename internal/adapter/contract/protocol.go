@@ -112,6 +112,12 @@ var (
 	// ErrUnknownOp is returned by DecodeOp when the wire op kind is not
 	// in the v1 closed set, or the "op" discriminator is missing.
 	ErrUnknownOp = errors.New("contract: unknown or missing op kind")
+
+	// ErrMissingEncoding is returned when a content-bearing op
+	// (write_file, write_tool_owned) is decoded without an "encoding"
+	// field. The wire schemas mark encoding as required; accepting
+	// omission would let schema-invalid ops pass Go-side decoding.
+	ErrMissingEncoding = errors.New("contract: op missing required encoding field")
 )
 
 // InitializeParams is the params object on the initialize request.
@@ -153,12 +159,17 @@ type Capabilities struct {
 // DeclaredOutput names a path the adapter intends to write. The CLI
 // runtime in PR 2 rejects any emit op that names a path outside the
 // declared set (Bazel declare_file pattern).
+//
+// JSONPointer holds an RFC 6901 JSON Pointer (e.g., "/mcpServers/echo")
+// when Mode is OutputModeToolOwnedEntry and the tool-owned file is
+// JSON-shaped. Aligns with ToolOwnedKindJSONPointer on OpWriteToolOwned
+// — both fields use the same locator standard.
 type DeclaredOutput struct {
-	Path      string          `json:"path"`
-	Mode      OutputMode      `json:"mode"`
-	JSONPath  *string         `json:"json_path,omitempty"`
-	SectionID *string         `json:"section_id,omitempty"`
-	Meta      json.RawMessage `json:"_meta,omitempty"`
+	Path        string          `json:"path"`
+	Mode        OutputMode      `json:"mode"`
+	JSONPointer *string         `json:"json_pointer,omitempty"`
+	SectionID   *string         `json:"section_id,omitempty"`
+	Meta        json.RawMessage `json:"_meta,omitempty"`
 }
 
 // EmitParams is the params object on the emit request. The IR is held
@@ -196,8 +207,9 @@ type ShutdownResult struct {
 }
 
 // Op is the interface every concrete op satisfies. OpKind names the
-// discriminator carried on the wire; OpPath names the target path
-// (every v1 op targets a path).
+// discriminator carried on the wire; OpPath names the target path on
+// path-bearing ops (every v1 op except OpWarning, which is concept-
+// level and returns the empty string from OpPath()).
 type Op interface {
 	OpKind() OpKind
 	OpPath() string
@@ -511,9 +523,14 @@ func encodeOpContent(content []byte) (Encoding, string) {
 }
 
 // decodeOpContent inverts the encoding picked by encodeOpContent.
+//
+// An empty encoding string is rejected as ErrMissingEncoding rather
+// than silently treated as utf8 — the wire schemas mark "encoding" as
+// required, and accepting omission would let schema-invalid ops slip
+// past Go-side decoding.
 func decodeOpContent(encoding Encoding, content string) ([]byte, error) {
 	switch encoding {
-	case EncodingUTF8, "":
+	case EncodingUTF8:
 		return []byte(content), nil
 	case EncodingBase64:
 		decoded, err := base64.StdEncoding.DecodeString(content)
@@ -521,6 +538,8 @@ func decodeOpContent(encoding Encoding, content string) ([]byte, error) {
 			return nil, fmt.Errorf("contract: base64 decode op content: %w", err)
 		}
 		return decoded, nil
+	case "":
+		return nil, ErrMissingEncoding
 	default:
 		return nil, fmt.Errorf("contract: unknown encoding %q", encoding)
 	}
