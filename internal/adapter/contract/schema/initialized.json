@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/initialized.json",
+  "title": "aienvs/v1 initialized notification",
+  "type": "object",
+  "$defs": {
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "description": "initialized is a notification with no params in v1; the empty params object is the wire form."
+    }
+  }
+}

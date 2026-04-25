@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/op_write_tool_owned.json",
+  "title": "aienvs/v1 write_tool_owned op",
+  "type": "object",
+  "properties": {
+    "op": {"const": "write_tool_owned"},
+    "path": {"type": "string"},
+    "kind": {"enum": ["json-pointer", "toml-path", "markdown-section"]},
+    "locator": {"type": "string"},
+    "encoding": {"enum": ["utf8", "base64"]},
+    "content": {"type": "string"},
+    "_meta": {}
+  },
+  "required": ["op", "path", "kind", "locator", "encoding", "content"]
+}

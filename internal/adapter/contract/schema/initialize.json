@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/initialize.json",
+  "title": "aienvs/v1 initialize method",
+  "type": "object",
+  "$defs": {
+    "params": {
+      "type": "object",
+      "properties": {
+        "client": {"type": "string"},
+        "protocol_versions": {"type": "array", "items": {"type": "string"}},
+        "cookie": {"type": "string"},
+        "workspace_root": {"type": "string"},
+        "reserved_prefix": {"type": "string"},
+        "ir_version": {"type": "string"},
+        "_meta": {}
+      },
+      "required": ["client", "protocol_versions", "cookie", "workspace_root", "reserved_prefix", "ir_version"]
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "server": {"type": "string"},
+        "protocol_version": {"type": "string"},
+        "capabilities": {"$ref": "#/$defs/capabilities"},
+        "declared_outputs": {"type": "array", "items": {"$ref": "#/$defs/declared_output"}},
+        "_meta": {}
+      },
+      "required": ["server", "protocol_version", "capabilities", "declared_outputs"]
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "concept_kinds": {
+          "type": "object",
+          "additionalProperties": {"enum": ["supported", "partial", "unsupported"]}
+        },
+        "write_tool_owned": {"type": "boolean"},
+        "progress": {"type": "boolean"},
+        "_meta": {}
+      },
+      "required": ["concept_kinds", "write_tool_owned", "progress"]
+    },
+    "declared_output": {
+      "type": "object",
+      "properties": {
+        "path": {"type": "string"},
+        "mode": {"enum": ["owned-subdir", "tool-owned-entry"]},
+        "json_path": {"type": "string"},
+        "section_id": {"type": "string"},
+        "_meta": {}
+      },
+      "required": ["path", "mode"]
+    }
+  }
+}

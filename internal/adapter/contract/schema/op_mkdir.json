@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/op_mkdir.json",
+  "title": "aienvs/v1 mkdir op",
+  "type": "object",
+  "properties": {
+    "op": {"const": "mkdir"},
+    "path": {"type": "string"},
+    "mode": {"type": "integer", "minimum": 0, "maximum": 4095},
+    "_meta": {}
+  },
+  "required": ["op", "path", "mode"]
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/op_write_file.json",
+  "title": "aienvs/v1 write_file op",
+  "type": "object",
+  "properties": {
+    "op": {"const": "write_file"},
+    "path": {"type": "string"},
+    "mode": {"type": "integer", "minimum": 0, "maximum": 4095},
+    "encoding": {"enum": ["utf8", "base64"]},
+    "content": {"type": "string"},
+    "_meta": {}
+  },
+  "required": ["op", "path", "mode", "encoding", "content"]
+}
