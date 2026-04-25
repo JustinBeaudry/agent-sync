@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
@@ -25,20 +27,28 @@ type Frontmatter struct {
 }
 
 // defaultFrontmatter returns a fresh Frontmatter with the documented
-// defaults applied.
+// defaults applied. Targets is an empty (non-nil) slice so the shape is
+// stable regardless of source format (YAML/JSON/TOML); the spec contract
+// is "empty == all adapters".
 func defaultFrontmatter() Frontmatter {
 	return Frontmatter{
 		Required: false,
-		Targets:  nil,
+		Targets:  []string{},
 		Version:  1,
 	}
 }
 
 // applyDefaults fills in zero-value fields with documented defaults. Used
-// after parsing a partial frontmatter block.
+// after parsing a partial frontmatter block. Normalizes Targets to a
+// non-nil empty slice so the shape is consistent across all extractors
+// (a parsed YAML doc that omits `targets:` and a JSON file with no
+// `__aienvs_targets` key both produce `[]string{}`, never nil).
 func (fm *Frontmatter) applyDefaults() {
 	if fm.Version == 0 {
 		fm.Version = 1
+	}
+	if fm.Targets == nil {
+		fm.Targets = []string{}
 	}
 }
 
@@ -98,6 +108,18 @@ func extractJSONFrontmatter(src []byte) (Frontmatter, []byte, error) {
 	dec.UseNumber()
 	if err := dec.Decode(&raw); err != nil {
 		return Frontmatter{}, nil, fmt.Errorf("%w: %w", ErrFrontmatterParse, err)
+	}
+	// Reject trailing data after the first value. The JSON decoder will
+	// happily stop at the end of the first object, so `{"a":1}{"b":2}` or
+	// `{"a":1} trailing` would silently lose everything past the first
+	// brace. For mcp/*.json, that masks merge-corrupted files; require
+	// EOF (modulo whitespace) to ensure end-to-end validity.
+	var probe json.RawMessage
+	if err := dec.Decode(&probe); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return Frontmatter{}, nil, fmt.Errorf("%w: trailing data after JSON object", ErrFrontmatterParse)
+		}
+		return Frontmatter{}, nil, fmt.Errorf("%w: trailing data after JSON object: %w", ErrFrontmatterParse, err)
 	}
 
 	fm := defaultFrontmatter()
@@ -195,7 +217,11 @@ func startsWithDelimiter(src []byte, delim string) bool {
 }
 
 // findDelimiterLine returns the byte offset of the next `<delim>` on its
-// own line within src, or -1 if none is found. Tolerates CR/LF.
+// own line within src, or -1 if none is found. Accepts `\n`, `\r\n`, or
+// EOF as line terminators after the delimiter. A bare `\r` (Mac-classic
+// line endings) is rejected — if it isn't followed by `\n` we don't
+// treat it as a closing delimiter line, matching the spec which only
+// recognizes Unix and Windows line endings.
 func findDelimiterLine(src []byte, delim string) int {
 	d := []byte(delim)
 	offset := 0
@@ -208,11 +234,20 @@ func findDelimiterLine(src []byte, delim string) int {
 		abs := offset + idx
 		// Must be at start-of-line: either offset 0, or preceded by `\n`.
 		atLineStart := abs == 0 || src[abs-1] == '\n'
-		// Must be followed by `\n` or `\r\n` or EOF.
+		// Must be followed by `\n`, a full `\r\n` sequence, or EOF.
 		afterDelim := abs + len(d)
-		atLineEnd := afterDelim == len(src) ||
-			src[afterDelim] == '\n' ||
-			(afterDelim+1 <= len(src) && src[afterDelim] == '\r')
+		var atLineEnd bool
+		switch {
+		case afterDelim == len(src):
+			atLineEnd = true
+		case src[afterDelim] == '\n':
+			atLineEnd = true
+		case src[afterDelim] == '\r':
+			// `\r` is only valid as the lead byte of `\r\n`. A trailing
+			// bare `\r` (or `\r` followed by anything else) is rejected
+			// rather than silently mis-splitting frontmatter and body.
+			atLineEnd = afterDelim+1 < len(src) && src[afterDelim+1] == '\n'
+		}
 		if atLineStart && atLineEnd {
 			return abs
 		}
@@ -277,8 +312,14 @@ func kindForExt(ext string) (Kind, bool) {
 // validateTargets ensures every entry in targets matches a known adapter
 // name. The decoder receives `knownTargets` from its caller (the adapter
 // registry from Unit 8). Empty targets means "all" and is always valid.
+//
+// Gating semantics match DecodeOptions: a `nil` registry means "no
+// registry wired, accept anything" (tests + early v1). A non-nil but
+// empty registry means "no adapters known, reject any declared target"
+// — that is a real configuration the caller must surface, not a silent
+// pass-through.
 func validateTargets(targets []string, knownTargets map[string]struct{}) error {
-	if len(knownTargets) == 0 {
+	if knownTargets == nil {
 		// Decoder was called without a target registry — accept whatever
 		// the file declared. Useful for tests and for the v1 case where
 		// adapters haven't been wired yet.
@@ -317,11 +358,14 @@ func extractFrontmatter(path string, src []byte) (Frontmatter, []byte, error) {
 
 // ext returns the lowercase extension including the leading dot, or "" if
 // none. Mirrors filepath.Ext but kept local to avoid pulling filepath into
-// the package's hot path.
+// the package's hot path. Canonical-repo paths are typically lowercase,
+// but we lower-case defensively so `foo.MD`, `foo.JSON`, etc. still
+// route to their owning extractor instead of falling through to the
+// "no frontmatter" branch.
 func ext(p string) string {
 	for i := len(p) - 1; i >= 0 && p[i] != '/'; i-- {
 		if p[i] == '.' {
-			return p[i:]
+			return strings.ToLower(p[i:])
 		}
 	}
 	return ""

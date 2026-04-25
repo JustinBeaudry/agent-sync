@@ -89,6 +89,11 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 				return nil, nil, err
 			}
 			nodes = append(nodes, node)
+			// An overlay (CLAUDE.md / GEMINI.md) counts as an
+			// agents-md file for the purposes of WarnAgentsMDMissing:
+			// the warning fires only when neither canonical nor any
+			// overlay exists.
+			hasAgentsMD = true
 
 		case strings.HasPrefix(p, "rules/"):
 			node, err := buildSimpleNode(repo, commitSHA, e, KindRule, "rules/", ".md")
@@ -178,8 +183,17 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 	}
 
 	// Skill orphan-dir check: every dir under skills/ must have SKILL.md.
-	for dir, hasSKILL := range skillDirs {
-		if !hasSKILL {
+	// Iterate over sorted keys so that, when multiple skill dirs are
+	// orphaned, the error names the lexicographically-first dir
+	// deterministically — Go's randomized map iteration would otherwise
+	// pick a different one across runs.
+	orphanDirs := make([]string, 0, len(skillDirs))
+	for dir := range skillDirs {
+		orphanDirs = append(orphanDirs, dir)
+	}
+	sort.Strings(orphanDirs)
+	for _, dir := range orphanDirs {
+		if !skillDirs[dir] {
 			return nil, nil, fmt.Errorf("%w: %s", ErrSkillMissingSKILL, dir)
 		}
 	}
@@ -204,7 +218,13 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 // inside `skills/<id>/` other than SKILL.md as Asset entries.
 //
 // Returns an empty map (not nil) when no skills are present.
-func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) map[string]Skill {
+//
+// The second return value carries non-fatal warnings — currently
+// WarnSkillAssetUnreadable when an asset blob fails to load. The asset
+// is omitted from the bundle (best-effort), and the warning lets
+// callers surface the failure instead of swallowing it silently.
+func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) (map[string]Skill, []Warning) {
+	var warnings []Warning
 	out := map[string]Skill{}
 	// Index skill nodes for fast lookup.
 	skills := map[string]Node{}
@@ -214,12 +234,12 @@ func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) map[string
 		}
 	}
 	if len(skills) == 0 {
-		return out
+		return out, warnings
 	}
 
 	entries, err := repo.ReadTree(commitSHA)
 	if err != nil {
-		return out
+		return out, warnings
 	}
 
 	// Group asset entries by skill id.
@@ -246,8 +266,18 @@ func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) map[string
 		}
 		content, err := repo.BlobContent(commitSHA, e.Path)
 		if err != nil {
-			// Best-effort — surface as a missing-asset rather than
-			// failing the whole skills lookup.
+			// Best-effort: skip the asset rather than failing the
+			// whole skills lookup, but surface the failure as a
+			// warning so callers can report it instead of
+			// silently dropping the file.
+			warnings = append(warnings, Warning{
+				Code:    WarnSkillAssetUnreadable,
+				Message: fmt.Sprintf("ir: skill asset unreadable at %q: %v", e.Path, err),
+				Provenance: Provenance{
+					Path:    e.Path,
+					BlobSHA: e.Hash,
+				},
+			})
 			continue
 		}
 		byID[id] = append(byID[id], Asset{
@@ -270,7 +300,11 @@ func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) map[string
 			out[id] = Skill{Node: n}
 		}
 	}
-	return out
+	// Sort warnings deterministically by provenance path.
+	sort.Slice(warnings, func(i, j int) bool {
+		return warnings[i].Provenance.Path < warnings[j].Provenance.Path
+	})
+	return out, warnings
 }
 
 // --- node builders ---
@@ -283,7 +317,10 @@ func buildAgentsMD(repo *git.Repository, commitSHA string, e git.TreeEntry, over
 	if err != nil {
 		return Node{}, fmt.Errorf("ir: read %q: %w", e.Path, err)
 	}
-	if len(body) == 0 {
+	// ErrEmptyAgentsMD is canonical-AGENTS.md-specific. Empty overlay
+	// files (CLAUDE.md, GEMINI.md) are acceptable: a placeholder overlay
+	// in the repo carries no body but should not fail decode.
+	if len(body) == 0 && e.Path == "AGENTS.md" {
 		return Node{}, fmt.Errorf("%w: %s", ErrEmptyAgentsMD, e.Path)
 	}
 	fm, stripped, err := extractFrontmatter(e.Path, body)

@@ -183,6 +183,104 @@ func TestExtractJSONFrontmatter_WrongTypes(t *testing.T) {
 	}
 }
 
+func TestExtractJSONFrontmatter_TrailingData(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string][]byte{
+		"second object":           []byte(`{"a":1}{"b":2}`),
+		"trailing non-whitespace": []byte(`{"a":1} trailing`),
+		"trailing array":          []byte(`{"a":1}[1,2,3]`),
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := extractJSONFrontmatter(body)
+			if !errors.Is(err, ErrFrontmatterParse) {
+				t.Errorf("err = %v, want ErrFrontmatterParse", err)
+			}
+		})
+	}
+}
+
+func TestExtractJSONFrontmatter_TrailingWhitespaceAccepted(t *testing.T) {
+	t.Parallel()
+
+	// Trailing whitespace is fine; only non-whitespace tokens after the
+	// first object are rejected.
+	body := []byte(`{"command":"x"}` + "\n\t  \n")
+	if _, _, err := extractJSONFrontmatter(body); err != nil {
+		t.Errorf("trailing whitespace should be accepted, got err = %v", err)
+	}
+}
+
+func TestExtractJSONFrontmatter_TargetsDefaultIsEmptySlice(t *testing.T) {
+	t.Parallel()
+
+	// A JSON file with no reserved keys should yield Targets that is
+	// non-nil and length zero — the spec contract is "empty slice means
+	// all adapters" and the shape must be stable across YAML/JSON/TOML.
+	body := []byte(`{"command":"x"}`)
+	fm, _, err := extractJSONFrontmatter(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fm.Targets == nil {
+		t.Errorf("Targets should be []string{}, got nil")
+	}
+	if len(fm.Targets) != 0 {
+		t.Errorf("Targets should be empty, got %v", fm.Targets)
+	}
+}
+
+func TestExtractMarkdownFrontmatter_TargetsDefaultIsEmptySlice(t *testing.T) {
+	t.Parallel()
+
+	// A markdown file with no frontmatter block — Targets must be
+	// non-nil empty slice.
+	fm, _, err := extractMarkdownFrontmatter([]byte("# body\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fm.Targets == nil || len(fm.Targets) != 0 {
+		t.Errorf("Targets = %v, want non-nil empty slice", fm.Targets)
+	}
+
+	// A markdown file with an empty frontmatter block (no `targets:`
+	// key) should also normalize to an empty slice.
+	fm2, _, err := extractMarkdownFrontmatter([]byte("---\nrequired: true\n---\nbody\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fm2.Targets == nil || len(fm2.Targets) != 0 {
+		t.Errorf("Targets = %v, want non-nil empty slice", fm2.Targets)
+	}
+}
+
+func TestExtractTOMLFrontmatter_TargetsDefaultIsEmptySlice(t *testing.T) {
+	t.Parallel()
+
+	fm, _, err := extractTOMLFrontmatter([]byte(`name = "ce"`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fm.Targets == nil || len(fm.Targets) != 0 {
+		t.Errorf("Targets = %v, want non-nil empty slice", fm.Targets)
+	}
+}
+
+func TestExtractMarkdownFrontmatter_BareCRDelimiterRejected(t *testing.T) {
+	t.Parallel()
+
+	// A bare `\r` after the closing `---` is not a valid line ending
+	// (only `\n`, `\r\n`, or EOF are). The decoder must not silently
+	// accept this and mis-split body.
+	body := []byte("---\nfoo: bar\n---\rbody\n")
+	_, _, err := extractMarkdownFrontmatter(body)
+	if !errors.Is(err, ErrFrontmatterParse) {
+		t.Errorf("err = %v, want ErrFrontmatterParse (bare \\r should be rejected)", err)
+	}
+}
+
 func TestExtractJSONFrontmatter_DeterministicOutput(t *testing.T) {
 	t.Parallel()
 
@@ -267,6 +365,17 @@ func TestValidateTargets(t *testing.T) {
 	if err := validateTargets([]string{"future-adapter"}, nil); err != nil {
 		t.Errorf("nil registry should accept any target: %v", err)
 	}
+	// Empty (but non-nil) registry → reject any declared target.
+	// Distinct from the nil case; an empty map is a real configuration
+	// that says "no adapters known", and the decoder must surface that.
+	emptyKnown := map[string]struct{}{}
+	if err := validateTargets([]string{"claude"}, emptyKnown); !errors.Is(err, ErrUnknownTarget) {
+		t.Errorf("empty (non-nil) registry should reject any target, err = %v, want ErrUnknownTarget", err)
+	}
+	// Empty registry + empty targets list is still fine (no targets to validate).
+	if err := validateTargets([]string{}, emptyKnown); err != nil {
+		t.Errorf("empty targets + empty registry should be ok: %v", err)
+	}
 }
 
 func TestExtFunction(t *testing.T) {
@@ -279,6 +388,12 @@ func TestExtFunction(t *testing.T) {
 		"noext":           "",
 		"foo/bar.no.dots": ".dots",
 		"AGENTS.md":       ".md",
+		// Lowercasing: docstring promises a lowercase result. Mixed-case
+		// extensions on disk (e.g., FOO.MD, BAR.JSON) must route to the
+		// owning extractor, not the "no frontmatter" fallback.
+		"foo.MD":      ".md",
+		"foo.JSON":    ".json",
+		"path/x.ToMl": ".toml",
 	}
 	for in, want := range cases {
 		if got := ext(in); got != want {

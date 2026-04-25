@@ -146,13 +146,16 @@ func TestDecode_SkillWithAssetsBundlesAuxiliaryFiles(t *testing.T) {
 		t.Fatalf("Decode: %v", err)
 	}
 
-	skills := SkillsByID(nodes, repo.Repo, repo.SHA)
+	skills, warnings := SkillsByID(nodes, repo.Repo, repo.SHA)
 	skill, ok := skills["with-assets"]
 	if !ok {
 		t.Fatalf("skill 'with-assets' not found in result")
 	}
 	if len(skill.Assets) != 2 {
 		t.Errorf("expected 2 assets, got %d (%v)", len(skill.Assets), assetPaths(skill.Assets))
+	}
+	if len(warnings) != 0 {
+		t.Errorf("expected no warnings on happy path, got %v", warnings)
 	}
 }
 
@@ -378,6 +381,120 @@ func TestDecode_VersionDefaultsToOne(t *testing.T) {
 		}
 	}
 }
+
+// TestDecode_EmptyOverlayIsAcceptedNotErrored guards thread #2: empty
+// CLAUDE.md / GEMINI.md overlays must not produce ErrEmptyAgentsMD.
+// That sentinel is canonical-AGENTS.md-specific.
+func TestDecode_EmptyOverlayIsAcceptedNotErrored(t *testing.T) {
+	t.Parallel()
+
+	repo := makeCanonicalRepo(t, []canonicalFile{
+		{Path: "AGENTS.md", Content: "# canonical\n"},
+		{Path: "CLAUDE.md", Content: ""}, // empty overlay
+	})
+	nodes, _, err := Decode(repo.Repo, repo.SHA, DecodeOptions{})
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	got := byKind(nodes)
+	if len(got[KindAgentsMD]) != 2 {
+		t.Errorf("expected 2 agents-md nodes (AGENTS + empty CLAUDE), got %d", len(got[KindAgentsMD]))
+	}
+	hasOverlay := false
+	for _, n := range got[KindAgentsMD] {
+		if n.Provenance.Path == "CLAUDE.md" {
+			hasOverlay = true
+			if len(n.Body) != 0 {
+				t.Errorf("empty CLAUDE.md should have empty Body, got %q", n.Body)
+			}
+		}
+	}
+	if !hasOverlay {
+		t.Error("empty CLAUDE.md overlay should still produce a Node")
+	}
+}
+
+// TestDecode_OrphanSkillDirsErrorIsDeterministic guards thread #5: when
+// multiple skill dirs lack SKILL.md, the error must name the
+// lexicographically-first dir on every run, not whichever Go's
+// randomized map iteration happens to pick.
+func TestDecode_OrphanSkillDirsErrorIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	repo := makeCanonicalRepo(t, []canonicalFile{
+		{Path: "skills/zeta-skill/notes.md", Content: "no SKILL.md\n"},
+		{Path: "skills/alpha-skill/notes.md", Content: "no SKILL.md\n"},
+		{Path: "skills/mid-skill/notes.md", Content: "no SKILL.md\n"},
+	})
+	for i := 0; i < 20; i++ {
+		_, _, err := Decode(repo.Repo, repo.SHA, DecodeOptions{})
+		if !errors.Is(err, ErrSkillMissingSKILL) {
+			t.Fatalf("run %d: err = %v, want ErrSkillMissingSKILL", i, err)
+		}
+		// Lexicographically first orphan is "skills/alpha-skill".
+		if !strings.Contains(err.Error(), "skills/alpha-skill") {
+			t.Fatalf("run %d: error must name the first orphan deterministically, got %v", i, err)
+		}
+	}
+}
+
+// TestDecode_OverlayOnlySuppressesAgentsMDMissingWarning guards thread
+// #12: WarnAgentsMDMissing only fires when no agents-md file exists at
+// all. An overlay (CLAUDE.md / GEMINI.md) without a canonical AGENTS.md
+// must still suppress the warning.
+func TestDecode_OverlayOnlySuppressesAgentsMDMissingWarning(t *testing.T) {
+	t.Parallel()
+
+	repo := makeCanonicalRepo(t, []canonicalFile{
+		{Path: "CLAUDE.md", Content: "# claude overlay\n"},
+		{Path: "rules/foo.md", Content: "rule\n"},
+	})
+	_, warnings, err := Decode(repo.Repo, repo.SHA, DecodeOptions{})
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	for _, w := range warnings {
+		if w.Code == WarnAgentsMDMissing {
+			t.Errorf("WarnAgentsMDMissing should not fire when an overlay (CLAUDE.md) is present, got warnings %v", warnings)
+		}
+	}
+}
+
+// TestSkillsByID_HappyPathProducesNoWarnings guards thread #13's
+// signature change: SkillsByID now returns ([]Warning) alongside the
+// skill map, and the happy path must produce zero warnings.
+func TestSkillsByID_HappyPathProducesNoWarnings(t *testing.T) {
+	t.Parallel()
+
+	repo := makeCanonicalRepo(t, []canonicalFile{
+		{Path: "skills/clean/SKILL.md", Content: "ok\n"},
+		{Path: "skills/clean/data.json", Content: `{"k":"v"}`},
+	})
+	nodes, _, err := Decode(repo.Repo, repo.SHA, DecodeOptions{})
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	skills, warnings := SkillsByID(nodes, repo.Repo, repo.SHA)
+	if len(warnings) != 0 {
+		t.Errorf("happy path should emit no warnings, got %v", warnings)
+	}
+	if got := skills["clean"]; len(got.Assets) != 1 {
+		t.Errorf("expected 1 asset on happy path, got %d", len(got.Assets))
+	}
+}
+
+// Note on TestSkillsByID_UnreadableAssetEmitsWarning: addressing thread
+// #13 also added a WarnSkillAssetUnreadable surface to SkillsByID so
+// per-asset blob-read failures are no longer silent. The path is
+// defensively coded but isn't reachable from fixture-based tests in
+// the current architecture: ReadTree (called at the top of
+// SkillsByID) eagerly decodes every blob's header, so any corruption
+// that would make a later BlobContent fail also makes ReadTree fail
+// first. The warning therefore guards a transient/runtime case
+// (e.g., file removed between ReadTree and BlobContent calls) without
+// a stable injection point. The signature change is exercised by
+// TestSkillsByID_HappyPathProducesNoWarnings and the existing
+// TestDecode_SkillWithAssetsBundlesAuxiliaryFiles assertions.
 
 // --- helpers ---
 

@@ -25,7 +25,7 @@ v2-grade change that requires a separate spec.
 
 | Kind | What it is | Typical filename |
 |---|---|---|
-| `agents-md` | Repo-root project guidance file. AGENTS.md is the canonical name; CLAUDE.md / GEMINI.md may overlay. | `AGENTS.md` |
+| `agents-md` | Repo-root project guidance file. `AGENTS.md` is the canonical name; `CLAUDE.md` / `GEMINI.md` are recognized overlays that produce additional, target-scoped `agents-md` nodes. | `AGENTS.md` |
 | `rule` | A short, behavior-shaping guideline. | `rules/<id>.md` |
 | `skill` | A multi-file skill bundle (markdown + optional assets). | `skills/<id>/SKILL.md` |
 | `command` | A user-invokable command definition (slash-commandable). | `commands/<id>.md` |
@@ -41,9 +41,9 @@ canonical SHA is authoritative.
 
 ```
 canonical-repo/
-├── AGENTS.md                 # one agents-md node (required nothing; optional file)
-├── CLAUDE.md                 # optional overlay; same node id, target-scoped
-├── GEMINI.md                 # optional overlay; same node id, target-scoped
+├── AGENTS.md                 # one agents-md node, id "agents", Targets: [] (unscoped)
+├── CLAUDE.md                 # optional overlay; separate agents-md node, id "claude", Targets: [claude]
+├── GEMINI.md                 # optional overlay; separate agents-md node, id "gemini", Targets: [gemini]
 ├── rules/
 │   └── <id>.md               # one rule node per file
 ├── skills/
@@ -63,6 +63,15 @@ canonical-repo/
 `<id>` segments must match `[a-z0-9][a-z0-9-_]{0,63}`. Decoder rejects
 ids that violate the pattern. ID uniqueness is enforced **per kind**
 (two skills can't share an id; a skill and a rule can).
+
+For `agents-md` overlays at the canonical repo root the id is derived
+from the filename basename, lowercased, with the extension stripped:
+`AGENTS.md` → `agents`, `CLAUDE.md` → `claude`, `GEMINI.md` → `gemini`.
+Each file is a distinct `agents-md` node, so the per-kind uniqueness
+rule is satisfied automatically. The overlay's `Targets` is set from
+the filename (`[claude]` for `CLAUDE.md`, `[gemini]` for `GEMINI.md`),
+unioned with any `targets:` declared in frontmatter; `AGENTS.md` itself
+ships unscoped (`Targets: []`, meaning all adapters).
 
 ### Recognized files vs. unknown files
 
@@ -121,8 +130,8 @@ or wait for the v1.x follow-up.
 
 ## Node
 
-The decoder produces `[]Node` in a deterministic order (depth-first
-tree walk, lexicographic per directory). Each Node carries:
+The decoder produces `[]Node` in a deterministic order (sorted by
+`Kind`, then `ID`). Each Node carries:
 
 ```go
 type Node struct {
@@ -168,10 +177,12 @@ The decoder MUST satisfy these invariants. They are test-suite-enforced.
 1. **Same commit SHA → byte-identical IR.** Decoding the same canonical
    repo at the same commit ten times in a row yields ten byte-identical
    `[]Node` slices (encoded via `json.Marshal` for comparison).
-2. **Order is content-derived.** Node order is depth-first lexicographic
-   over the canonical tree. The test suite asserts the order against a
-   fixture; reordering the test fixture's filesystem must not change IR
-   output (the order comes from git's tree, not the host fs).
+2. **Order is content-derived.** Node order is determined by `(Kind, ID)`
+   ascending: nodes are grouped by kind in the order kinds are declared
+   in `kinds.go`, and within a kind sorted lexicographically by `ID`.
+   The test suite asserts this order against a fixture; reordering the
+   test fixture's filesystem must not change IR output (the order is
+   derived from node identity, not the host fs).
 3. **Provenance is git-blob-keyed.** `BlobSHA` is the SHA git itself
    computes for the file content, not a `aienvs`-derived hash. This lets
    downstream tooling (ledger, validate, diff) cross-check against
