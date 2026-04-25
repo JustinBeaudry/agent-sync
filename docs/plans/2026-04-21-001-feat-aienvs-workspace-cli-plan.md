@@ -307,7 +307,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 ### Phase A — Foundation
 
-- [ ] **Unit 1: Repo scaffolding, Go tooling, safe-filesystem layer**
+- [x] **Unit 1: Repo scaffolding, Go tooling, safe-filesystem layer**
 
 **Goal:** Stand up the Go module with tooling, CI skeleton, and the `os.Root`-backed safe-filesystem primitives that every later unit depends on.
 
@@ -340,7 +340,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Verification:** `golangci-lint run` clean; CI green on all three OSes; `go test -race` clean.
 
-- [ ] **Unit 2: Manifest schema, loader, and comment-preserving writer**
+- [x] **Unit 2: Manifest schema, loader, and comment-preserving writer**
 
 **Goal:** Define the `.aienv.yaml` schema, strict loader, and the round-trip writer that preserves user comments when `init` writes the resolved SHA back.
 
@@ -379,7 +379,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Verification:** all fixtures round-trip cleanly; manifest-schema doc matches code behavior.
 
-- [ ] **Unit 3: Workspace discovery (logical walk, terminus, bounded cycle safety)**
+- [x] **Unit 3: Workspace discovery (logical walk, terminus, bounded cycle safety)**
 
 **Goal:** Walk up from cwd to find `.aienv.yaml`, honor `--workspace` override, terminate safely at filesystem root or `--workspace-stop-at`, refuse excessive hops as a v1 cycle safety net.
 
@@ -413,7 +413,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Verification:** `Workspace.Root` is consistent across logical and resolved views; containment check rejects writes outside `Root`.
 
-- [ ] **Unit 4: Deterministic cache + URL canonicalization helper**
+- [x] **Unit 4: Deterministic cache + URL canonicalization helper**
 
 **Goal:** Compute a stable cache directory path for a (canonical URL, optional ref) pair, with explicit URL canonicalization rules that strip credentials and normalize scp-style SSH URLs.
 
@@ -489,7 +489,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Verification:** manifest gets a valid 40-char SHA in `commit:` after `init`; offline-pinned-cached reproduces identically.
 
-- [ ] **Unit 6: Two-tier trust — committed project pin (`trusted_sha`) + per-user history (`trust.jsonl`) + `trust` subcommand**
+- [x] **Unit 6: Two-tier trust — committed project pin (`trusted_sha`) + per-user history (`trust.jsonl`) + `trust` subcommand**
 
 **Goal:** Implement the two-store trust model: (a) a committed-in-manifest project pin (`trusted_sha:`) that is authoritative for CI, and (b) an SSH-`known_hosts`-style per-user JSONL history that is authoritative for interactive cross-project recall. Ship the `aienvs trust` CLI surface including the out-of-band batch-review commands (`pending`/`diff`/`promote`) for SHA updates.
 
