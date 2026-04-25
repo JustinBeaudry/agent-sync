@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "4043591d6cc7",
+  "session_id": "8450dd0b-8ed9-4ead-a403-bbe167a87346",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-25T12:52:49.444905Z",
+  "branch": "feat/unit-8-pr1-wire-protocol",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "internal/adapter/contract/framing.go",
+    "internal/adapter/contract/framing_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "7b6b08de872f",
+  "token_usage": {
+    "input_tokens": 292,
+    "cache_creation_tokens": 742956,
+    "cache_read_tokens": 41107786,
+    "output_tokens": 167391,
+    "api_call_count": 190
+  },
+  "session_metrics": {
+    "turn_count": 12
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-25T12:52:49.385431Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 203,
+    "human_modified": 4,
+    "human_removed": 0,
+    "total_committed": 203,
+    "total_lines_changed": 219,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

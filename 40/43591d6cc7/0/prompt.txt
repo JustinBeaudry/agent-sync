@@ -1,0 +1,893 @@
+<task-notification>
+<task-id>aeda2f5726cf2b4de</task-id>
+<tool-use-id>toolu_01RoVHevMAfgMCorN9tVM6Af</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/a1cbd198-4e37-41d3-a946-cfc2378b1333/tasks/aeda2f5726cf2b4de.output</output-file>
+<status>completed</status>
+<summary>Agent "learnings researcher" completed</summary>
+<result>Both files are directly relevant. No critical-patterns directory exists yet.
+
+---
+
+## Institutional Learnings Search Results
+
+### Search Context
+- **Feature/Task**: Unit 8 PR 1 — `internal/adapter/contract` package; LSP-style Content-Length-framed JSON-RPC 2.0 over stdio, wire types, JSON Schemas, schema-vs-types parity test
+- **Keywords Used**: cross-platform, windows, filepath, build-tags, spec-impl-drift, parity test, JSON, wire-protocol, embed.FS, sentinel errors, TDD
+- **Files Scanned**: 2 (full corpus — only two solution docs exist)
+- **Relevant Matches**: 2 (both files match)
+
+---
+
+### Critical Patterns
+
+No `docs/solutions/patterns/critical-patterns.md` exists yet. Both existing solution files are effectively critical — see findings below.
+
+---
+
+### Relevant Learnings
+
+#### 1. Go cross-platform CI pitfalls — build tags, filepath.IsAbs, and path-separator comparisons
+
+- **File**: `/Users/justinbeaudry/Projects/aienvs/docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md`
+- **Module**: `internal/fsroot`, `internal/cache`, `internal/workspace`
+- **Severity**: high
+- **Relevance**: `internal/adapter/contract` adds a new Go package. Any test file that calls stdio primitives (`os.Pipe`, `os.Stdin`), exercises framing logic with byte buffers, or uses `syscall`-adjacent APIs needs to be checked for build-tag discipline before the Windows CI matrix runs.
+- **Key Insight**: `t.Skip("windows")` does not protect a file from compile-time symbol resolution. If any import in the file is Windows-unavailable, the file must be split with `//go:build !windows` — not guarded with a runtime skip. Also: any test assertion that compares a path string produced by `filepath.Join` against a forward-slash constant will silently fail on Windows. Use `filepath.ToSlash` on the joined side before comparing.
+- **FLAG — likely relevant to this PR**: The Content-Length framing code works with byte offsets and `\r\n` CRLF line endings (LSP spec requires CRLF). If any test hard-codes `\r\n` as a Go string literal and compares against output produced by a buffer writer, the comparison is fine — but if any test reads back bytes through a platform-buffered reader that translates line endings (e.g., text-mode file I/O on Windows), framing byte counts will silently mismatch. Prefer raw `[]byte` comparisons or explicitly open pipes in binary mode.
+
+---
+
+#### 2. Reconciling spec-vs-impl drift caught at PR review
+
+- **File**: `/Users/justinbeaudry/Projects/aienvs/docs/solutions/workflow-issues/spec-impl-drift-at-pr-review-2026-04-25.md`
+- **Module**: `internal/ir`
+- **Severity**: medium
+- **Relevance**: This PR includes a "hand-rolled schema-vs-types parity test" — exactly the fixture-test pattern recommended in this learning's Prevention section. That parity test is the right call. The risk is that the JSON Schema files (likely in `embed.FS`) were authored before or alongside the Go types, and the two can drift on details (field names, required arrays, enum values, `additionalProperties` flags) the same way `ir-v1.md` drifted from `decode.go`.
+- **Key Insight**: The parity test is only as strong as what it asserts. A test that merely checks "the schema parses without error" or "the Go struct round-trips through JSON" does not catch field-name drift or missing `required` entries. The test should assert each JSON Schema field name against the corresponding Go struct tag, and each `required` array entry against fields without `omitempty`. If the test skips those assertions, it provides false confidence — the same failure mode as the skipped duplicate-id test in Unit 7 that made an invariant invisible.
+- **FLAG — directly applicable**: The PR description mentions a "spec-vs-types parity test." Before this PR merges, confirm the test exercises: (a) every field in the JSON Schema appears in the Go struct with a matching `json:` tag, (b) every `required` schema entry corresponds to a non-pointer, non-`omitempty` Go field, and (c) the JSON-RPC `method` string values in the schema match the Go constants exactly (case-sensitive). If any of these are left to prose, they are invisible to CI.
+
+---
+
+### Recommendations
+
+1. **Audit framing tests for Windows line-ending hazards.** The LSP Content-Length header uses `\r\n`. Any test that writes a frame and reads it back through an `os.Pipe` or `bufio.Reader` should use raw byte comparison, not string comparison, to avoid platform text-mode translation. Run `GOOS=windows GOARCH=amd64 go vet ./...` locally before pushing — it is cheap and catches Rule 1 compile failures before CI.
+
+2. **Strengthen the parity test beyond round-trip.** Do not let the schema-vs-types test pass on "no decode error." Add explicit assertions: Go struct tag == JSON Schema property name, `required` entries == non-optional fields, method string constants == schema enum values. A weak parity test is the exact failure mode documented for Unit 7's skipped invariant test.
+
+3. **Use `//go:build !windows` for any test importing platform-specific packages.** This package introduces stdio framing; if any test uses `syscall` or `golang.org/x/sys/unix` for pipe setup, it must be in a `_unix_test.go` file with the build tag — not guarded by `runtime.GOOS` at runtime.
+
+4. **embed.FS path separators are always forward slashes.** `embed.FS` normalizes paths to `/` regardless of OS — this is safe and correct. No separator normalization is needed for embedded schema file reads. Do not apply `filepath.FromSlash` to paths passed to `fs.ReadFile` on an `embed.FS`; it will break on Windows.
+
+5. **Expect 1-2 auto-reviewer fix rounds.** Per the PR review cadence memory, gemini + copilot + codex all auto-review on push. If schema field names or method string constants diverge even slightly from the JSON Schema content, expect conflicting reviewer threads. The reconciliation procedure from Learning 2 applies: identify which side carries the mechanical invariant (the Go constant or the embedded schema), and move the prose, not the enforcement point.</result>
+<usage><total_tokens>30978</total_tokens><tool_uses>7</tool_uses><duration_ms>54248</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>af871864ad55e1586</task-id>
+<tool-use-id>toolu_01Mu5GgN7UxueXXQpZMpks41</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/a1cbd198-4e37-41d3-a946-cfc2378b1333/tasks/af871864ad55e1586.output</output-file>
+<status>completed</status>
+<summary>Agent "maintainability review" completed</summary>
+<result>```json
+{
+  "reviewer": "maintainability",
+  "findings": [
+    {
+      "id": "M-01",
+      "title": "envelopeFields.jsonrpc bool is always true — unreachable false branch",
+      "severity": "low",
+      "confidence": 0.88,
+      "category": "dead_code",
+      "file": "/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/jsonrpc.go",
+      "lines": [278, 308],
+      "description": "The envelopeFields struct has a jsonrpc bool field (line 279). Every call site — Request.MarshalJSON (line 179), Notification.MarshalJSON (line 200), Response.MarshalJSON (line 228) — unconditionally passes jsonrpc: true. The branch at line 307 ('if f.jsonrpc { writeKey(\"jsonrpc\") ... }') therefore has an unreachable false path in production. The field only exists to make marshalEnvelope 'generic', but there is only one legal value. If the false branch is a deliberate future escape hatch (e.g., for a test-only malformed-envelope helper in PR 3), that intent is not documented.",
+      "suggested_fix": "Remove the jsonrpc bool from envelopeFields and write the jsonrpc emission unconditionally at the top of marshalEnvelope. If the false path is intentional forward-guard, add an explicit comment."
+    },
+    {
+      "id": "M-02",
+      "title": "Duplicate encode/decode block in OpWriteFile and OpWriteToolOwned with no extraction helper",
+      "severity": "medium",
+      "confidence": 0.85,
+      "category": "unnecessary_duplication",
+      "file": "/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/protocol.go",
+      "lines": [229, 244, 299, 334],
+      "description": "OpWriteFile.MarshalJSON (lines 229-244) and OpWriteToolOwned.MarshalJSON (lines 299-315) contain identical utf8.Valid / base64.StdEncoding.EncodeToString blocks. Their UnmarshalJSON methods both repeat an identical &gt; MaxOpPayloadBytes guard after calling decodeOpContent. The decode side already has a private decodeOpContent helper; the encode side has no parallel. This is only the second occurrence (Rule of Three says wait for the third), but write_tool_owned arriving at exactly the same shape as write_file in this PR makes a third content-bearing op very likely, so extracting now costs four lines and avoids a future three-way copy-paste.",
+      "suggested_fix": "Add a package-private func encodeOpContent(content []byte) (Encoding, string) symmetric with decodeOpContent. Replace both open-coded utf8.Valid/base64 blocks with a call. Optionally fold the MaxOpPayloadBytes guard into decodeOpContent via a maxBytes int64 parameter."
+    },
+    {
+      "id": "M-03",
+      "title": "MarshalOp is a one-line alias over json.Marshal with no added behavior",
+      "severity": "low",
+      "confidence": 0.80,
+      "category": "unnecessary_indirection",
+      "file": "/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/protocol.go",
+      "lines": [441, 445],
+      "description": "MarshalOp(op Op) ([]byte, error) calls json.Marshal(op) and nothing else. Its justification is 'symmetry with DecodeOp', but DecodeOp has real logic (discriminator peek + type switch) that earns its existence. MarshalOp is a renamed json.Marshal call. Callers in the tests (protocol_test.go) would be equally clear calling json.Marshal directly. The wrapper's only future value would be if it adds size-enforcement or instrumentation, but that is not present.",
+      "suggested_fix": "Either inline json.Marshal at the test call sites, or promote MarshalOp into a real invariant-enforcing encoder by adding the per-op size check that currently only lives in NewOpWriteFile and UnmarshalJSON. The latter is the likely PR 2 end-state."
+    },
+    {
+      "id": "M-04",
+      "title": "SchemaFS exported with zero external consumers — premature export",
+      "severity": "low",
+      "confidence": 0.82,
+      "category": "dead_code",
+      "file": "/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/schema.go",
+      "lines": [8, 11],
+      "description": "SchemaFS is exported and documented for PR 3's conformance harness. Within this PR it is consumed only by the package-internal schema_parity_test.go; there are zero external import sites in internal/ or anywhere else. Exporting an identifier before the first consumer exists creates an implied commitment to a stable API shape even though the package is under internal/. This is a conscious plan decision, but it is flagged at low confidence because the repo's own guidance says to avoid abstractions before first use.",
+      "suggested_fix": "Keep unexported as schemaFS in this PR. Promote to exported SchemaFS in the PR 3 commit that adds pkg/adapterkit/ as the first real consumer, making the export and the justification visible in the same diff."
+    },
+    {
+      "id": "M-05",
+      "title": "Schema parity test propsPath field name understates what the value is",
+      "severity": "low",
+      "confidence": 0.65,
+      "category": "naming_obscures_intent",
+      "file": "/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/schema_parity_test.go",
+      "lines": [26, 118],
+      "description": "The propsPath field in the test cases table (e.g. {\"$defs\", \"params\", \"properties\"}) is a full document traversal path through the schema JSON, not only a path to a properties key. The name propsPath reads like a path to one properties object; schemaNavPath or schemaDocPath would better describe that it navigates from the root of the document to the terminal properties map. This is low severity — loadSchemaProps makes the semantics obvious — but the mismatch between name and meaning will slow down the next contributor who adds a new schema entry to the table.",
+      "suggested_fix": "Rename propsPath to schemaNavPath or docPath in the table struct and update loadSchemaProps's parameter name to match."
+    }
+  ],
+  "residual_risks": [
+    {
+      "id": "RR-01",
+      "description": "The schema parity test checks field-name set equality but not omitempty annotation consistency. A Go struct field tagged json:\"foo\" versus json:\"foo,omitempty\" and a schema that marks foo as required will both pass the parity test while producing divergent wire behavior at runtime. PR 3's constraint-tightening pass should add an omitempty-vs-required consistency check."
+    },
+    {
+      "id": "RR-02",
+      "description": "IDCorrelator.MarkPending and Resolve both silently no-op for non-integer IDs (lines 488-490, 502-504). This is documented behavior since the CLI only emits int IDs, but a caller that passes a string ID from a peer and then calls MarkPending will get no feedback that the registration was dropped. PR 2 will need to decide whether string-ID tracking should be supported or explicitly rejected with an error at the call site."
+    }
+  ],
+  "testing_gaps": [
+    {
+      "id": "TG-01",
+      "description": "No test for ParseMessage on an id-bearing 'initialized' frame. The classifier at line 446 correctly classifies '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialized\"}' as MessageKindRequest rather than MessageKindNotification, but the test suite has no case asserting this. A peer that accidentally attaches an id to the initialized notification would be silently misclassified as a request in the CLI runtime."
+    },
+    {
+      "id": "TG-02",
+      "description": "No boundary test for OpWriteToolOwned at exactly MaxOpPayloadBytes. TestNewOpWriteFile_AcceptsExactBoundary and TestDecodeOp_RejectsOversizedDecodedPayload cover the write_file op only. The identical cap logic in OpWriteToolOwned.UnmarshalJSON is not exercised at the boundary, leaving a gap between the two content-bearing ops."
+    }
+  ]
+}
+```
+
+The findings file has been saved to `/Users/justinbeaudry/Projects/aienvs/.context/compound-engineering/ce-review/20260425-032742-85562cea/maintainability.json`.
+
+Key decisions behind the ratings:
+
+**M-01 (high confidence, 0.88):** The `envelopeFields.jsonrpc` bool is provably always `true` at every call site. The false branch in `marshalEnvelope` is objectively unreachable. This is a textbook dead-branch case.
+
+**M-02 (medium, 0.85):** The encode-side duplication between `OpWriteFile` and `OpWriteToolOwned` is objectively present and measurable. Flagged medium rather than high because it is only the second occurrence and Rule of Three permits it. The mitigating note is that `decodeOpContent` already proves the author knows how to extract the pattern; the omission on the encode side looks like an oversight rather than a deliberate asymmetry.
+
+**M-03 (low, 0.80):** `MarshalOp` is objectively a one-line alias. The case for keeping it (future invariant enforcement) is plausible but nothing in this PR delivers it.
+
+**M-04 (low, 0.82):** `SchemaFS` being exported with zero consumers is objectively verifiable from the import graph. Confidence is high that it is an early export; severity is low because it is explicitly planned and `internal/` gives some protection.
+
+**M-05 (low, 0.65):** The `propsPath` naming issue is a judgment call about whether the name misleads future readers. Reasonable people can disagree, hence the lower confidence.</result>
+<usage><total_tokens>67389</total_tokens><tool_uses>20</tool_uses><duration_ms>145851</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a310ed3cc0919b500</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/a1cbd198-4e37-41d3-a946-cfc2378b1333/tasks/a310ed3cc0919b500.output</output-file>
+<status>completed</status>
+<summary>Agent "project-standards review" completed</summary>
+<result>```json
+{
+  "reviewer": "project-standards",
+  "findings": [
+    {
+      "id": "PSR-001",
+      "severity": "medium",
+      "confidence": 0.90,
+      "file": "docs/plans/2026-04-25-001-feat-unit-8-pr1-wire-protocol-plan.md",
+      "lines": [118, 124, 515, 516],
+      "title": "Plan doc references broken repo-relative paths for docs/solutions files",
+      "rule_citation": "AGENTS.md: 'Cross-cutting lessons (cross-platform pitfalls, migration gotchas, workflow patterns) accumulate under docs/solutions/, organized by category with YAML frontmatter (module, tags, problem_type).' Scope requirement: 'repo-relative file paths; not absolute paths'",
+      "violation": "Lines 118 and 515 reference `docs/solutions/2026-04-22-go-cross-platform-ci.md`; lines 124 and 516 reference `docs/solutions/2026-04-23-spec-vs-impl-drift.md`. Neither path resolves to an actual file. The real files are at `docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md` and `docs/solutions/workflow-issues/spec-impl-drift-at-pr-review-2026-04-25.md` respectively.",
+      "status": "new"
+    },
+    {
+      "id": "PSR-002",
+      "severity": "low",
+      "confidence": 0.65,
+      "file": "internal/adapter/contract/framing.go",
+      "lines": [67, 85, 117],
+      "title": "WriteFrame, ReadFrame, and FrameReader.Read are I/O functions without context.Context",
+      "rule_citation": "Global CLAUDE.md, Go Standards: 'Every I/O function takes context.Context first.' Project AGENTS.md, Style: 'Concurrency: all long-running work takes a context.Context.'",
+      "violation": "`WriteFrame(w io.Writer, payload []byte) error` (line 67), `ReadFrame(r io.Reader, maxBytes int64) ([]byte, error)` (line 85), and `func (fr *FrameReader) Read(maxBytes int64) ([]byte, error)` (line 117) perform I/O over a stream but do not accept a `context.Context` as their first parameter. The project AGENTS.md qualifies the rule as 'long-running work', and existing project precedent (`internal/trust/store.go:parseLines`, `internal/trust/prompt.go:NewPrompter`) omits context from stream-level byte I/O, creating genuine ambiguity about whether synchronous byte-framing functions fall within scope.",
+      "status": "new"
+    }
+  ],
+  "residual_risks": [
+    {
+      "id": "RR-001",
+      "description": "The schema parity test uses embed.FS.ReadFile with hard-coded forward-slash paths (e.g., `\"schema/\" + m + \".json\"`). embed.FS implements io/fs.FS, which mandates forward-slash path separators on all platforms per the Go stdlib spec, so this is correct behavior. However, the plan doc (lines 122-123) cites the cross-platform solutions doc and states the parity test 'must read internal/adapter/contract/schema/*.json via filepath.Join, not hard-coded forward slashes' — this is incorrect advice for embed.FS paths. The code is correct; the plan's rationale is confused. Not a code standards violation but worth noting."
+    }
+  ],
+  "testing_gaps": []
+}
+```
+
+Two findings, saved to `/Users/justinbeaudry/Projects/aienvs/.context/compound-engineering/ce-review/20260425-032742-85562cea/project-standards.json`.
+
+**PSR-001 (high confidence, medium severity):** The plan doc at `/Users/justinbeaudry/Projects/aienvs/docs/plans/2026-04-25-001-feat-unit-8-pr1-wire-protocol-plan.md` lines 118, 124, 515, and 516 references two `docs/solutions/` paths that do not exist. The actual files are organized under category subdirectories with different filenames (`docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md` and `docs/solutions/workflow-issues/spec-impl-drift-at-pr-review-2026-04-25.md`). Rule: AGENTS.md documents that lessons accumulate under `docs/solutions/` with category-based organization; the broken paths indicate the plan was authored against a flat layout that was never used.
+
+**PSR-002 (moderate confidence, low severity):** `WriteFrame`, `ReadFrame`, and `FrameReader.Read` in `/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/framing.go` perform stream I/O without a `context.Context` first parameter. The global CLAUDE.md rule is categorical ("every I/O function"), but the project AGENTS.md qualifies it to "long-running work," and existing project code (`internal/trust/store.go:parseLines`, `internal/trust/prompt.go:NewPrompter`) follows the same pattern for stream-level byte I/O. Confidence is moderate due to that ambiguity — the human reviewer should settle whether stdio framing functions are in scope for the context rule.
+
+No violations found for: testify usage (plain `testing` package throughout), `t.Parallel()` (present on every top-level test), package doc comment (present on `framing.go`), sentinel errors with `errors.Is` branching (correctly used throughout), YAML frontmatter on plan doc (all five required fields present), error wrapping with `%w` (consistent throughout), or grab-bag package names (none present).</result>
+<usage><total_tokens>73276</total_tokens><tool_uses>50</tool_uses><duration_ms>168419</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>abbc1d3ce510087bd</task-id>
+<tool-use-id>toolu_01WPRGntRRjig2ApE5WyDGSC</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/a1cbd198-4e37-41d3-a946-cfc2378b1333/tasks/abbc1d3ce510087bd.output</output-file>
+<status>completed</status>
+<summary>Agent "agent-native review" completed</summary>
+<result>```json
+{
+  "run_id": "20260425-032742-85562cea",
+  "reviewer": "agent-native",
+  "verdict": "PASS",
+  "score": "5/5 agent-native checks pass",
+
+  "checks": {
+    "error_surface_machine_actionable": "MOSTLY_YES — six ErrorClass constants map cleanly to retry/abort/reconfigure/fix-adapter decisions with no human-string parsing required. Gap: no class for semantic IR rejection at emit time; an adapter that refuses an IR as invalid has no stable ErrorClass to return other than CodeInvalidParams, forcing the caller to parse Message text.",
+    "warnings_structured_for_programmatic_consumption": "PARTIAL — OpWarning has concept_id (stable key) + status (closed enum: degraded|partial). Two-field tuple is a usable branch surface. The note field is prose-only and correctly not load-bearing in any test assertion. Gap: no sub-code within a status, so an agent cannot distinguish 'skill assets unreadable' from 'platform does not support this concept kind' without free-text parsing.",
+    "adapter_author_self_service_from_package_alone": "YES WITH CAVEATS — package is well-commented, schemas give formal field contracts, parity test validates alignment. Lifecycle ordering (initialize -&gt; initialized -&gt; emit -&gt; shutdown) is only implicit in method-name constants; spec doc ships PR 3. JSONPath/JSON Pointer naming inconsistency (see O2) will confuse write_tool_owned implementers. DeclaredOutput enforcement is mentioned in a comment but not testable until PR 2.",
+    "no_user_facing_concerns_in_wire_layer": "PASS — no ANSI codes, no color, no terminal-width assumptions. Error.Message is a plain string required by JSON-RPC 2.0 spec; its contents are adapter-supplied and unvalidated, which is correct. Package is byte-pure.",
+    "no_agent_blocking_design_assumptions": "PASS — no sentinel values without context (ErrUnknownOp wraps the actual kind string; ErrPayloadTooLarge wraps both sizes). No magic numbers. CapabilityLevel is a closed enum with named constants. IDCorrelator is concurrency-safe. DecodeOp returns typed concrete values. isOp() unexported sentinel makes the Op switch exhaustive over the wire contract."
+  },
+
+  "findings": {
+    "critical": [],
+
+    "warnings": [
+      {
+        "id": "W1",
+        "title": "OpWarning.Note is human-prose only — no machine-readable sub-code",
+        "location": "internal/adapter/contract/protocol.go:404-413",
+        "confidence": 0.72,
+        "description": "An agent can branch on status (degraded|partial) but cannot distinguish reason variants within a status without parsing the note string. The test at protocol_test.go:403 uses 'skill assets unreadable' as a note — an agent has no stable way to identify that failure mode vs. 'platform unsupported' without parsing prose.",
+        "fix": "Add optional Code string (wire: 'code', omitempty) to OpWarning for a machine-actionable sub-classifier. Leave note for human display. Add the field to schema/op_warning.json and update the parity test. Alternatively, document in the PR 3 spec that concept_id + status is provably sufficient for all v1 warning branch points and that note MUST NOT be parsed programmatically — acceptable if the two-field tuple covers every v1 scenario."
+      },
+      {
+        "id": "W2",
+        "title": "ErrorClass set has no class for semantic adapter errors at emit time",
+        "location": "internal/adapter/contract/jsonrpc.go:40-47",
+        "confidence": 0.65,
+        "description": "The six ErrorClass constants cover process-level failures. None covers an adapter rejecting the IR as structurally invalid or encountering an unknown concept kind. Without a stable class for semantic rejections, the CLI and agents invoking it must fall back to parsing the human Message string to decide whether to retry with a different IR version or surface a configuration error. The class set is frozen at the wire layer here; PR 3 is the last safe moment to add a class.",
+        "fix": "Before PR 3 spec freeze, consider adding ErrorClassAdapterInvalidIR ('adapter-invalid-ir') to cover adapter-side semantic rejection of the IR payload. Document in the plan as a pre-freeze decision point."
+      }
+    ],
+
+    "observations": [
+      {
+        "id": "O1",
+        "title": "No comment linking InitializeResult.ProtocolVersion to ErrorClassAdapterProtocolMismatch",
+        "location": "internal/adapter/contract/protocol.go:130-136",
+        "confidence": 0.62,
+        "description": "ProtocolVersions (slice in params) and ProtocolVersion (single string in result) correctly model negotiation. An adapter author reading the package cannot tell what happens when the returned version was not in the offered set without reading the plan. A single-line doc comment on InitializeResult.ProtocolVersion pointing at ErrorClassAdapterProtocolMismatch closes the loop without adding code."
+      },
+      {
+        "id": "O2",
+        "title": "DeclaredOutput.JSONPath field name conflicts with ToolOwnedKindJSONPointer constant — two distinct standards named inconsistently",
+        "location": "internal/adapter/contract/protocol.go:151-157 and 53-57",
+        "confidence": 0.78,
+        "description": "DeclaredOutput has a field named JSONPath (wire: 'json_path'). The ToolOwnedKind constant for write_tool_owned ops is ToolOwnedKindJSONPointer ('json-pointer'). JSON Pointer (RFC 6901, '/mcpServers/echo') and JSONPath ('$.mcpServers.echo') are distinct standards. The test at protocol_test.go:115 puts '$.mcpServers.echo' (JSONPath syntax) in DeclaredOutput.JSONPath; the test at protocol_test.go:340 puts '/mcpServers/echo' (JSON Pointer syntax) in the write_tool_owned Locator field. An adapter author building a write_tool_owned implementation cannot tell which standard governs which field from the types alone.",
+        "fix": "Either (a) rename DeclaredOutput.JSONPath -&gt; JSONPointer and wire tag to 'json_pointer' to match the ToolOwnedKind constant and RFC 6901; or (b) add a doc comment clarifying that DeclaredOutput.JSONPath is advisory/display metadata, and the authoritative locator on the op is what the adapter must implement. Resolve before PR 3 spec freeze."
+      },
+      {
+        "id": "O3",
+        "title": "ErrorData.Detail is opaque — agent retry logic must be heuristic for adapter-timeout",
+        "location": "internal/adapter/contract/jsonrpc.go:244-249",
+        "confidence": 0.60,
+        "description": "ErrorData.Detail is json.RawMessage. adapter-timeout is plausibly retryable; adapter-panic is not. ErrorClass alone is sufficient for v1 given the small class set, but a 'retryable bool' field in ErrorData would make agent retry logic mechanical. Low priority; the ErrorClass set is small enough that per-class retry policy can be hardcoded in the caller."
+      }
+    ]
+  },
+
+  "what_is_working_well": [
+    "All error sentinels are errors.Is-compatible with context-rich wrapping (kind string in ErrUnknownOp, both sizes in ErrPayloadTooLarge). No opaque integer returns.",
+    "CapabilityLevel, OutputMode, OpKind, ToolOwnedKind, WarningStatus are all named string types with exported constants — an agent can switch on them without magic strings.",
+    "isOp() unexported sentinel makes DecodeOp's type switch exhaustive over the wire contract. External types cannot accidentally satisfy Op, so the switch is agent-safe.",
+    "Schema parity test (schema_parity_test.go) runs in CI and catches field-name drift between JSON Schema and Go struct tags in both directions — a third-party adapter author can trust the schemas.",
+    "IDCorrelator is concurrency-safe with a mutex; the 1000-goroutine race test is present and the design is simpler than a channel-based alternative.",
+    "No human-readable formatting, ANSI codes, or terminal concerns in the wire layer. byte-pure throughout.",
+    "ErrorClass strings are locked by a literal-table stability test (TestErrorClass_StableNames) — renaming any class fails CI before it breaks an adapter.",
+    "EmitParams.IR is json.RawMessage — the contract package does not couple upward to internal/ir, which is the correct dependency direction."
+  ],
+
+  "output_file": ".context/compound-engineering/ce-review/20260425-032742-85562cea/agent-native.json"
+}
+```
+
+---
+
+Answers to the five scoped questions:
+
+**1. Is the error surface machine-actionable?**
+
+Yes for the six defined ErrorClass constants — they map cleanly to retry (adapter-timeout), abort-and-report (adapter-panic), abort-and-reconfigure (adapter-protocol-mismatch, adapter-capability-lied), and abort-and-fix-trust (adapter-exec-denied, adapter-undeclared-output). The gap is that there is no class for the case where an adapter finds the IR semantically invalid at emit time. That forces the caller to parse the human-readable `Message` string. This is W2 above. The class set is frozen at the wire layer in this PR; PR 3 is the last safe moment to add `adapter-invalid-ir`.
+
+**2. Are OpWarning fields structured for programmatic consumption?**
+
+Partially. `concept_id` (stable string key) and `status` (closed enum `degraded|partial`) give an agent a usable two-field branch surface. The `note` field is prose-only. The design is usable as-is if the PR 3 spec documents that `concept_id + status` is the complete stable branch surface and that `note` MUST NOT be parsed programmatically. If there are v1 warning scenarios where two different reasons produce the same `status` on the same `concept_id`, a `code` sub-classifier field will be needed. This is W1.
+
+**3. Can an adapter author understand how to implement an adapter from this package alone?**
+
+Mostly yes. The package doc in `/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/framing.go` (line 1-9) explicitly says the spec doc ships in PR 3 and points there. The JSON Schemas give a formal field contract, and the parity test validates alignment. The one genuine confusion point is O2 — `DeclaredOutput.JSONPath` and `ToolOwnedKindJSONPointer` refer to two different locator standards, and the test fixtures use both inconsistently. An implementer of `write_tool_owned` will be confused about which standard to use in the `declared_outputs` list vs. the op locator field.
+
+**4. Does the contract leak user-facing concerns into the wire layer?**
+
+No. The package is byte-pure. There are no ANSI codes, no color references, no terminal-width logic, and no formatting. `Error.Message` is a plain string (required by JSON-RPC 2.0 spec), and its contents are adapter-supplied and not validated by this layer — which is correct.
+
+**5. Are there agent-blocking concerns hidden in the design?**
+
+None that are blocking. The `isOp()` unexported sentinel means the `DecodeOp` switch is exhaustive over the wire contract and external types cannot accidentally satisfy `Op` — this is safe and correct. All error values carry context beyond their sentinel identity. The `CapabilityLevel` enum is closed and all values are named constants. The only subtle issue is that an agent acting on `adapter-timeout` has no `retryable` field in `ErrorData` — it must apply per-class retry policy from its own knowledge of what `adapter-timeout` means. Given the class set is small, this is acceptable for v1 (O3).
+
+Full analysis saved to `/Users/justinbeaudry/Projects/aienvs/.context/compound-engineering/ce-review/20260425-032742-85562cea/agent-native.json`.</result>
+<usage><total_tokens>64809</total_tokens><tool_uses>22</tool_uses><duration_ms>147846</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a1059ffe07a550ad2</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/a1cbd198-4e37-41d3-a946-cfc2378b1333/tasks/a1059ffe07a550ad2.output</output-file>
+<status>completed</status>
+<summary>Agent "testing review" completed</summary>
+<result>```json
+{
+  "reviewer": "testing",
+  "findings": [
+    {
+      "id": "T-01",
+      "file": "internal/adapter/contract/framing_test.go",
+      "severity": "medium",
+      "confidence": 0.95,
+      "category": "missing_edge_case",
+      "title": "ReadFrame has no success test for Content-Length exactly equal to maxBytes",
+      "detail": "framing.go line 179 uses contentLength &gt; maxBytes (strict greater-than), so a frame at exactly maxBytes is accepted. The only boundary test is TestReadFrame_RejectsOversizedFrame, which uses 999999999 &gt; 1024 — a clear reject. No test asserts ReadFrame(frame with len==maxBytes, maxBytes) succeeds. An off-by-one change from &gt; to &gt;= would silently break at-boundary clients.",
+      "missing_test": "TestReadFrame_AcceptsExactlyMaxBytes: write N bytes, set maxBytes=N, assert no error."
+    },
+    {
+      "id": "T-02",
+      "file": "internal/adapter/contract/framing_test.go",
+      "severity": "low",
+      "confidence": 0.88,
+      "category": "missing_edge_case",
+      "title": "No success test for ReadFrame with empty body (Content-Length: 0)",
+      "detail": "framing.go calls io.ReadFull(br, body) where body is make([]byte, 0) when contentLength==0. Both existing Content-Length: 0 tests are error cases (wrong charset, wrong media type) that never reach the body-read path. The empty-frame happy path — valid for e.g. shutdown with no inline params — is untested.",
+      "missing_test": "TestReadFrame_AcceptsEmptyBody: 'Content-Length: 0\\r\\n\\r\\n', assert returned slice is empty and err is nil."
+    },
+    {
+      "id": "T-03",
+      "file": "internal/adapter/contract/framing_test.go",
+      "severity": "low",
+      "confidence": 0.85,
+      "category": "missing_edge_case",
+      "title": "Bare-LF-only header separator is tolerated by code but untested",
+      "detail": "framing.go line 139 trims \\r\\n and treats an empty result as end-of-headers, so a bare \\n separator is silently accepted. The comment says 'tolerate bare LF for lenient peers'. No test feeds a bare-LF-separated frame and asserts success. If the trim logic is tightened to require CRLF, no test catches the regression."
+    },
+    {
+      "id": "T-04",
+      "file": "internal/adapter/contract/jsonrpc_test.go",
+      "severity": "medium",
+      "confidence": 0.95,
+      "category": "untested_branch",
+      "title": "ParseMessage branch 'response missing id' is not covered",
+      "detail": "jsonrpc.go lines 442-444 reject a frame with result or error but no id, returning ErrInvalidEnvelope 'response missing id'. None of the seven ParseMessage test inputs hit this branch. The covered ErrInvalidEnvelope paths are: missing jsonrpc, wrong version, and both result+error. Input {\"jsonrpc\":\"2.0\",\"result\":42} (result without id) triggers the uncovered branch.",
+      "missing_test": "TestParseMessage_RejectsResponseMissingID: input {\"jsonrpc\":\"2.0\",\"result\":42}, assert errors.Is(err, ErrInvalidEnvelope)."
+    },
+    {
+      "id": "T-05",
+      "file": "internal/adapter/contract/jsonrpc_test.go",
+      "severity": "medium",
+      "confidence": 0.95,
+      "category": "untested_branch",
+      "title": "ParseMessage default branch ('no method, result, or error') is not covered",
+      "detail": "jsonrpc.go line 451 handles a valid-jsonrpc envelope with no method, result, or error, returning ErrInvalidEnvelope 'no method, result, or error'. No existing test exercises this. Input {\"jsonrpc\":\"2.0\"} or {\"jsonrpc\":\"2.0\",\"id\":1} hits this path.",
+      "missing_test": "TestParseMessage_RejectsEnvelopeWithNoMethodOrResult: input {\"jsonrpc\":\"2.0\"}, assert errors.Is(err, ErrInvalidEnvelope)."
+    },
+    {
+      "id": "T-06",
+      "file": "internal/adapter/contract/jsonrpc_test.go",
+      "severity": "medium",
+      "confidence": 0.90,
+      "category": "weak_concurrency_test",
+      "title": "Concurrency test covers only Next(), missing concurrent MarkPending+Resolve",
+      "detail": "TestIDCorrelator_IsRaceFreeUnderConcurrentAllocs dispatches 1000 goroutines all calling Next() concurrently. This catches a race on c.next if the Mutex is removed. However, the map mutation paths — concurrent MarkPending() and Resolve() on the pending map — are not exercised with parallelism. The realistic production race is goroutines calling Next()+MarkPending() while other goroutines call Resolve() simultaneously. The existing test does not cover this pattern.",
+      "missing_test": "TestIDCorrelator_ConcurrentMarkAndResolve: spawn goroutines doing Next()+MarkPending() simultaneously with goroutines doing Resolve() on the same IDs, run under -race."
+    },
+    {
+      "id": "T-07",
+      "file": "internal/adapter/contract/protocol_test.go",
+      "severity": "low",
+      "confidence": 0.88,
+      "category": "missing_edge_case",
+      "title": "decodeOpContent 'unknown encoding' error path is untested",
+      "detail": "protocol.go lines 508-510 return a non-sentinel fmt.Errorf for an unrecognized encoding value. No test feeds a wire op with encoding='gzip' (or any non-utf8/base64 value) to DecodeOp. The error is reachable via a hostile or malformed peer message.",
+      "missing_test": "TestDecodeOp_RejectsUnknownEncoding: hand-craft JSON with {\"op\":\"write_file\",...,\"encoding\":\"gzip\",...}, assert err != nil."
+    },
+    {
+      "id": "T-08",
+      "file": "internal/adapter/contract/protocol_test.go",
+      "severity": "low",
+      "confidence": 0.85,
+      "category": "missing_edge_case",
+      "title": "ToolOwnedKind stable wire values not locked for toml-path and markdown-section",
+      "detail": "ToolOwnedKindTOMLPath (\"toml-path\") and ToolOwnedKindMarkdownSection (\"markdown-section\") have no stable-value assertion. Only ToolOwnedKindJSONPointer is asserted on the wire in TestOpWriteToolOwned_RoundTripJSONPointer. OpKinds, CapabilityLevels, OutputModes, MethodNames, and ErrorCodes all have dedicated table-driven stable-value tests. The omission is inconsistent and allows a rename without a test failure.",
+      "missing_test": "TestToolOwnedKinds_StableValues: table with {ToolOwnedKindJSONPointer, \"json-pointer\"}, {ToolOwnedKindTOMLPath, \"toml-path\"}, {ToolOwnedKindMarkdownSection, \"markdown-section\"}."
+    },
+    {
+      "id": "T-09",
+      "file": "internal/adapter/contract/protocol_test.go",
+      "severity": "low",
+      "confidence": 0.85,
+      "category": "missing_edge_case",
+      "title": "WarningStatus stable wire value for 'degraded' is not locked",
+      "detail": "WarningStatusDegraded (\"degraded\") has no stable-value test. TestOpWarning_RoundTrip exercises only WarningStatusPartial. WarningStatus is part of the wire schema (op_warning.json 'status' enum). A rename of WarningStatusDegraded would not be caught by CI.",
+      "missing_test": "TestWarningStatuses_StableValues: {WarningStatusDegraded, \"degraded\"}, {WarningStatusPartial, \"partial\"}."
+    },
+    {
+      "id": "T-10",
+      "file": "internal/adapter/contract/jsonrpc_test.go",
+      "severity": "low",
+      "confidence": 0.82,
+      "category": "weak_assertion",
+      "title": "TestResponse_MarshalsError uses substring contains instead of exact wire shape",
+      "detail": "TestResponse_MarshalsError checks the error response output with strings.Contains for two substrings. Every other marshal test in the file (Request, Notification, Response with result) asserts the complete canonical wire form with exact string equality. The inconsistency means the error response marshal could emit extraneous fields or a different field order without failing the test. The marshalEnvelope function is documented to produce deterministic byte-stable output specifically to support exact comparison.",
+      "recommendation": "Replace the two strings.Contains assertions with a single exact string equality check against the full expected JSON, consistent with the other marshal tests."
+    }
+  ],
+  "residual_risks": [
+    {
+      "id": "RR-01",
+      "description": "jsonTagSet in schema_parity_test.go skips exported fields with no json tag and fields tagged json:\"-\". An exported field accidentally added to a parity-checked struct without a json tag would be invisible to the test — a one-way false negative. No false positives are possible. The risk is low because the wire types (opWriteFileWire etc.) are all fully tagged, but it is a structural gap in the test helper.",
+      "confidence": 0.80
+    },
+    {
+      "id": "RR-02",
+      "description": "The initialized.json schema has an empty properties object. No parity case in TestSchemaParity_GoStructsMatchJSONSchemas checks a Go struct against InitializedParams. TestSchemaParity_AllMethodsHaveSchemas asserts the file exists but not that any struct matches it. If InitializedParams gains a field that is not reflected in initialized.json, the parity test will not detect the drift.",
+      "confidence": 0.75
+    }
+  ],
+  "testing_gaps": [
+    "ParseMessage: response-missing-id branch (T-04)",
+    "ParseMessage: no-method-result-or-error default branch (T-05)",
+    "ReadFrame: success path with Content-Length exactly equal to maxBytes (T-01)",
+    "ReadFrame: success path with Content-Length: 0 / empty body (T-02)",
+    "ReadFrame: bare-LF-only header separator tolerated by code but untested (T-03)",
+    "IDCorrelator: concurrent MarkPending+Resolve under -race (T-06)",
+    "decodeOpContent: unknown encoding error path (T-07)",
+    "ToolOwnedKind: stable wire values for toml-path and markdown-section (T-08)",
+    "WarningStatus: stable wire value for degraded (T-09)"
+  ]
+}
+```
+
+The full analysis is saved to `/Users/justinbeaudry/Projects/aienvs/.context/compound-engineering/ce-review/20260425-032742-85562cea/testing.json`.
+
+**Summary of what the diff's tests get right and where the gaps are:**
+
+**Strong coverage areas:** Error-path tests all use `errors.Is` with the correct sentinel (no non-nil-only checks). Marshal tests assert exact byte-stable wire strings. The op round-trip loop covers all five op kinds including empty content. Schema parity uses bi-directional set diff. The concurrency test for `Next()` is race-detector-meaningful.
+
+**The two highest-priority gaps (T-04, T-05)** are in `ParseMessage`: the "response missing id" branch and the "no method/result/error" default branch are both reachable on inbound hostile or malformed frames and have zero test coverage. These are provable from the switch statement in jsonrpc.go lines 438-452 against the seven test inputs listed above — neither `{"jsonrpc":"2.0","result":42}` nor `{"jsonrpc":"2.0"}` appear.
+
+**T-06** (concurrency) is the subtlest: the 1000-goroutine test *is* race-detector-meaningful for `c.next`, but the `c.pending` map has a separate race surface (concurrent `MarkPending` + `Resolve`) that only the sequential `TestIDCorrelator_TracksPendingRequests` exercises. Removing the mutex from `MarkPending`/`Resolve` alone would not be caught.
+
+**T-10** (assertion quality) is the only case of weak assertions — the error response marshal test is the sole outlier that uses `strings.Contains` where every other marshal test in the same file uses exact equality.</result>
+<usage><total_tokens>68860</total_tokens><tool_uses>60</tool_uses><duration_ms>252557</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>af33159789979022f</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/a1cbd198-4e37-41d3-a946-cfc2378b1333/tasks/af33159789979022f.output</output-file>
+<status>completed</status>
+<summary>Agent "api-contract review" completed</summary>
+<result>```json
+{
+  "reviewer": "api-contract",
+  "run_id": "20260425-032742-85562cea",
+  "findings": [
+    {
+      "id": "AC-001",
+      "severity": "high",
+      "confidence": 0.92,
+      "title": "capabilities{} required fields will break additive extension",
+      "location": {
+        "file": "internal/adapter/contract/schema/initialize.json",
+        "path": "$defs.capabilities.required",
+        "line_range": [42, 43]
+      },
+      "description": "The schema marks 'concept_kinds', 'write_tool_owned', and 'progress' as required on the Capabilities object. The intent doc states capabilities{} is the additive extension point: new fields land there without bumping the protocol. But 'required' works both ways under JSON Schema 2020-12 — if a future boolean capability is added and marked required, old CLI implementations that don't know the field will emit objects that fail validation against newer schemas. More critically, third-party adapters in other languages that don't explicitly serialize false booleans will omit 'write_tool_owned' and 'progress', failing schema validation. Resolution: remove 'write_tool_owned' and 'progress' from the required array; only 'concept_kinds' warrants required. No new capability field should ever enter required."
+    },
+    {
+      "id": "AC-002",
+      "severity": "high",
+      "confidence": 0.88,
+      "title": "OpWarning.OpPath() returns empty string but op_record schema requires non-empty 'path' — undocumented wire semantic",
+      "location": {
+        "file": "internal/adapter/contract/protocol.go",
+        "lines": [411, 412],
+        "related_schema": "internal/adapter/contract/schema/emit.json",
+        "schema_path": "$defs.op_record.required"
+      },
+      "description": "OpWarning.OpPath() returns '' (concept-level, not path-level). This empty string lands in OpRecord.Path in EmitResult.OpsPerformed. The schema defines op_record with 'path' as required (type: string) but no minLength constraint, so empty string passes schema validation. However, no schema annotation or oneOf discriminates that path is empty-string for warning ops only. Any downstream consumer — including PR 2's declared-outputs gate and PR 3's conformance harness — that assumes ops_performed paths are non-empty will silently mishandle warning records. The semantic must be documented at the schema layer before freeze."
+    },
+    {
+      "id": "AC-003",
+      "severity": "high",
+      "confidence": 0.85,
+      "title": "No schema entry point for the op stream — third-party validators cannot validate streamed ops",
+      "location": {
+        "file": "internal/adapter/contract/schema/emit.json",
+        "path": "$defs.params.properties.ir"
+      },
+      "description": "The nine op_*.json schemas exist as standalone documents but are never referenced by emit.json via $ref or oneOf. emit.json also describes 'ir' as {\"type\": \"object\"} — completely opaque. A third-party adapter author using the schemas as a validator cannot validate their op output against the contract. PR 3's conformance harness will need to discover op schemas out-of-band. This is hidden contract debt: the schema set is internally consistent (the parity test covers Go↔schema field names) but is not self-describing for the emit op stream, forcing PR 3 to retrofit a composite schema or a separate op-stream schema entry point after the contract is described as frozen."
+    },
+    {
+      "id": "AC-004",
+      "severity": "medium",
+      "confidence": 0.82,
+      "title": "IDCorrelator.MarkPending silently drops string IDs — string-ID peers are uncorrelatable",
+      "location": {
+        "file": "internal/adapter/contract/jsonrpc.go",
+        "lines": [487, 491]
+      },
+      "description": "MarkPending returns early without recording when id.IsInt() is false. NewStringID is exported and documented for echoing client string IDs verbatim. If any peer sends requests with string IDs (explicitly permitted by JSON-RPC 2.0), MarkPending is a no-op and Resolve always returns (\"\", false). PR 2's runtime will treat all responses to string-ID requests as unmatched. Either the contract doc should state the CLI only emits int IDs and string IDs are accepted only in error responses (narrowing the accepted input — a contract constraint), or MarkPending needs to handle string IDs via a parallel map."
+    },
+    {
+      "id": "AC-005",
+      "severity": "medium",
+      "confidence": 0.81,
+      "title": "DeclaredOutput.JSONPath locator syntax is ambiguous — JSONPath vs JSON Pointer conflict",
+      "location": {
+        "file": "internal/adapter/contract/protocol.go",
+        "lines": [153, 154],
+        "related_schema": "internal/adapter/contract/schema/initialize.json",
+        "schema_path": "$defs.declared_output.properties.json_path"
+      },
+      "description": "DeclaredOutput has a field named 'json_path' (JSON tag). The test populates it with JSONPath syntax ('$.mcpServers.echo'). But OpWriteToolOwned uses a separate 'locator' field with a 'kind' discriminator, and ToolOwnedKindJSONPointer uses RFC 6901 JSON Pointer syntax ('/mcpServers/echo') — a different syntax. The schema defines 'json_path' as {\"type\": \"string\"} with no format or enum constraint. An adapter author reading the schema cannot determine which syntax to use for the declared-output path locator, and there is no documented relationship between DeclaredOutput.JSONPath and OpWriteToolOwned.Locator."
+    },
+    {
+      "id": "AC-006",
+      "severity": "medium",
+      "confidence": 0.78,
+      "title": "Empty-string encoding fallthrough accepts ops with missing 'encoding' field despite schema requiring it",
+      "location": {
+        "file": "internal/adapter/contract/protocol.go",
+        "lines": [501, 502]
+      },
+      "description": "decodeOpContent's first case is 'EncodingUTF8, \"\"' — an empty string (what you get when a sender omits the field) is treated as utf8. The op_write_file.json and op_write_tool_owned.json schemas mark 'encoding' as required. The Go decoder is more permissive than the schema. An adapter that omits the encoding field passes Go-side validation but fails schema validation. This asymmetry will surface as a hard-to-diagnose conformance failure in PR 3: the reference adapter passes, but an adapter validated against the schema fails even though the Go runtime would accept its output."
+    },
+    {
+      "id": "AC-007",
+      "severity": "medium",
+      "confidence": 0.75,
+      "title": "MaxOpPayloadBytes not represented in any JSON Schema — third-party validators cannot enforce the 8 MiB cap",
+      "location": {
+        "file": "internal/adapter/contract/schema/op_write_file.json",
+        "related_constant": "internal/adapter/contract/protocol.go line 26"
+      },
+      "description": "MaxOpPayloadBytes = 8 MiB is a wire contract constraint enforced at Go encode/decode time. The op_write_file.json and op_write_tool_owned.json schemas define 'content' as {\"type\": \"string\"} with no maxLength. Third-party validators cannot enforce the cap from the schema alone. Since maxLength for JSON Schema applies to the string length (the base64-encoded form), not the decoded byte count, accurately expressing this constraint requires a 'description' annotation or a companion note in the spec doc. The schema as shipped gives no hint of the constraint."
+    },
+    {
+      "id": "AC-008",
+      "severity": "low",
+      "confidence": 0.72,
+      "title": "initialized.json uses additionalProperties:false but _meta is not listed — inconsistent with every other method schema",
+      "location": {
+        "file": "internal/adapter/contract/schema/initialized.json",
+        "line": 8
+      },
+      "description": "initialized.json sets 'additionalProperties: false' on params and does not list '_meta' in properties. Every other method schema includes '_meta' in properties to preserve the additive extension point. A notification with a populated Meta field would serialize '_meta' into params, which strict validators would reject against this schema. All other method schemas handle _meta consistently. This is the only one that both excludes _meta AND closes additionalProperties."
+    },
+    {
+      "id": "AC-009",
+      "severity": "low",
+      "confidence": 0.70,
+      "title": "Encoding type is exported but described as wire-only/internal — creates confusing SDK surface in PR 3",
+      "location": {
+        "file": "internal/adapter/contract/protocol.go",
+        "lines": [70, 77]
+      },
+      "description": "The Encoding type and EncodingUTF8/EncodingBase64 constants are exported from the package. The comment says 'The Go API never exposes this directly'. When PR 3's adapterkit re-exports the contract package, Encoding will appear in the public SDK docs with no clear consumer use case. It is not referenced by any public struct field. Either it should be unexported (breaking if adapterkit consumers depend on it, but they can't since it's new) or the comment should explain why it is exported."
+    }
+  ],
+  "residual_risks": [
+    {
+      "id": "RR-001",
+      "title": "Protocol version negotiation has no rejection ErrorClass",
+      "description": "InitializeParams carries 'protocol_versions []string' and InitializeResult carries 'protocol_version string'. There is no ErrorClass constant for version negotiation failure. ErrorClassAdapterProtocolMismatch exists but its scope is not defined relative to version negotiation. PR 2 will need to decide the error classification for a server that cannot satisfy any offered version, potentially requiring a contract.go change after this PR lands.",
+      "deferred_to": "PR 2 (runtime)"
+    },
+    {
+      "id": "RR-002",
+      "title": "IR field in EmitParams is untyped — schema says 'object' but IR v1 has a fully-known shape",
+      "description": "EmitParams.IR is json.RawMessage with schema 'type: object'. The IR v1 shape is defined in internal/ir/types.go and docs/spec/ir-v1.md. Any adapter author reading only the emit.json schema cannot know what IR shape to expect. PR 3 will need to either add an IR sub-schema or document the intentional opacity. If it's not intentional, this is contract debt that will be discovered at spec-freeze time.",
+      "deferred_to": "PR 3 (spec freeze)"
+    },
+    {
+      "id": "RR-003",
+      "title": "PR 2 declared-outputs gate will need to special-case warning ops with empty path",
+      "description": "OpRecord{Op: 'warning', Path: ''} entries can appear in EmitResult.OpsPerformed. The declared-outputs gate in PR 2 checks whether op paths are in the declared set. An empty path is not a declared path. The gate logic must special-case warnings or the check will produce false positives on every adapter that emits warnings. This constraint is not documented in PR 1's types.",
+      "deferred_to": "PR 2 (declared-outputs gate)"
+    }
+  ],
+  "testing_gaps": [
+    {
+      "id": "TG-001",
+      "title": "No test for Capabilities round-trip with unknown fields present",
+      "description": "The additive extension promise for capabilities{} depends on unknown fields being silently ignored on unmarshal. There is no test that unmarshals a Capabilities JSON object with an unknown field (e.g., 'future_flag: true') and asserts the known fields are preserved. Without this test, a future change that adds DisallowUnknownFields to Capabilities would silently break the additive contract without failing existing tests."
+    },
+    {
+      "id": "TG-002",
+      "title": "No test for ParseMessage with a null-ID error response",
+      "description": "The comments state null IDs are reserved for error responses to requests whose ID could not be determined. TestID_NullIsRejected tests bare null unmarshal into ID, but no test exercises ParseMessage with '{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{...}}'. If ParseMessage's 'response missing id' guard fires before the null-ID path, null-ID error responses would be rejected as invalid envelopes rather than classified as responses."
+    },
+    {
+      "id": "TG-003",
+      "title": "No test for OpWriteToolOwned with toml-path or markdown-section locator kinds",
+      "description": "TestOpWriteToolOwned_RoundTripJSONPointer covers only the json-pointer kind. The toml-path and markdown-section wire strings are locked by the stable-values test, but no round-trip test confirms locator-parsing correctness for those kinds before PR 3 conformance testing."
+    },
+    {
+      "id": "TG-004",
+      "title": "Schema parity test does not run a real JSON Schema 2020-12 validator against sample payloads",
+      "description": "The parity test checks Go struct tag names against schema property names (bidirectional). It does not run an actual draft-2020-12 validator against sample payloads. Wrong field types (e.g., integer where string is expected, or a missing format constraint) in any schema will not be caught until PR 3 lands a full conformance harness. For a wire contract frozen after PR 3, catching schema type errors post-freeze requires a breaking schema change."
+    }
+  ]
+}
+```
+
+The full analysis is saved to `/Users/justinbeaudry/Projects/aienvs/.context/compound-engineering/ce-review/20260425-032742-85562cea/api-contract.json`.
+
+**Summary of what I found and why each matters:**
+
+**AC-001 (high, 0.92) — `capabilities{}` required array breaks the additive extension point.**
+`/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/schema/initialize.json` line 42 lists `write_tool_owned` and `progress` as required. The design doc says capabilities is the additive extension point where new fields land without a v2 bump. Marking booleans required means any future capability field added as required will cause old-CLI-to-new-adapter negotiation failures. Third-party adapters in languages that don't serialize false booleans as present will also fail schema validation on a required boolean they intend to leave at its zero value. Only `concept_kinds` warrants required.
+
+**AC-002 (high, 0.88) — `OpWarning` writes an empty-string path into `OpRecord` with no schema annotation.**
+`/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/protocol.go` line 412 returns `""` from `OpPath()`. That empty string flows into `EmitResult.OpsPerformed`. The schema allows it (no minLength), but nothing in the schema distinguishes this case. PR 2's declared-outputs gate and any summary consumer will silently mishandle it unless the semantic is documented before freeze.
+
+**AC-003 (high, 0.85) — Op schemas are orphaned — `emit.json` has no `$ref` to the op union.**
+`/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/schema/emit.json` treats the op stream as opaque. The nine `op_*.json` files in the schema directory are not referenced from `emit.json`. PR 3's conformance harness cannot discover them through schema traversal alone; it must enumerate them out-of-band. This is contract debt that will require schema retrofitting at spec-freeze time.
+
+**AC-006 (medium, 0.78) — Empty-string encoding fallthrough makes the Go decoder more permissive than the schema.**
+`/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/protocol.go` line 501: `case EncodingUTF8, "":` silently accepts ops with no `encoding` field, while `op_write_file.json` and `op_write_tool_owned.json` mark `encoding` as required. A schema-valid adapter must include `encoding`; the Go runtime will accept one that doesn't. This asymmetry will confuse PR 3 conformance testing.
+
+**AC-008 (low, 0.72) — `initialized.json` sets `additionalProperties:false` without listing `_meta`.**
+`/Users/justinbeaudry/Projects/aienvs/internal/adapter/contract/schema/initialized.json` line 8. Every other method schema includes `_meta` in properties before closing extension points. This one omits it and sets `additionalProperties: false`, meaning a notification with a populated `Meta` field would fail schema validation.</result>
+<usage><total_tokens>68927</total_tokens><tool_uses>25</tool_uses><duration_ms>200125</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a307c1c49cc3869c3</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-aienvs/a1cbd198-4e37-41d3-a946-cfc2378b1333/tasks/a307c1c49cc3869c3.output</output-file>
+<status>completed</status>
+<summary>Agent "adversarial review" completed</summary>
+<result>The findings are saved. Here is the full output:
+
+```json
+{
+  "reviewer": "adversarial",
+  "findings": [
+    {
+      "id": "ADV-001",
+      "title": "Unbounded header-line length allows memory exhaustion before frame-size cap applies",
+      "severity": "high",
+      "confidence": 0.95,
+      "files": ["internal/adapter/contract/framing.go"],
+      "evidence": [
+        "framing.go:130 calls bufio.Reader.ReadString('\\n') inside the header-parsing loop with no per-line byte limit.",
+        "A hostile peer sends a single header line with no '\\n' for 10 GiB of data. ReadString buffers continuously until '\\n' arrives.",
+        "The DefaultMaxFrameBytes check at framing.go:178 only fires after all headers have been fully read. The per-line cap never fires because none exists.",
+        "The attack holds the goroutine and its growing buffer in a blocking loop, exhausting heap before the frame-size guard is reached.",
+        "Fix: wrap the reader with io.LimitReader at a per-line ceiling (e.g., 8 KiB) before ReadString, or use bufio.Scanner with MaxScanTokenSize."
+      ],
+      "autofix_class": "manual",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-002",
+      "title": "Unbounded header count allows memory exhaustion via thousands of unknown headers",
+      "severity": "medium",
+      "confidence": 0.90,
+      "files": ["internal/adapter/contract/framing.go"],
+      "evidence": [
+        "framing.go:169: unknown headers are discarded but each still causes a heap allocation (the string from ReadString + TrimSpace).",
+        "A hostile peer sends 1 million short unknown header lines before the blank separator. The loop runs without a header-count ceiling.",
+        "Fix: reject after N &gt; 32 headers."
+      ],
+      "autofix_class": "advisory",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-003",
+      "title": "Error on one frame leaves FrameReader stream in a non-resynchronizable state for the next frame",
+      "severity": "medium",
+      "confidence": 0.92,
+      "files": ["internal/adapter/contract/framing.go"],
+      "evidence": [
+        "Content-Length: 0 produces a zero-length body read that succeeds, but ParseMessage errors on empty JSON. The FrameReader has already consumed the header block and zero bytes of body.",
+        "The underlying bufio.Reader's position is now at the start of the next frame's headers. If the caller's loop (PR 2) breaks on the error without resetting, fr.Read() on re-entry parses the next frame correctly — but if the caller tries to re-read without understanding the stream has advanced, it will misparse.",
+        "The contract package provides no 'is stream recoverable' signal. The composition risk is that PR 2's error handling for one bad frame inadvertently silently skips the next valid frame."
+      ],
+      "autofix_class": "advisory",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-004",
+      "title": "base64 decode allocates ~12 MiB before the 8 MiB cap check, enabling sustained GC pressure",
+      "severity": "medium",
+      "confidence": 0.88,
+      "files": ["internal/adapter/contract/protocol.go"],
+      "evidence": [
+        "decodeOpContent (protocol.go:501-504): base64.StdEncoding.DecodeString(content) runs unconditionally, then len(decoded) &gt; MaxOpPayloadBytes is checked.",
+        "A 16 MiB frame (the DefaultMaxFrameBytes ceiling) can carry ~16 MiB of base64 which decodes to ~12 MiB — above the 8 MiB cap. DecodeString allocates the 12 MiB buffer, finishes the decode, then ErrPayloadTooLarge fires.",
+        "Under sustained attack (many such frames in rapid succession) each frame forces a full 12 MiB transient allocation before rejection, creating significant GC pressure and CPU cost.",
+        "Fix: reject base64 content strings longer than ceil(MaxOpPayloadBytes * 4/3) = ~10.7 MiB before calling DecodeString. The existing test TestDecodeOp_RejectsOversizedDecodedPayload verifies the post-decode check but does not cover the pre-decode window."
+      ],
+      "autofix_class": "manual",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-005",
+      "title": "Comment claims fractional IDs are truncated but Int64() actually errors — misleading documentation risks future regression",
+      "severity": "low",
+      "confidence": 0.85,
+      "files": ["internal/adapter/contract/jsonrpc.go"],
+      "evidence": [
+        "jsonrpc.go:149: comment says 'fractional IDs are accepted but truncated'. This is false. json.Number.Int64() returns an error on any non-integer input (1.7, 1e2).",
+        "The code is actually safer than the comment claims. But a future maintainer reading the comment may 'fix' the behavior to actually truncate (e.g., using float64 conversion), introducing a real correlation bug where id 1.9 and id 1.0 both map to pending[1].",
+        "Correcting the comment to 'fractional and scientific-notation IDs are rejected' closes this documentation-induced risk."
+      ],
+      "autofix_class": "advisory",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-006",
+      "title": "IDCorrelator pending map grows without bound when an adapter accepts requests but never responds",
+      "severity": "medium",
+      "confidence": 0.87,
+      "files": ["internal/adapter/contract/jsonrpc.go"],
+      "evidence": [
+        "MarkPending inserts into c.pending. Resolve removes entries. No eviction on timeout, no max-pending ceiling, no TTL.",
+        "A hostile adapter accepts every request and never sends a response. PR 2's stdio loop (not yet written) is likely to keep calling Next()+MarkPending() as long as the connection is open.",
+        "1000 unanswered requests = 1000 map entries. At high-frequency emit throughput against a hung adapter the map grows until the process is killed or the connection tears down.",
+        "IDCorrelator provides no PendingCount() or SetMaxPending() surface. PR 2 cannot self-defend using the existing API."
+      ],
+      "autofix_class": "advisory",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-007",
+      "title": "Empty encoding string silently accepted as utf8, allowing schema-invalid op to pass Go decoding",
+      "severity": "low",
+      "confidence": 0.92,
+      "files": ["internal/adapter/contract/protocol.go", "internal/adapter/contract/schema/op_write_file.json"],
+      "evidence": [
+        "decodeOpContent (protocol.go:501): case EncodingUTF8, \"\": — empty string is a silent alias for utf8.",
+        "op_write_file.json:9 declares encoding as enum [\"utf8\",\"base64\"] with encoding in required[]. Empty string is not a valid enum value.",
+        "A hostile adapter sends {\"op\":\"write_file\",\"path\":\"p\",\"mode\":420,\"encoding\":\"\",\"content\":\"hello\"}. Schema validation (PR 3) would reject this. DecodeOp accepts it and returns a valid OpWriteFile.",
+        "If PR 2 calls DecodeOp before schema validation (the natural streaming order), the schema-invalid content is acted on.",
+        "Fix: make the empty-encoding case an explicit error. The utf8-as-default only benefits buggy adapters that omit a required field."
+      ],
+      "autofix_class": "manual",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-008",
+      "title": "Cascade: result=null response classified as valid success, downstream receives zero-value InitializeResult",
+      "severity": "medium",
+      "confidence": 0.83,
+      "files": ["internal/adapter/contract/jsonrpc.go"],
+      "evidence": [
+        "envelopeWire.Result is *json.RawMessage. When the peer sends {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":null}, json.Unmarshal sets the pointer to non-nil (pointing to the bytes 'null').",
+        "ParseMessage:417-418: if w.Result != nil { msg.Result = *w.Result }. Pointer is non-nil, so msg.Result = []byte(\"null\").",
+        "hasResult (line 434): msg.Result != nil is TRUE for the 4-byte 'null' slice.",
+        "Message is classified MessageKindResponse. PR 2 receives Kind=Response, Result=[]byte(\"null\"), no Error.",
+        "json.Unmarshal([]byte(\"null\"), &amp;initResult) is a no-op in Go — it leaves initResult as a zero-value InitializeResult{}. PR 2 may proceed with an empty capabilities map and empty declared_outputs, treating the session as successfully initialized against a non-functioning adapter."
+      ],
+      "autofix_class": "advisory",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-009",
+      "title": "Duplicate 'path' keys in op JSON silently last-write-wins, potentially bypassing declared-output path check",
+      "severity": "low",
+      "confidence": 0.80,
+      "files": ["internal/adapter/contract/protocol.go"],
+      "evidence": [
+        "DecodeOp uses json.Unmarshal for the typed decode. Go's encoding/json accepts duplicate keys with last-value-wins semantics, no error.",
+        "A hostile adapter sends {\"op\":\"write_file\",\"path\":\"declared/path\",\"mode\":420,\"encoding\":\"utf8\",\"content\":\"x\",\"path\":\"undeclared/sensitive/path\"}. The second 'path' wins.",
+        "PR 2's declared-output check (not yet written) will compare op.Path against the declared set. The adapter declared 'declared/path' during initialize; the actual write targets 'undeclared/sensitive/path'.",
+        "The opDiscriminator peek (protocol.go:457) and the typed decode are two separate json passes; both use last-wins, so they agree on 'op' kind. The path substitution is the only injected value."
+      ],
+      "autofix_class": "advisory",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-010",
+      "title": "Schema caps mode at 4095 but Go uint32 accepts any value; hostile adapter can pass setuid bits to filesystem",
+      "severity": "low",
+      "confidence": 0.95,
+      "files": ["internal/adapter/contract/protocol.go", "internal/adapter/contract/schema/op_write_file.json"],
+      "evidence": [
+        "op_write_file.json: mode maximum: 4095 (0o7777). OpWriteFile.UnmarshalJSON and NewOpWriteFile have no runtime range check.",
+        "A hostile adapter sends mode: 4294967295. json.Unmarshal into uint32 succeeds. OpWriteFile.Mode = 0xFFFFFFFF.",
+        "On POSIX, os.Chmod(path, os.FileMode(0xFFFFFFFF)) masks to 0o7777 — all permission bits set including setuid and setgid. On a shared filesystem this is a privilege escalation vector.",
+        "The schema is the intended safety net; the runtime provides no secondary defense. If PR 2 validates schema before acting on the op, safe. If streaming performance leads to act-then-validate ordering, the filesystem call happens with unchecked mode."
+      ],
+      "autofix_class": "advisory",
+      "owner": "human"
+    },
+    {
+      "id": "ADV-011",
+      "title": "Trailing bytes after JSON object in ParseMessage silently ignored, no anomaly signal",
+      "severity": "low",
+      "confidence": 0.88,
+      "files": ["internal/adapter/contract/jsonrpc.go"],
+      "evidence": [
+        "ParseMessage creates json.NewDecoder(bytes.NewReader(raw)) and calls dec.Decode(&amp;w). Decode reads one JSON value and stops; trailing bytes are not checked.",
+        "A hostile adapter packs a valid envelope in the first 200 bytes of a 16 MiB frame, leaving 16 MiB - 200 bytes of arbitrary content after the closing '}'.",
+        "The trailing bytes are discarded without error. The envelope is processed normally. The CLI has no signal that the frame carried 16 MiB of extra content.",
+        "While the smuggled bytes cannot affect the current parse result, a strict parser would verify dec.Buffered() is empty (or that all raw bytes were consumed) to surface the anomaly for security logging."
+      ],
+      "autofix_class": "advisory",
+      "owner": "human"
+    }
+  ],
+  "residual_risks": [
+    "IDCorrelator.next wraps from math.MaxInt64 to math.MinInt64 after 9.2e18 calls to Next(). At realistic throughput this is cosmological, but a tight-loop bug in PR 2's retry path could exhaust the counter faster. Post-wrap, Next() emits negative IDs that match nothing in the pending map, silently treating all responses as unmatched.",
+    "The schema parity test compares field name sets but not types or required/optional status. A payload with mode as a JSON string instead of integer passes the parity test but fails at json.Unmarshal with an error message that leaks the field name.",
+    "ParseMessage does not validate that a Notification's method is non-empty. {\"jsonrpc\":\"2.0\",\"method\":\"\"} parses cleanly as MessageKindNotification with Method=\"\". PR 2's dispatch switch will silently fall through."
+  ],
+  "testing_gaps": [
+    "No test sends a header line longer than bufio.DefaultBufSize (4096 bytes) to verify memory is bounded (ADV-001).",
+    "No test sends Content-Length: 0 followed immediately by a second valid frame to verify FrameReader stream recovery (ADV-003).",
+    "No test sends encoding: \"\" to document and lock down the acceptance-vs-rejection policy (ADV-007).",
+    "No test verifies behavior when result: null appears in a response envelope (ADV-008).",
+    "No test checks that trailing bytes after the JSON object in ParseMessage are detected (ADV-011).",
+    "No test sends a write_file op with mode &gt; 4095 to cover the schema/runtime gap (ADV-010)."
+  ]
+}
+```
+
+Findings saved to `/Users/justinbeaudry/Projects/aienvs/.context/compound-engineering/ce-review/20260425-032742-85562cea/adversarial.json`.
+
+---
+
+**Depth selected: Deep** (3.3K lines, wire-protocol attack surface with strong risk signals — framing parser, base64 decode, identity correlation, op dispatch).
+
+---
+
+**Summary of what I found attacking each area:**
+
+**ADV-001 (high, 0.95)** is the sharpest finding. `bufio.Reader.ReadString` in the header loop has no per-line length cap. The frame-size ceiling in DefaultMaxFrameBytes only fires after all headers are read. A peer that never sends `\n` on a header line can exhaust heap memory before any cap applies. The two paths orthogonal to each other — ADV-001 is width (line length), ADV-002 is depth (line count).
+
+**ADV-004 (medium, 0.88)** is the base64 CPU/memory pre-rejection window. A 16 MiB frame contains up to ~16 MiB of base64 which decodes to ~12 MiB before the 8 MiB cap check fires. The existing test `TestDecodeOp_RejectsOversizedDecodedPayload` verifies the post-decode check but does not close the pre-decode allocation window. The cap-before-decode guard is `ceil(8 MiB * 4/3) = ~10.7 MiB` on the wire content string length.
+
+**ADV-007 (low, 0.92)** and **ADV-010 (low, 0.95)** are schema/runtime divergences: empty encoding string accepted as utf8 despite being schema-invalid; mode unconstrained to [0, 4095] in the runtime despite the schema constraint. Both become exploitable if PR 2 acts on ops before schema validation rather than after.
+
+**ADV-008 (medium, 0.83)** is the `result: null` cascade: the pointer-to-RawMessage indirection in envelopeWire means `null` result values are classified as `hasResult=true`, leading PR 2 to unmarshal a null result into a zero-value `InitializeResult{}` and treat initialization as successful against a non-functioning adapter.
+
+**ADV-005** documents a misleading comment that says fractional IDs are "accepted but truncated" — they are in fact rejected. The comment is a future-maintainer trap that could cause someone to "fix" the code to actually truncate, creating ID collision bugs in the correlator.</result>
+<usage><total_tokens>57486</total_tokens><tool_uses>16</tool_uses><duration_ms>200769</duration_ms></usage>
+</task-notification>
