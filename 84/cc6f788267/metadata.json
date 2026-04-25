@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "84cc6f788267",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr1-wire-protocol",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-04-25-001-feat-unit-8-pr1-wire-protocol-plan.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/84/cc6f788267/0/metadata.json",
+      "transcript": "/84/cc6f788267/0/full.jsonl",
+      "content_hash": "/84/cc6f788267/0/content_hash.txt",
+      "prompt": "/84/cc6f788267/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 96,
+    "cache_creation_tokens": 184282,
+    "cache_read_tokens": 4368370,
+    "output_tokens": 52019,
+    "api_call_count": 55
+  }
+}
