@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "ea0491e42c9d",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr1-wire-protocol",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/contract/framing.go",
+    "internal/adapter/contract/framing_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ea/0491e42c9d/0/metadata.json",
+      "transcript": "/ea/0491e42c9d/0/full.jsonl",
+      "content_hash": "/ea/0491e42c9d/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3,
+    "cache_creation_tokens": 2756,
+    "cache_read_tokens": 456207,
+    "output_tokens": 834,
+    "api_call_count": 3
+  }
+}
