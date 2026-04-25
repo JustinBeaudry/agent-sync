@@ -13,7 +13,7 @@ origin: docs/brainstorms/2026-04-21-aienvs-agent-workspace-requirements.md
 
 Build the v1 of `aienvs` — a Go CLI that keeps AI-agent configuration for multiple tools (v1 primary: Claude, Cursor, Codex) in sync from a single Git-backed manifest (`.aienv.yaml`). This plan turns the approved requirements doc into concrete, dependency-ordered implementation units for a greenfield repository.
 
-The architectural essence is a four-stage pipeline — **materialize → compile → stage → swap** — with a **two-mode ownership model** (reserved-subdirectory ownership where the target tool supports it + per-entry ledgered merges into tool-owned files where it doesn't), ledger-driven orphan deletion in both modes, a **two-tier trust model** (committed `trusted_sha:` in `.aienv.yaml` for CI plus per-user `trust.jsonl` TOFU history for interactive work), and a v1-stable adapter extension contract — **LSP-framed JSON-RPC 2.0 over stdio** with initialize/initialized lifecycle, capabilities, declared outputs, cancel/shutdown, progress tokens, per-op timeouts, structured errors, and a magic-cookie handshake — so the three primary adapters and any out-of-tree third-party adapter (Go, Python, or otherwise) speak the same protocol from day one.
+The architectural essence is a four-stage pipeline — **materialize → compile → stage → swap** — with a **two-mode ownership model** (reserved-subdirectory ownership where the target tool supports it + per-entry ledgered merges into tool-owned files where it doesn't), ledger-driven orphan deletion in both modes, a **two-tier trust model** (committed `trusted_sha:` in `.aienv.yaml` for CI plus per-user `trust.jsonl` TOFU history for interactive work), and a v1-stable adapter extension contract — **LSP-framed JSON-RPC 2.0 over stdio** with initialize/initialized lifecycle, capabilities, declared outputs, cancel/shutdown, progress tokens, per-op timeouts, structured errors, and a magic-cookie handshake — so the four primary adapters (claude, cursor, codex, pi) and any out-of-tree third-party adapter (Go, Python, or otherwise) speak the same protocol from day one.
 
 ## Problem Frame
 
@@ -101,7 +101,7 @@ The requirements doc left several technical details to planning. All resolved he
 5. **YAML: goccy/go-yaml v1.19.x** with `DisallowUnknownField()` + `AllowFieldPrefixes("x-")` for forward-compat extension keys. `CommentMap` used when `init` writes the resolved SHA back into the manifest.
 6. **Filesystem safety — `os.Root` at the workspace-parent level [deepened].** Use **one `os.Root` scoped at a common ancestor** (typically `<workspace>/.claude/`, `<workspace>/.cursor/`, etc. — the parent of the reserved prefix) rather than one `os.Root` at the reserved prefix itself. Rationale (from Go 1.25 release notes + [Traversal-resistant file APIs](https://go.dev/blog/osroot)): on Windows, an open `os.Root` *handle holds its directory against rename* — a per-reserved-prefix `os.Root` would block its own swap. A parent-root also lets the staging directory live as a sibling (`<workspace>/.claude/.aienv-staging/<ts>/`) so step 1 (`aienvs/ → aienvs.old`) and step 2 (`.aienv-staging/<ts>/claude → aienvs`) happen inside a single root; Go 1.25 has no cross-root rename primitive ([proposal #73041](https://github.com/golang/go/issues/73041)). Generations root accordingly moves under each target's parent (see decision #20). Post-swap, per-reserved-prefix read-only `os.Root` handles are fine — the constraint applies only during the swap window.
 7. **File locking: `gofrs/flock` v0.13** with `TryLockContext` + bounded timeout. One lock per (workspace, target); cache directory has its own.
-8. **Adapter extension contract [deepened]: LSP-style `Content-Length` framing + JSON-RPC 2.0 body** over stdin/stdout, protocol identifier `aienvs/v1` carried in `Content-Type: application/aienvs-v1+json; charset=utf-8`. Rationale ([LSP 3.17 base protocol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/), [MCP 2025-11-25 lifecycle](https://modelcontextprotocol.io/specification/latest/basic/lifecycle)): length-prefixed headers are 8-bit-clean, debug-friendly (`cat`/`tee`/`tail`), survive partial writes, and are the de-facto standard adopted by every JSON-over-stdio protocol shipped by Microsoft, Anthropic, and HashiCorp-ish successors. Bundled adapters (claude/cursor/codex) still run via in-process shim but speak the same wire protocol for parity. **Required v1 surface before freeze** (each item sourced from prior-art gap analysis, see Sources):
+8. **Adapter extension contract [deepened]: LSP-style `Content-Length` framing + JSON-RPC 2.0 body** over stdin/stdout, protocol identifier `aienvs/v1` carried in `Content-Type: application/aienvs-v1+json; charset=utf-8`. Rationale ([LSP 3.17 base protocol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/), [MCP 2025-11-25 lifecycle](https://modelcontextprotocol.io/specification/latest/basic/lifecycle)): length-prefixed headers are 8-bit-clean, debug-friendly (`cat`/`tee`/`tail`), survive partial writes, and are the de-facto standard adopted by every JSON-over-stdio protocol shipped by Microsoft, Anthropic, and HashiCorp-ish successors. Bundled adapters (claude/cursor/codex/pi) still run via in-process shim but speak the same wire protocol for parity. **Required v1 surface before freeze** (each item sourced from prior-art gap analysis, see Sources):
     - Transport: `Content-Length:`/`Content-Type:` headers + JSON-RPC 2.0 request/response/notification envelope.
     - **`initialize` → `initialized`** lifecycle (LSP/MCP): server must not emit real ops before receiving `initialized` notification.
     - **Server counter-proposes version** on mismatch (MCP rule): adapter replies with its highest supported protocol, CLI decides to proceed or refuse.
@@ -142,7 +142,7 @@ The requirements doc left several technical details to planning. All resolved he
 25. **Per-tool ownership model [deepened] — reserved subdirectories where viable, tool-owned files via per-entry ledger elsewhere.** The "every concept lives under `.<tool>/aienvs/`" symmetry in the origin requirements is *partially fiction*: three of the six IR concept kinds land in files the tool itself owns (Claude `.mcp.json` at repo root, Cursor `.cursor/mcp.json`, Codex `.codex/config.toml`, plus repo-root `AGENTS.md` for Cursor/Codex). The plan therefore supports **two ownership modes** simultaneously:
     - **Reserved-subdirectory mode** (preferred): adapter owns `.<tool>/<subsystem>/aienvs/` as a namespace. Verified viable for Claude/Cursor rules (`.claude/rules/aienvs/<id>.md`, `.cursor/rules/aienvs/<id>.mdc`) and Claude commands (`.claude/commands/aienvs/<id>.md`, which get free `/aienvs:<id>` slash-command namespacing). Orphan deletion is ledger-driven inside this namespace. **Skills use name-prefix isolation, not subdirectory nesting** (e.g., `.claude/skills/aienvs-<id>/SKILL.md`) because Cursor and Claude's skill discovery requires `<skill-folder-name> == skill-name`.
     - **Per-entry-in-tool-owned-file mode**: concepts that land in `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, or repo-root `AGENTS.md` are tracked via **per-entry ledger records** that name the containing file and the JSON/TOML path (e.g., `$.mcpServers.aienvs_<id>`) or AGENTS.md section marker (`<!-- aienvs:begin id=… -->` / `<!-- aienvs:end id=… -->`). Orphan removal edits the file in place, preserving non-aienvs entries. Emit uses a read-merge-write pattern under a per-file lock; the ledger's content hash covers the aienvs-owned slice, not the whole file.
-    The adapter framework (unit 8) exposes a `write_tool_owned` op distinct from `write_file` so this mode is first-class rather than a workaround. The per-tool concept→destination mapping is authoritative in each adapter's `docs/adapters/<tool>.md` and encoded in its `capabilities.yaml`. See Units 9/10/11 for the specific mappings; several origin assumptions (Claude reads `AGENTS.md`, Codex reads `.codex/skills/`, all tools support an aienvs/ subdir symmetrically) are now explicitly reversed based on official-docs research.
+    The adapter framework (unit 8) exposes a `write_tool_owned` op distinct from `write_file` so this mode is first-class rather than a workaround. The per-tool concept→destination mapping is authoritative in each adapter's `docs/adapters/<tool>.md` and encoded in its `capabilities.yaml`. See Units 9/10/11/11.5 for the specific mappings; several origin assumptions (Claude reads `AGENTS.md`, Codex reads `.codex/skills/`, all tools support an aienvs/ subdir symmetrically) are now explicitly reversed based on official-docs research.
 
 ## Open Questions
 
@@ -703,7 +703,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 - Backward compat: MVP-only adapter (declaring no extensions) passes the harness with extension tests auto-skipped via capability tags.
 - Per-method timeout override: `adapter.yaml` sets `emit: 120s`; adapter emits for 60s → no timeout; emits for 130s → `adapter-timeout` class error.
 
-**Verification:** Unit 8's frozen corpus passes unchanged; extension tests tagged and gated by capability flags; no MVP consumer (Units 9/10/11/20) requires 8b to function.
+**Verification:** Unit 8's frozen corpus passes unchanged; extension tests tagged and gated by capability flags; no MVP consumer (Units 9/10/11/11.5/20) requires 8b to function.
 
 - [ ] **Unit 9: Primary adapter — claude**
 
@@ -822,7 +822,56 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 - Edge case: existing user content in `.codex/config.toml` (top-level `[general]` table) → preserved across reads/writes; ledger covers only the aienvs-owned tables.
 - Edge case: `required: true` rule → `required_unmet` (Codex does not support rules).
 
-**Verification:** conformance passes; all three primary adapters share consistent managed-file header format and compatible section-marker syntax when multiple adapters touch the shared `AGENTS.md`; `docs/adapters/codex.md` prominently documents the asymmetry (no `.codex/aienvs/` subdirectory in v1) so users are not surprised.
+**Verification:** conformance passes; all four primary adapters share consistent managed-file header format and compatible section-marker syntax when multiple adapters touch the shared `AGENTS.md`; `docs/adapters/codex.md` prominently documents the asymmetry (no `.codex/aienvs/` subdirectory in v1) so users are not surprised.
+
+- [ ] **Unit 11.5: Primary adapter — pi (`@mariozechner/pi-coding-agent`)**
+
+**Goal:** Ship the bundled `pi` adapter that maps the v1 IR concept set to Pi's actual project-level surfaces: parent-walked `AGENTS.md` context files, the Agent-Skills-standard skills directories, and Pi's prompt-template directory. Honestly declare `unsupported` for the IR concepts Pi has deliberately excluded (MCP, rules, plugin-references) — Pi's "no MCP" stance is a product position, not a gap, and the capability matrix surfaces it as such.
+
+**Requirements:** R3, R11, R12
+
+**Dependencies:** Units 7, 8, 12, 12a.
+
+**Files:**
+- Create: `internal/adapter/bundled/pi/adapter.go`, `capabilities.yaml`, `emit.go`
+- Create: `docs/adapters/pi.md` (authoritative concept→destination table; "no MCP by design" callout pointing at Pi's blog post; `.agents/skills/` reuse note)
+- Test: `internal/adapter/bundled/pi/emit_test.go`, `testdata/adapters/pi/*`
+
+**Approach:**
+- **Reserved subdirectories:**
+  - `command` → `.pi/prompts/aienvs/<id>.md` — Pi expands `/<name>` slash-templates from this directory; the `aienvs/` subfolder gives free `/aienvs/<id>` namespacing without colliding with user prompts.
+- **Name-prefix isolation under `.agents/skills/` (shared with codex):**
+  - `skill` → **`.agents/skills/aienvs-<id>/SKILL.md`** — Pi reads both `.pi/skills/` and `.agents/skills/` (parent-walked from cwd). Choosing `.agents/skills/` means a single emitted skill tree is consumed by **both pi and codex** with no duplication. This is the first concrete payoff of the cross-tool shared-namespace pattern surfaced in Unit 11.
+- **Tool-owned-file mode:**
+  - `agents-md` → **workspace-root `AGENTS.md`**, section-merged between `<!-- aienvs:begin id=<id> -->` / `<!-- aienvs:end id=<id> -->` markers via `write_tool_owned`. Same file, same marker scheme as cursor and codex — the three-way concurrent-ownership conflict test from Unit 11 must extend to four-way.
+- **Concepts Pi does not support at project level (declare `unsupported` honestly):**
+  - `mcp-server-entry` → **`unsupported` by product design** (not by gap). Pi explicitly rejects MCP in its philosophy section; emit a one-time warning when an IR with MCP entries targets pi: "Pi does not load MCP servers by design — see https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/. To expose this functionality to Pi, build or install a Pi extension that wraps the same capability." Do **not** silently degrade; this is the canonical worked example for capability-matrix honesty in `docs/spec/ir-v1.md`.
+  - `rule` → `unsupported`. Pi has no per-tool rule concept distinct from `AGENTS.md`. The note in `capabilities.yaml` directs users to either consolidate rules into `agents-md` IR nodes or use a skill.
+  - `plugin-reference` → `unsupported`. Pi packages install via the `pi install` command against npm/git sources, not from a project-level registry file. There is no per-project plugin-reference shape aienvs would write.
+- **Pi-specific advisories (warnings only, not failures):**
+  - Detect a pre-existing `.pi/SYSTEM.md` or `.pi/APPEND_SYSTEM.md` at workspace root → emit a one-time advisory: "Pi system-prompt overrides are present; aienvs does not manage these files. Your `agents-md` content will not appear in the system prompt; it is loaded as a parent-walked context file alongside your overrides." Do not touch the files.
+  - Detect a project-local `.pi/extensions/` directory → emit informational note (not a warning): "Pi extensions detected. aienvs does not manage extensions in v1; see Pi packages for installable workflows."
+- **Emission paths summary** (added to `docs/adapters/pi.md`):
+  - `.pi/prompts/aienvs/<id>.md` (commands)
+  - `.agents/skills/aienvs-<id>/SKILL.md` (skills, shared with codex)
+  - workspace-root `AGENTS.md` (section, shared with cursor + codex)
+- Same managed-file headers + managed-section markers + per-reserved-subdir README as Units 9–11. Ledger tracks: `.pi/prompts/aienvs/` (per-folder), workspace `AGENTS.md` (per-section), `.agents/skills/aienvs-*/` (per-folder, shared registry coordinates with codex's ledger entries by id).
+
+**Patterns to follow:** Units 9 + 10 + 11; [Pi context-files docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent#context-files); [Pi skills docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent#skills) (Agent Skills standard); [Pi prompt templates](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent#prompt-templates); [Pi "No MCP" rationale](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/).
+
+**Test scenarios:**
+- Happy path: IR with `agents-md` + `command` + `skill` emits: workspace `AGENTS.md` section, `.pi/prompts/aienvs/<id>.md`, `.agents/skills/aienvs-<id>/SKILL.md` — verified by golden tree diff.
+- Happy path: same workspace targets `[pi, codex]` simultaneously → `.agents/skills/aienvs-<id>/SKILL.md` is written **once** by whichever adapter emits first; the second adapter's ledger records the same path-id pair without re-emitting. Cross-adapter conflict test asserts no duplicate writes and ledger reconciles cleanly on orphan removal.
+- Happy path: same workspace targets `[pi, cursor, codex]` → all three section-merge into workspace `AGENTS.md` with distinct `<id>` markers; user content outside markers byte-identical before and after.
+- Edge case: IR has an `mcp-server-entry` node and `targets: [pi]` → the no-MCP advisory fires once (per sync, not per entry); no `.pi/` MCP file is written; the capability report records the unsupported translation as a *deliberate exclusion*, not a degradation.
+- Edge case: `required: true` `mcp-server-entry` targeting pi → `required_unmet` error in atomic mode (the user explicitly required something Pi explicitly doesn't load — surface, don't paper over).
+- Edge case: `required: true` rule targeting pi → `required_unmet` with the `agents-md`-or-skill remediation note from `capabilities.yaml`.
+- Edge case: `command` IR node containing `{{focus}}`-style template variables → emitted verbatim; aienvs does not interpret Pi template syntax (Pi handles expansion at runtime).
+- Edge case: pre-existing `.pi/SYSTEM.md` → advisory emitted; file untouched; sync proceeds.
+- Edge case: pre-existing user prompt at `.pi/prompts/foo.md` (no `aienvs/` prefix) → preserved; orphan-deletion scope is `.pi/prompts/aienvs/` only.
+- Conformance: passes the shared conformance harness with the unsupported-MCP test case asserting the warning fires and no MCP file is touched.
+
+**Verification:** `docs/adapters/pi.md` matches the emitted layout; `docs/spec/ir-v1.md` references the pi adapter as the worked example for capability-matrix honesty (a tool that *deliberately* excludes a concept rather than failing to support it); the four-adapter `AGENTS.md` round-trip test (cursor + codex + pi + a stub fourth) preserves user content byte-for-byte.
 
 ### Phase D — Sync engine
 
@@ -930,7 +979,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 - Mutation: single-byte corruption in user content outside managed region → post-merge that region byte-identical (mutation-test gate).
 - Fuzz: randomized user content preceding/following managed section does not break parse or corrupt aienvs-owned slice.
 
-**Verification:** `docs/spec/tool-owned-merge-v1.md` is authoritative and matches code; golden fixtures cover every recovery branch; mutation test passes across all three formats; Unit 9/10/11 adapters consume this unit's API exclusively for any non-reserved-subdir emission.
+**Verification:** `docs/spec/tool-owned-merge-v1.md` is authoritative and matches code; golden fixtures cover every recovery branch; mutation test passes across all three formats; Unit 9/10/11/11.5 adapters consume this unit's API exclusively for any non-reserved-subdir emission.
 
 - [ ] **Unit 13: Atomic staging + swap + rollback — staging-under-target, single-parent `os.Root`, explicit recovery state machine**
 
@@ -1383,20 +1432,20 @@ The full plan is 21+ units and reads like a 3–6 month critical path. To derisk
 **MVP includes:**
 - Units 1–7 (foundation + IR decoder) — full scope.
 - Unit 8 **MVP subset only** (no Unit 8b extensions: no progress, no cancel, no counter-propose, no Python reference adapter, defaults-only timeouts).
-- Unit 9 **only** (`claude` adapter). `cursor` + `codex` adapters (Units 10, 11) **defer to v0.2**.
+- Unit 9 **only** (`claude` adapter). `cursor` + `codex` + `pi` adapters (Units 10, 11, 11.5) **defer to v0.2**.
 - Units 12 + 12a (ledger + per-external-file lock + JSON/TOML/markdown merge).
 - Unit 13 (atomic swap + recovery state machine).
 - Unit 15 (sync summary + capability report + JSON output).
 - Unit 16 **subset**: `init` and `sync` subcommands only. Defer `validate`, `watch`, `hooks`, `adapter install`, `unmanage`, `rollback`, `status` to v0.2+.
 - Unit 6 **subset**: `trusted_sha:` in manifest + `trust.jsonl` append/read + `aienvs trust pin` / `trust verify`. Defer `trust pending` / `diff` / `promote` / `allow-new-shas` / `reset` / `revoke` / `compact` to v0.2.
 
-**MVP excludes:** Units 8b, 10, 11, 14 (orphan + adopt ship in MVP with Unit 13; *adopt-prefix UX wizard* defers), 17 (Bubble Tea wizards — MVP is flag-only), 18 (`validate`), 19 (hooks + watch), 20 (SDK + SDK docs + install-by-topic), 21 (full release packaging — MVP releases as a single tarball, not goreleaser).
+**MVP excludes:** Units 8b, 10, 11, 11.5, 14 (orphan + adopt ship in MVP with Unit 13; *adopt-prefix UX wizard* defers), 17 (Bubble Tea wizards — MVP is flag-only), 18 (`validate`), 19 (hooks + watch), 20 (SDK + SDK docs + install-by-topic), 21 (full release packaging — MVP releases as a single tarball, not goreleaser).
 
 **MVP target profile:** single workspace, pinned canonical repo, Claude adapter only, atomic sync, capability report, no interactive wizards (all flags). Ships as `v0.1.0-alpha` to gather real-world signal before locking adapter protocol extensions, tool paths for cursor/codex, or the full UX surface.
 
-**Post-MVP path:** v0.2 adds cursor + codex adapters (Units 10, 11) + validate (Unit 18) + full Unit 6 + adopt wizard (Unit 14). v0.3 adds hooks + watch (Unit 19). v0.4 adds SDK + release packaging (Units 20, 21) + Bubble Tea wizards (Unit 17). v1.0.0 cuts when all of the above ship and protocol has seen at least one out-of-tree adapter survive for 30 days.
+**Post-MVP path:** v0.2 adds cursor + codex + pi adapters (Units 10, 11, 11.5) + validate (Unit 18) + full Unit 6 + adopt wizard (Unit 14). v0.3 adds hooks + watch (Unit 19). v0.4 adds SDK + release packaging (Units 20, 21) + Bubble Tea wizards (Unit 17). v1.0.0 cuts when all of the above ship and protocol has seen at least one out-of-tree adapter survive for 30 days.
 
-Parallelism notes: within Phase C, Units 9/10/11 are independent after Units 7/8/12/12a land. v0.2 can fan Units 10 and 11 out to separate implementers.
+Parallelism notes: within Phase C, Units 9/10/11/11.5 are independent after Units 7/8/12/12a land. v0.2 can fan Units 10, 11, and 11.5 out to separate implementers.
 
 ## Documentation Plan
 

@@ -39,6 +39,7 @@ into each tool's own conventions.
 | Claude Code | Primary |
 | Cursor | Primary |
 | Codex CLI | Primary |
+| Pi (`@mariozechner/pi-coding-agent`) | Primary |
 | Gemini CLI | Supported |
 | Windsurf | Experimental |
 | LM Studio | Experimental |
