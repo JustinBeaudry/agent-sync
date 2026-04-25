@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "5a8f1f84b103",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr1-wire-protocol",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/contract/protocol.go",
+    "internal/adapter/contract/protocol_test.go",
+    "internal/adapter/contract/schema.go",
+    "internal/adapter/contract/schema/emit.json",
+    "internal/adapter/contract/schema/initialize.json",
+    "internal/adapter/contract/schema/initialized.json",
+    "internal/adapter/contract/schema/op_delete.json",
+    "internal/adapter/contract/schema/op_mkdir.json",
+    "internal/adapter/contract/schema/op_warning.json",
+    "internal/adapter/contract/schema/op_write_file.json",
+    "internal/adapter/contract/schema/op_write_tool_owned.json",
+    "internal/adapter/contract/schema/shutdown.json",
+    "internal/adapter/contract/schema_parity_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5a/8f1f84b103/0/metadata.json",
+      "transcript": "/5a/8f1f84b103/0/full.jsonl",
+      "content_hash": "/5a/8f1f84b103/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 29,
+    "cache_creation_tokens": 40958,
+    "cache_read_tokens": 5466524,
+    "output_tokens": 29835,
+    "api_call_count": 29
+  }
+}
