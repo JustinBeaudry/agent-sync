@@ -250,6 +250,84 @@ func TestDecideAllowNewSHAsActiveAutoPromotes(t *testing.T) {
 		t.Errorf("AppendTrustLog sha/prev = %q/%q, want %q/%q",
 			d.AppendTrustLog.SHA, d.AppendTrustLog.PrevSHA, shaA, shaB)
 	}
+	// Post-decision trust = ResolvedSHA, since the caller will append the
+	// promote record and the new SHA becomes the effective trust.
+	if d.TrustedSHA != shaA {
+		t.Errorf("TrustedSHA = %q, want %q (post-decision = ResolvedSHA)", d.TrustedSHA, shaA)
+	}
+}
+
+func TestDecideCIKnownURLDriftAcceptNewSourceMatches(t *testing.T) {
+	t.Parallel()
+
+	// Known URL whose SHA drifted, non-interactive, with --accept-new-source
+	// matching the resolved SHA. Remediation tells users to do exactly this,
+	// so it must work as the documented CI escape hatch.
+	in := baseInput()
+	in.TTY = false
+	in.State = State{CurrentSHA: shaB, LastOp: OpTrust}
+	in.Flags.AcceptNewSource = shaA // matches resolved.
+
+	d, err := Decide(in)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if d.Kind != KindProceed {
+		t.Errorf("Kind = %q, want proceed", d.Kind)
+	}
+	if !strings.Contains(d.AuditEcho, "Trusting new source") {
+		t.Errorf("AuditEcho = %q, want audit line", d.AuditEcho)
+	}
+}
+
+func TestDecideCIKnownURLDriftAcceptNewSourceMismatch(t *testing.T) {
+	t.Parallel()
+
+	in := baseInput()
+	in.TTY = false
+	in.State = State{CurrentSHA: shaB, LastOp: OpTrust}
+	in.Flags.AcceptNewSource = shaC // user said trust C, resolved is A.
+
+	_, err := Decide(in)
+	if !errors.Is(err, ErrTrustDecisionRequired) {
+		t.Fatalf("err = %v, want ErrTrustDecisionRequired (mismatch between --accept-new-source and resolved)", err)
+	}
+}
+
+func TestDecideCIKnownURLDriftAcceptAnyWithPeerGate(t *testing.T) {
+	t.Parallel()
+
+	in := baseInput()
+	in.TTY = false
+	in.State = State{CurrentSHA: shaB, LastOp: OpTrust}
+	in.Flags.AcceptAny = true
+	in.Flags.AcceptAnyPeerGate = true
+
+	d, err := Decide(in)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if d.Kind != KindProceed {
+		t.Errorf("Kind = %q, want proceed", d.Kind)
+	}
+	if !strings.Contains(d.AuditEcho, "Trusting new source") {
+		t.Errorf("AuditEcho = %q, want audit line", d.AuditEcho)
+	}
+}
+
+func TestDecideCIKnownURLDriftAcceptAnyWithoutPeerGate(t *testing.T) {
+	t.Parallel()
+
+	in := baseInput()
+	in.TTY = false
+	in.State = State{CurrentSHA: shaB, LastOp: OpTrust}
+	in.Flags.AcceptAny = true
+	in.Flags.AcceptAnyPeerGate = false
+
+	_, err := Decide(in)
+	if !errors.Is(err, ErrTrustDecisionRequired) {
+		t.Fatalf("err = %v, want ErrTrustDecisionRequired (--accept-new-source=any requires peer gate)", err)
+	}
 }
 
 func TestDecideAllowNewSHAsExpiredFallsBackToReminder(t *testing.T) {

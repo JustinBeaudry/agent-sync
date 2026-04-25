@@ -1,6 +1,7 @@
 package trust
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -317,5 +318,55 @@ func TestStoreAppendRejectsInvalidEntry(t *testing.T) {
 	}
 	if err := s.Append(bad); err == nil {
 		t.Error("Append(empty entry) returned nil, want error")
+	}
+}
+
+// TestStoreReadAllRetriesOnTruncatedLastLine simulates the race where a
+// reader observes the file mid-write: a complete line followed by a
+// truncated trailing fragment. ReadAll must succeed by re-reading once
+// the writer (here, our test goroutine) has appended the missing
+// newline, per docs/spec/trust-store-v1.md (Concurrency: "fold re-reads
+// on io.UnexpectedEOF up to 3 times").
+func TestStoreReadAllRetriesOnTruncatedLastLine(t *testing.T) {
+	t.Parallel()
+	s := newStoreInDir(t)
+
+	// Seed a clean record.
+	if err := s.Append(mustEntry(t, OpTrust, urlX, shaA, "", "2026-05-01T12:00:00Z")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	// Write a truncated trailing fragment (no closing brace, no
+	// newline). On the first ReadAll attempt this should fail with a
+	// json.SyntaxError; the retry will see it again. We close the gap
+	// concurrently so a later attempt succeeds.
+	f, err := os.OpenFile(s.Path(), os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatalf("open for truncation injection: %v", err)
+	}
+	if _, err := f.WriteString(`{"ts":"2026-05-02T12:00:00Z","op":"trust","url"`); err != nil {
+		_ = f.Close()
+		t.Fatalf("write truncated fragment: %v", err)
+	}
+
+	// Concurrent goroutine completes the line shortly after ReadAll
+	// starts retrying. The retry backoffs are 10ms/20ms/30ms; we
+	// complete the line at ~5ms so the second attempt sees the
+	// completed file.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		time.Sleep(5 * time.Millisecond)
+		_, _ = f.WriteString(`:"` + urlX + `","sha":"` + shaB + `","prev_sha":"","source":"cli","actor":"a","hostname":"h"}` + "\n")
+		_ = f.Close()
+	}()
+
+	entries, err := s.ReadAll()
+	<-done
+	if err != nil {
+		t.Fatalf("ReadAll did not retry past truncation: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("entries=%d, want 2 (one seed + one completed)", len(entries))
 	}
 }

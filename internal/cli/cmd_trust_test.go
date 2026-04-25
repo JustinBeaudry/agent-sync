@@ -220,7 +220,9 @@ func TestTrustPromotePinManifest(t *testing.T) {
 	t.Parallel()
 
 	e := newTestEnv(t)
-	writeTestManifest(t, e.manifestPath, "")
+	// Manifest's canonical.url must match the promoted URL for
+	// --pin-manifest to be allowed (workspace-safety gate).
+	writeTestManifestWithURL(t, e.manifestPath, urlX, "", "")
 	if err := e.pending.Append(trust.PendingEntry{
 		TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaB, OldSHA: shaA,
 	}); err != nil {
@@ -237,6 +239,93 @@ func TestTrustPromotePinManifest(t *testing.T) {
 	}
 	if got.TrustedSHA != shaB {
 		t.Errorf("manifest trusted_sha = %q, want %q", got.TrustedSHA, shaB)
+	}
+}
+
+func TestTrustPromoteRejectsAllWithPinManifest(t *testing.T) {
+	t.Parallel()
+
+	e := newTestEnv(t)
+	writeTestManifestWithURL(t, e.manifestPath, urlX, "", "")
+	if err := e.pending.Append(trust.PendingEntry{
+		TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaB, OldSHA: shaA,
+	}); err != nil {
+		t.Fatalf("seed pending: %v", err)
+	}
+
+	err := e.run("promote", "--all", "--pin-manifest")
+	if err == nil {
+		t.Fatal("promote --all --pin-manifest accepted, want error")
+	}
+	if !strings.Contains(err.Error(), "incompatible") {
+		t.Errorf("error = %v, want 'incompatible' message", err)
+	}
+}
+
+func TestTrustPromotePinManifestRejectsURLMismatch(t *testing.T) {
+	t.Parallel()
+
+	e := newTestEnv(t)
+	// Manifest is pinned to a different canonical source than the
+	// pending entry. --pin-manifest must refuse to write.
+	writeTestManifestWithURL(t, e.manifestPath, "https://github.com/example/other", "", "")
+	if err := e.pending.Append(trust.PendingEntry{
+		TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaB, OldSHA: shaA,
+	}); err != nil {
+		t.Fatalf("seed pending: %v", err)
+	}
+
+	err := e.run("promote", urlX, "--pin-manifest")
+	if err == nil {
+		t.Fatal("promote --pin-manifest accepted with URL mismatch, want error")
+	}
+	if !strings.Contains(err.Error(), "URL mismatch") {
+		t.Errorf("error = %v, want 'URL mismatch' message", err)
+	}
+
+	// Manifest must remain untouched: trusted_sha still empty.
+	got, err := manifest.LoadFile(e.manifestPath, manifest.LoadOptions{NonInteractive: false})
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if got.TrustedSHA != "" {
+		t.Errorf("manifest trusted_sha = %q, want empty (pin should have been rejected)", got.TrustedSHA)
+	}
+}
+
+func TestTrustPromoteRejectsStalePending(t *testing.T) {
+	t.Parallel()
+
+	e := newTestEnv(t)
+	// Trust log says CurrentSHA = shaB. Pending entry says OldSHA =
+	// shaA — i.e. it was generated before the trust log moved on.
+	// Promoting that pending would record an incorrect prev_sha.
+	if err := e.store.Append(trust.LogEntry{
+		TSRaw: "2026-04-01T12:00:00Z", Op: trust.OpTrust, URL: urlX, SHA: shaB,
+		Source: trust.SourceCLI, Actor: "t", Hostname: "h",
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := e.pending.Append(trust.PendingEntry{
+		TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaA, OldSHA: shaA,
+	}); err != nil {
+		t.Fatalf("seed pending: %v", err)
+	}
+
+	err := e.run("promote", urlX)
+	if err == nil {
+		t.Fatal("promote accepted stale pending, want error")
+	}
+	if !strings.Contains(err.Error(), "stale") {
+		t.Errorf("error = %v, want 'stale' message", err)
+	}
+	// Trust log must be unchanged.
+	state, err := e.store.Fold()
+	if err != nil {
+		t.Fatalf("Fold: %v", err)
+	}
+	if state[urlX].CurrentSHA != shaB {
+		t.Errorf("CurrentSHA after rejected promote = %q, want %q", state[urlX].CurrentSHA, shaB)
 	}
 }
 
@@ -296,6 +385,39 @@ func TestTrustVerifyMismatchReturnsDecisionRequired(t *testing.T) {
 	}
 	if got := trust.ExitCodeFor(err); got != trust.ExitTrustDecisionRequired {
 		t.Errorf("ExitCodeFor = %d, want %d", got, trust.ExitTrustDecisionRequired)
+	}
+}
+
+func TestTrustVerifyRejectsMalformedSHA(t *testing.T) {
+	t.Parallel()
+
+	// Both fields equal, both garbage. Equality alone would let this
+	// slip past the CI gate; the format check exists to stop that.
+	cases := []struct {
+		name            string
+		commit, trusted string
+		wantSubstring   string
+	}{
+		{"both equal but ref name", "main", "main", "canonical.commit must be 40-lowercase-hex"},
+		{"trusted_sha uppercase hex", strings.Repeat("a", 40), strings.Repeat("A", 40), "trusted_sha must be 40-lowercase-hex"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newTestEnv(t)
+			writeTestManifestWithCommit(t, e.manifestPath, tc.commit, tc.trusted)
+			err := e.run("verify")
+			if !errors.Is(err, trust.ErrTrustDecisionRequired) {
+				t.Fatalf("err = %v, want ErrTrustDecisionRequired", err)
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Errorf("err = %v, want substring %q", err, tc.wantSubstring)
+			}
+			if got := trust.ExitCodeFor(err); got != trust.ExitTrustDecisionRequired {
+				t.Errorf("ExitCodeFor = %d, want %d", got, trust.ExitTrustDecisionRequired)
+			}
+		})
 	}
 }
 
@@ -472,10 +594,18 @@ func writeTestManifest(t *testing.T, path, trustedSHA string) {
 // even when their values are empty.
 func writeTestManifestWithCommit(t *testing.T, path, commit, trustedSHA string) {
 	t.Helper()
+	writeTestManifestWithURL(t, path, "https://github.com/example/canonical", commit, trustedSHA)
+}
+
+// writeTestManifestWithURL is the most-explicit form: lets the caller
+// pin a specific canonical.url, used by promote --pin-manifest tests
+// that need the manifest URL to match (or not match) the promoted URL.
+func writeTestManifestWithURL(t *testing.T, path, canonicalURL, commit, trustedSHA string) {
+	t.Helper()
 	var b strings.Builder
 	b.WriteString("version: 1\n")
 	b.WriteString("canonical:\n")
-	b.WriteString("  url: https://github.com/example/canonical\n")
+	b.WriteString("  url: " + canonicalURL + "\n")
 	b.WriteString("  commit: " + commit + "\n")
 	b.WriteString("trusted_sha: " + trustedSHA + "\n")
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {

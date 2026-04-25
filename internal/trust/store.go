@@ -2,6 +2,7 @@ package trust
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,7 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -25,9 +26,11 @@ const CompactThresholdBytes int64 = 1 << 20 // 1 MiB
 // before giving up with ErrLocked.
 const compactLockTimeout = 5 * time.Second
 
-// ErrLocked is returned when Compact cannot acquire the advisory lock in
-// compactLockTimeout.
-var ErrLocked = errors.New("trust: store busy, another compact is in progress")
+// ErrLocked is returned when an advisory-locked operation (Compact on
+// trust.jsonl, or PendingStore.rewrite on pending.jsonl) cannot acquire
+// the lock within compactLockTimeout. The message is intentionally
+// generic so it reads correctly for both stores.
+var ErrLocked = errors.New("trust: store or queue busy, try again")
 
 // Store owns the append-only trust.jsonl file described in
 // docs/spec/trust-store-v1.md.
@@ -43,7 +46,15 @@ type Store struct {
 
 // NewStore returns a Store rooted at path. The file and its parent
 // directory are created lazily on first Append.
+//
+// The path is normalized to absolute via filepath.Abs so Path() always
+// returns an absolute path, matching its doc contract. If Abs fails
+// (extremely rare — only on cwd lookup failure), the original path is
+// retained and lazy Append will surface any path errors.
 func NewStore(path string) *Store {
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
 	return &Store{path: path}
 }
 
@@ -55,10 +66,22 @@ func (s *Store) Path() string {
 // Append validates and appends e to the log. It creates the parent
 // directory (mode 0700) and file (mode 0600) on first use.
 //
-// The in-process mutex guards against intra-process write interleaving.
-// Cross-process interleaving is prevented by the single write(2) call
-// (atomic up to PIPE_BUF for POSIX; FILE_APPEND_DATA with OVERLAPPED
-// Offset=-1 semantics on Windows via os.O_APPEND).
+// Concurrency model:
+//   - The in-process mutex guards against intra-process interleaving and
+//     also bounds how much filesystem state our own goroutines can churn.
+//   - Cross-process safety relies on O_APPEND. On POSIX-conforming local
+//     filesystems, a write(2) issued through a file descriptor opened
+//     with O_APPEND atomically updates the file offset to the current
+//     end-of-file and writes the bytes there in a single operation.
+//     Two writers using a single Write call per record cannot interleave
+//     bytes within a record. Windows provides the equivalent via
+//     FILE_APPEND_DATA semantics through os.O_APPEND.
+//   - This guarantee assumes a local POSIX filesystem (ext4/xfs/apfs/zfs)
+//     or NTFS. Network filesystems without close-to-open consistency —
+//     notably classic NFS without O_APPEND server-side enforcement — are
+//     out of scope; users running aienvs over such mounts can see
+//     interleaved appends. The trust store is documented as a per-user
+//     local artifact, so this is acceptable.
 func (s *Store) Append(e LogEntry) error {
 	if err := ValidateEntry(e); err != nil {
 		return err
@@ -103,7 +126,40 @@ func (s *Store) Fold() (map[string]State, error) {
 
 // ReadAll returns every entry in order. Used by Compact and by diagnostic
 // callers that want the raw history.
+//
+// Concurrent appends can cause a reader to observe a partially-written
+// final line (the writer has done the open(O_APPEND) but not yet the
+// write(2), or — on a non-POSIX-strict path — the bytes are not yet
+// fully flushed). When the parse error indicates truncation on the last
+// line, ReadAll retries up to readAllMaxAttempts times with a short
+// backoff. This implements the "fold re-reads on io.UnexpectedEOF up to
+// 3 times" rule in docs/spec/trust-store-v1.md (Concurrency).
 func (s *Store) ReadAll() ([]LogEntry, error) {
+	const readAllMaxAttempts = 3
+	var lastErr error
+	for attempt := 0; attempt < readAllMaxAttempts; attempt++ {
+		entries, err := s.readAllOnce()
+		if err == nil {
+			return entries, nil
+		}
+		// Only retry on truncation-style errors that look like the last
+		// line was caught mid-write. Other parse errors (genuine
+		// corruption, unknown structural issues) fail fast.
+		if !isTruncationError(err) {
+			return nil, err
+		}
+		lastErr = err
+		// Short backoff to give the concurrent writer time to finish its
+		// single Write call. The writer is doing one syscall so the
+		// observable window is microseconds; we use millisecond-scale
+		// sleeps to absorb scheduler jitter under CI load.
+		time.Sleep(time.Duration(10*(attempt+1)) * time.Millisecond)
+	}
+	return nil, lastErr
+}
+
+// readAllOnce performs a single open+parse pass without retry.
+func (s *Store) readAllOnce() ([]LogEntry, error) {
 	f, err := os.Open(s.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -114,6 +170,22 @@ func (s *Store) ReadAll() ([]LogEntry, error) {
 	defer func() { _ = f.Close() }()
 
 	return parseLines(f, s.path)
+}
+
+// isTruncationError reports whether err indicates a JSON parse failed
+// because the input was cut off mid-record — the signature of a reader
+// that observed a writer's open() but not its write() yet. We accept
+// io.ErrUnexpectedEOF directly and json.SyntaxError as the typical shape
+// from json.Unmarshal on a truncated object.
+func isTruncationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var syntaxErr *json.SyntaxError
+	return errors.As(err, &syntaxErr)
 }
 
 // Compact rewrites the log, retaining the most-recent trust / promote /
@@ -184,6 +256,15 @@ func (s *Store) Compact() error {
 		_ = tmp.Close()
 		return fmt.Errorf("trust: chmod compact tmp: %w", err)
 	}
+	// fsync the temp file before rename so a crash between rename and
+	// the next reboot cannot resurrect the old log over a half-written
+	// new one. This matches the StagedWrite contract in
+	// internal/fsroot/safewrite.go and the spec's "fsync-before-rename"
+	// requirement (docs/spec/trust-store-v1.md, Compaction).
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("trust: fsync compact tmp: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("trust: close compact tmp: %w", err)
 	}
@@ -192,6 +273,15 @@ func (s *Store) Compact() error {
 		return fmt.Errorf("trust: rename compact tmp: %w", err)
 	}
 	removeTmp = false
+
+	// Best-effort directory fsync to durably record the rename. Windows
+	// and many network filesystems refuse to fsync a directory handle;
+	// errors are non-fatal here because the file data itself is already
+	// durable from the tmp.Sync() above.
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
 	return nil
 }
 
@@ -359,14 +449,14 @@ func compactEntries(entries []LogEntry) []LogEntry {
 	}
 	out = append(out, revokes...)
 
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].TS.Equal(out[j].TS) {
-			return out[i].TS.Before(out[j].TS)
+	slices.SortFunc(out, func(a, b LogEntry) int {
+		if c := a.TS.Compare(b.TS); c != 0 {
+			return c
 		}
-		if out[i].URL != out[j].URL {
-			return out[i].URL < out[j].URL
+		if c := cmp.Compare(a.URL, b.URL); c != 0 {
+			return c
 		}
-		return out[i].Op < out[j].Op
+		return cmp.Compare(string(a.Op), string(b.Op))
 	})
 	return out
 }

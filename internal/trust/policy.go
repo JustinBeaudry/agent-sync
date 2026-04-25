@@ -147,6 +147,11 @@ func Decide(in DecideInput) (Decision, error) {
 		// Known URL, new SHA.
 		if in.State.AllowNewSHAsOn && cooldownActive(in) {
 			d.Kind = KindProceedAutoPromote
+			// Auto-promote: the caller will append the promote record and the
+			// new SHA becomes the effective trust. Surface that to the caller
+			// via TrustedSHA so a natural read of d.TrustedSHA matches what
+			// the system now treats as trusted.
+			d.TrustedSHA = in.ResolvedSHA
 			d.AppendTrustLog = LogEntry{
 				TS:       in.Now,
 				TSRaw:    in.Now.UTC().Format(time.RFC3339),
@@ -161,7 +166,36 @@ func Decide(in DecideInput) (Decision, error) {
 			return d, nil
 		}
 		if !in.TTY {
-			// Non-interactive and no pin: fail closed.
+			// Non-interactive: honor the documented CI escape hatches before
+			// failing closed. This mirrors the first-URL CI branch below so
+			// `--accept-new-source=<sha>` and `--accept-new-source=any` (with
+			// peer gate) work for SHA drift on previously trusted URLs — which
+			// is exactly what the remediation message points users at.
+			if in.Flags.AcceptNewSource != "" {
+				if in.Flags.AcceptNewSource != in.ResolvedSHA {
+					d.Kind = KindDecisionRequired
+					d.Remediation = fmt.Sprintf(
+						"--accept-new-source=%s but resolved SHA is %s. "+
+							"Update the flag to match, or omit it to fail closed.",
+						shortSHA(in.Flags.AcceptNewSource), shortSHA(in.ResolvedSHA),
+					)
+					return d, fmt.Errorf("%w: --accept-new-source mismatch", ErrTrustDecisionRequired)
+				}
+				d.Kind = KindProceed
+				d.AuditEcho = auditLine(in.URL, in.ResolvedSHA)
+				return d, nil
+			}
+			if in.Flags.AcceptAny {
+				if !in.Flags.AcceptAnyPeerGate {
+					d.Kind = KindDecisionRequired
+					d.Remediation = "--accept-new-source=any requires AIENVS_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
+					return d, fmt.Errorf("%w: accept-any peer gate missing", ErrTrustDecisionRequired)
+				}
+				d.Kind = KindProceed
+				d.AuditEcho = auditLine(in.URL, in.ResolvedSHA)
+				return d, nil
+			}
+			// No pin, no flag override: fail closed.
 			d.Kind = KindDecisionRequired
 			d.Remediation = fmt.Sprintf(
 				"known URL %s changed SHA (%s -> %s). "+

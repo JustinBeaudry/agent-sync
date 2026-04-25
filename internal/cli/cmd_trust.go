@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,13 +14,14 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/adrg/xdg"
 	"github.com/goccy/go-yaml"
 	"github.com/spf13/cobra"
 
+	"github.com/aienvs/aienvs/internal/cache"
 	"github.com/aienvs/aienvs/internal/manifest"
 	"github.com/aienvs/aienvs/internal/trust"
 )
@@ -224,7 +226,7 @@ func printStatus(out io.Writer, m map[string]trust.State, asJSON bool) error {
 			Revoked:    st.Revoked,
 		})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].URL < rows[j].URL })
+	slices.SortFunc(rows, func(a, b statusRow) int { return cmp.Compare(a.URL, b.URL) })
 
 	if asJSON {
 		enc := json.NewEncoder(out)
@@ -266,7 +268,7 @@ func printPending(out io.Writer, latest map[string]trust.PendingEntry, asJSON bo
 	for _, e := range latest {
 		rows = append(rows, e)
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].URL < rows[j].URL })
+	slices.SortFunc(rows, func(a, b trust.PendingEntry) int { return cmp.Compare(a.URL, b.URL) })
 	if asJSON {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
@@ -349,6 +351,15 @@ func newTrustPromoteCmd(deps TrustDeps) *cobra.Command {
 		Use:   "promote [url]",
 		Short: "Promote pending SHA(s) into the trust log",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// `--all` + `--pin-manifest` is a footgun: pending.jsonl is a
+			// per-user store across many workspaces, but .aienv.yaml is a
+			// per-workspace pin to a single canonical source. Looping the
+			// pin-write across every pending URL would non-deterministically
+			// overwrite the workspace manifest with whichever URL ran last.
+			if all && pinManifest {
+				return errors.New("trust promote: --all is incompatible with --pin-manifest; pin one URL at a time")
+			}
+
 			s, err := resolveTrustStore(deps)
 			if err != nil {
 				return err
@@ -387,13 +398,36 @@ func newTrustPromoteCmd(deps TrustDeps) *cobra.Command {
 					_, _ = fmt.Fprintf(errWriter(deps, cmd), "trust promote: no pending entry for %s, skipping\n", url)
 					continue
 				}
+				// Defense against stale pending entries: if our folded view
+				// of the trust log already has a CurrentSHA for this URL, it
+				// MUST match the pending entry's OldSHA, otherwise the
+				// pending entry was generated against a previous trust state
+				// that has since changed (someone else ran `trust add` /
+				// `promote` / `revoke` in between). Recording PrevSHA from
+				// the current fold would silently violate the trust.jsonl
+				// chain contract.
+				prevSHA := state[url].CurrentSHA
+				if prevSHA != "" && pending.OldSHA != "" && prevSHA != pending.OldSHA {
+					return fmt.Errorf(
+						"trust promote: pending entry for %s is stale "+
+							"(pending.old_sha=%s, current trusted=%s); "+
+							"re-run sync to refresh the pending queue, then `aienvs trust pending`",
+						url, shortSHAOrDash(pending.OldSHA), shortSHAOrDash(prevSHA),
+					)
+				}
+				// When the local trust log has no record yet (first promote
+				// for this URL on this machine), fall back to the OldSHA
+				// recorded by sync — that's the chain link we want to keep.
+				if prevSHA == "" {
+					prevSHA = pending.OldSHA
+				}
 				e := trust.LogEntry{
 					TS:       now,
 					TSRaw:    nowStr,
 					Op:       trust.OpPromote,
 					URL:      url,
 					SHA:      pending.NewSHA,
-					PrevSHA:  state[url].CurrentSHA,
+					PrevSHA:  prevSHA,
 					Source:   trust.SourceCLI,
 					Actor:    actor(deps),
 					Hostname: hostname(deps),
@@ -407,7 +441,17 @@ func newTrustPromoteCmd(deps TrustDeps) *cobra.Command {
 				_, _ = fmt.Fprintf(outWriter(deps, cmd), "promoted %s to %s\n", url, shortSHAOrDash(pending.NewSHA))
 
 				if pinManifest {
-					if err := writePinToManifest(resolveManifestPath(deps), pending.NewSHA); err != nil {
+					// Workspace safety: only pin if the URL we're promoting
+					// matches the manifest's canonical URL (after
+					// canonicalization on both sides). Otherwise the user is
+					// promoting a pending entry from an unrelated workspace
+					// and `--pin-manifest` would write an unrelated SHA into
+					// the current project's .aienv.yaml.
+					manifestPath := resolveManifestPath(deps)
+					if err := assertPromotedURLMatchesManifest(manifestPath, url); err != nil {
+						return err
+					}
+					if err := writePinToManifest(manifestPath, pending.NewSHA); err != nil {
 						return err
 					}
 				}
@@ -418,6 +462,42 @@ func newTrustPromoteCmd(deps TrustDeps) *cobra.Command {
 	cmd.Flags().BoolVar(&all, "all", false, "promote every pending URL")
 	cmd.Flags().BoolVar(&pinManifest, "pin-manifest", false, "also write trusted_sha to .aienv.yaml")
 	return cmd
+}
+
+// assertPromotedURLMatchesManifest returns nil when the manifest's
+// canonical.url matches promotedURL after canonicalization. It is the
+// gate that keeps `trust promote --pin-manifest` from writing an
+// unrelated workspace's SHA into .aienv.yaml.
+//
+// Local-canonical manifests (canonical.local_path) cannot be safely
+// pinned via promote-from-pending; we reject in that case too.
+func assertPromotedURLMatchesManifest(manifestPath, promotedURL string) error {
+	m, err := manifest.LoadFile(manifestPath, manifest.LoadOptions{NonInteractive: false})
+	if err != nil {
+		return fmt.Errorf("trust promote: read manifest %q: %w", manifestPath, err)
+	}
+	if m.Canonical.URL == "" {
+		return fmt.Errorf(
+			"trust promote: --pin-manifest requires manifest canonical.url; "+
+				"%q has no canonical url to match against", manifestPath,
+		)
+	}
+	manifestURL, err := cache.Canonicalize(m.Canonical.URL)
+	if err != nil {
+		return fmt.Errorf("trust promote: canonicalize manifest url: %w", err)
+	}
+	promotedCanon, err := cache.Canonicalize(promotedURL)
+	if err != nil {
+		return fmt.Errorf("trust promote: canonicalize promoted url: %w", err)
+	}
+	if manifestURL != promotedCanon {
+		return fmt.Errorf(
+			"trust promote: --pin-manifest URL mismatch "+
+				"(manifest canonical.url=%s, promoted=%s); refusing to overwrite",
+			manifestURL, promotedCanon,
+		)
+	}
+	return nil
 }
 
 // --- pin ---
@@ -485,6 +565,17 @@ func newTrustVerifyCmd(deps TrustDeps) *cobra.Command {
 			}
 			if parsed.Canonical.Commit == "" {
 				return fmt.Errorf("%w: canonical.commit is required for verify", trust.ErrTrustDecisionRequired)
+			}
+			// Format check before equality: equality alone passes for
+			// matched-but-malformed values like commit=trusted_sha=`main`,
+			// which would let an unpinned manifest sneak past the CI gate.
+			if !trust.IsSHA40(parsed.Canonical.Commit) {
+				return fmt.Errorf("%w: canonical.commit must be 40-lowercase-hex, got %q",
+					trust.ErrTrustDecisionRequired, parsed.Canonical.Commit)
+			}
+			if !trust.IsSHA40(parsed.TrustedSHA) {
+				return fmt.Errorf("%w: trusted_sha must be 40-lowercase-hex, got %q",
+					trust.ErrTrustDecisionRequired, parsed.TrustedSHA)
 			}
 			if parsed.TrustedSHA != parsed.Canonical.Commit {
 				return fmt.Errorf("%w: trusted_sha=%s != canonical.commit=%s",

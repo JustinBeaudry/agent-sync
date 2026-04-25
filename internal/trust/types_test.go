@@ -95,18 +95,51 @@ func TestValidateEntry(t *testing.T) {
 	t.Run("revoke op rejects sha", func(t *testing.T) {
 		e := base
 		e.Op = OpRevoke
+		e.PrevSHA = "0123456789abcdef0123456789abcdef01234567"
 		// SHA left non-empty; should error.
 		if err := ValidateEntry(e); err == nil {
 			t.Error("expected error for revoke op with non-empty sha")
 		}
 	})
 
-	t.Run("revoke op with empty sha is valid", func(t *testing.T) {
+	t.Run("revoke op with empty sha and valid prev_sha is valid", func(t *testing.T) {
 		e := base
 		e.Op = OpRevoke
 		e.SHA = ""
+		e.PrevSHA = "0123456789abcdef0123456789abcdef01234567"
 		if err := ValidateEntry(e); err != nil {
 			t.Errorf("ValidateEntry(revoke) unexpected error: %v", err)
+		}
+	})
+
+	t.Run("revoke op with empty prev_sha rejected", func(t *testing.T) {
+		// Spec: revoke records carry the SHA being revoked in prev_sha
+		// (audit data). Empty prev_sha is invalid even though sha is empty.
+		e := base
+		e.Op = OpRevoke
+		e.SHA = ""
+		e.PrevSHA = ""
+		if err := ValidateEntry(e); err == nil {
+			t.Error("expected error for revoke op with empty prev_sha")
+		}
+	})
+
+	t.Run("promote op with empty prev_sha rejected", func(t *testing.T) {
+		// Spec: promote replaces a previous SHA — prev_sha is required.
+		e := base
+		e.Op = OpPromote
+		e.PrevSHA = ""
+		if err := ValidateEntry(e); err == nil {
+			t.Error("expected error for promote op with empty prev_sha")
+		}
+	})
+
+	t.Run("promote op with valid prev_sha is valid", func(t *testing.T) {
+		e := base
+		e.Op = OpPromote
+		e.PrevSHA = "fedcba9876543210fedcba9876543210fedcba98"
+		if err := ValidateEntry(e); err != nil {
+			t.Errorf("ValidateEntry(promote) unexpected error: %v", err)
 		}
 	})
 
@@ -132,6 +165,26 @@ func TestValidateEntry(t *testing.T) {
 		e.PrevSHA = "not-a-sha"
 		if err := ValidateEntry(e); err == nil {
 			t.Error("expected error for malformed prev_sha")
+		}
+	})
+
+	t.Run("non-RFC3339 ts rejected", func(t *testing.T) {
+		// Spec requires RFC3339 ts; without strict parsing, compaction's
+		// ts-asc sort breaks on zero/garbage timestamps.
+		e := base
+		e.TSRaw = "not-a-timestamp"
+		if err := ValidateEntry(e); err == nil {
+			t.Error("expected error for non-RFC3339 ts")
+		}
+	})
+
+	t.Run("RFC3339 ts with sub-second precision is valid", func(t *testing.T) {
+		// time.Parse(RFC3339, ...) accepts the canonical form. The spec
+		// constrains writers to second-precision; readers tolerate richer.
+		e := base
+		e.TSRaw = "2026-05-01T12:00:00.123Z"
+		if err := ValidateEntry(e); err != nil {
+			t.Errorf("ValidateEntry(sub-second ts) unexpected error: %v", err)
 		}
 	})
 }

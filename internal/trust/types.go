@@ -120,8 +120,11 @@ type Decision struct {
 	// about.
 	ResolvedSHA string
 
-	// TrustedSHA is the SHA currently treated as trusted: the committed
-	// trusted_sha if present, else the latest SHA in user history, else "".
+	// TrustedSHA is the SHA the caller should treat as trusted after acting
+	// on this decision. For most kinds this is the pre-decision effective
+	// trust (manifest pin if present, else the latest SHA in user history,
+	// else ""). For KindProceedAutoPromote it is set to ResolvedSHA, since
+	// applying AppendTrustLog makes ResolvedSHA the new effective trust.
 	TrustedSHA string
 
 	// Reminder is the one-line stderr message the CLI should emit when
@@ -253,6 +256,11 @@ func ValidateEntry(e LogEntry) error {
 	if e.TSRaw == "" {
 		return errors.New("trust: ts is required")
 	}
+	// ts must parse as RFC3339; otherwise compaction's ts-asc sort breaks on
+	// zero timestamps and audit ordering becomes meaningless.
+	if _, err := time.Parse(time.RFC3339, e.TSRaw); err != nil {
+		return fmt.Errorf("trust: ts %q is not RFC3339: %w", e.TSRaw, err)
+	}
 	switch e.Op {
 	case OpTrust, OpPromote:
 		if !IsSHA40(e.SHA) {
@@ -263,8 +271,18 @@ func ValidateEntry(e LogEntry) error {
 			return fmt.Errorf("trust: op %q requires an empty sha, got %q", e.Op, e.SHA)
 		}
 	}
-	if e.PrevSHA != "" && !IsSHA40(e.PrevSHA) {
-		return fmt.Errorf("trust: prev_sha must be empty or 40-hex, got %q", e.PrevSHA)
+	// Per docs/spec/trust-store-v1.md: promote requires prev_sha (the SHA
+	// being replaced); revoke requires prev_sha (the SHA at time of revoke,
+	// for audit). Other ops permit empty prev_sha but reject malformed.
+	switch e.Op {
+	case OpPromote, OpRevoke:
+		if !IsSHA40(e.PrevSHA) {
+			return fmt.Errorf("trust: op %q requires a 40-hex prev_sha, got %q", e.Op, e.PrevSHA)
+		}
+	default:
+		if e.PrevSHA != "" && !IsSHA40(e.PrevSHA) {
+			return fmt.Errorf("trust: prev_sha must be empty or 40-hex, got %q", e.PrevSHA)
+		}
 	}
 	return nil
 }

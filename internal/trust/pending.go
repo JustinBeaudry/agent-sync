@@ -28,7 +28,14 @@ type PendingStore struct {
 }
 
 // NewPendingStore returns a PendingStore rooted at path.
+//
+// The path is normalized to absolute via filepath.Abs so Path() always
+// returns an absolute path. If Abs fails (extremely rare), the original
+// path is retained.
 func NewPendingStore(path string) *PendingStore {
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
 	return &PendingStore{path: path}
 }
 
@@ -229,11 +236,20 @@ func validatePendingEntry(e PendingEntry) error {
 	if e.TSRaw == "" {
 		return errors.New("trust: pending: ts is required")
 	}
+	// ts must parse as RFC3339; pending entries are sorted/folded by ts so a
+	// zero TS would collide with every other zero-TS entry.
+	if _, err := time.Parse(time.RFC3339, e.TSRaw); err != nil {
+		return fmt.Errorf("trust: pending: ts %q is not RFC3339: %w", e.TSRaw, err)
+	}
 	if !IsSHA40(e.NewSHA) {
 		return fmt.Errorf("trust: pending: new_sha must be 40-hex, got %q", e.NewSHA)
 	}
-	if e.OldSHA != "" && !IsSHA40(e.OldSHA) {
-		return fmt.Errorf("trust: pending: old_sha must be empty or 40-hex, got %q", e.OldSHA)
+	// Per docs/spec/trust-store-v1.md: a pending entry represents a transition
+	// from the currently trusted SHA (old_sha) to a newly observed SHA
+	// (new_sha). An empty old_sha would mean there's nothing to promote
+	// against, so it's invalid by construction.
+	if !IsSHA40(e.OldSHA) {
+		return fmt.Errorf("trust: pending: old_sha must be 40-hex, got %q", e.OldSHA)
 	}
 	return nil
 }

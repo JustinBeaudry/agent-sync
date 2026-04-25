@@ -105,7 +105,7 @@ func TestPendingLatestPerURL(t *testing.T) {
 	entries := []PendingEntry{
 		{TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaB, OldSHA: shaA},
 		{TSRaw: "2026-05-02T12:00:00Z", URL: urlX, NewSHA: shaC, OldSHA: shaA},
-		{TSRaw: "2026-05-01T13:00:00Z", URL: urlY, NewSHA: shaA, OldSHA: ""},
+		{TSRaw: "2026-05-01T13:00:00Z", URL: urlY, NewSHA: shaA, OldSHA: shaB},
 	}
 	for _, e := range entries {
 		if err := p.Append(e); err != nil {
@@ -134,7 +134,7 @@ func TestPendingClear(t *testing.T) {
 
 	entries := []PendingEntry{
 		{TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaB, OldSHA: shaA},
-		{TSRaw: "2026-05-01T13:00:00Z", URL: urlY, NewSHA: shaA, OldSHA: ""},
+		{TSRaw: "2026-05-01T13:00:00Z", URL: urlY, NewSHA: shaA, OldSHA: shaB},
 	}
 	for _, e := range entries {
 		if err := p.Append(e); err != nil {
@@ -164,7 +164,7 @@ func TestPendingClearAll(t *testing.T) {
 
 	for _, e := range []PendingEntry{
 		{TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaB, OldSHA: shaA},
-		{TSRaw: "2026-05-01T13:00:00Z", URL: urlY, NewSHA: shaA, OldSHA: ""},
+		{TSRaw: "2026-05-01T13:00:00Z", URL: urlY, NewSHA: shaA, OldSHA: shaB},
 	} {
 		if err := p.Append(e); err != nil {
 			t.Fatalf("Append: %v", err)
@@ -193,6 +193,12 @@ func TestPendingAppendRejectsInvalid(t *testing.T) {
 		"missing_url": {TSRaw: "2026-05-01T12:00:00Z", NewSHA: shaB, OldSHA: shaA},
 		"bad_new_sha": {TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: "nope", OldSHA: shaA},
 		"missing_ts":  {URL: urlX, NewSHA: shaB, OldSHA: shaA},
+		// Spec: old_sha is the currently trusted SHA being transitioned
+		// from. A pending entry without it is malformed by construction.
+		"missing_old_sha": {TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaB, OldSHA: ""},
+		"bad_old_sha":     {TSRaw: "2026-05-01T12:00:00Z", URL: urlX, NewSHA: shaB, OldSHA: "nope"},
+		// Spec: ts is RFC3339; lax parsing breaks fold/sort ordering.
+		"bad_ts": {TSRaw: "yesterday", URL: urlX, NewSHA: shaB, OldSHA: shaA},
 	}
 	for name, e := range cases {
 		t.Run(name, func(t *testing.T) {
