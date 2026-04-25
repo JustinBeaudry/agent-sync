@@ -559,7 +559,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 ### Phase C — IR + Adapter framework + Primary adapters
 
-- [ ] **Unit 7: IR v1 decoder + capability matrix types**
+- [x] **Unit 7: IR v1 decoder + capability matrix types**
 
 **Goal:** Decode the canonical repo's tree into the v1 frozen IR concept set, and define the shared capability-matrix types used by the adapter framework.
 

@@ -106,11 +106,18 @@ reserved for forward-compat experimentation and are tolerated but ignored.
 
 ### Frontmatter on non-markdown nodes
 
-`mcp-server-entry` (JSON) and `plugin-reference` (TOML) carry their
-metadata in the body of the file via reserved top-level keys
-`__aienvs_required`, `__aienvs_targets`, `__aienvs_version` (so the file
-stays valid JSON / TOML). These keys are stripped from the body the
-adapter receives.
+`mcp-server-entry` (JSON) carries metadata in the body of the file via
+reserved top-level keys `__aienvs_required`, `__aienvs_targets`,
+`__aienvs_version` (so the file stays valid JSON). These keys are stripped
+from the body the adapter receives.
+
+`plugin-reference` (TOML) is decoded with default metadata (`required:
+false`, `targets: []`, `version: 1`) in v1. Reserved-key extraction in
+TOML files is deferred to a follow-up (introducing a TOML parser
+dependency was not part of the v1 key-decisions list). The body is passed
+through unchanged. Plugin authors who need `required: true` semantics in
+v1 should mark a sibling rule node `required: true` referencing the plugin
+or wait for the v1.x follow-up.
 
 ## Node
 
