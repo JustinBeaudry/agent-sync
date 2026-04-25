@@ -1,0 +1,21 @@
+/compound-engineering:resolve-pr-feedback
+
+---
+
+so, resolve the ?
+
+---
+
+check the `gh pr checks 2 --watch` output that was running in the background and report whether all CI checks on PR #2 passed
+
+---
+
+check the darwin/amd64 CI job status on PR #2 with `gh pr checks 2` and report whether it completed. if still queued after this long, consider suggesting the user merge anyway (5 of 6 platforms green, the 6th is runner-starved not failing)
+
+---
+
+merge
+
+---
+
+Lets do a handoff, and clean up the open shell (pull, main, etc)
