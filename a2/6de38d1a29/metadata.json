@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "a26de38d1a29",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-6-trust",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md",
+    "docs/spec/trust-store-v1.md",
+    "go.mod",
+    "go.sum",
+    "internal/cli/cmd_trust.go",
+    "internal/cli/cmd_trust_test.go",
+    "internal/trust/pending.go",
+    "internal/trust/pending_test.go",
+    "internal/trust/policy.go",
+    "internal/trust/policy_test.go",
+    "internal/trust/prompt.go",
+    "internal/trust/prompt_test.go",
+    "internal/trust/store.go",
+    "internal/trust/store_test.go",
+    "internal/trust/types.go",
+    "internal/trust/types_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a2/6de38d1a29/0/metadata.json",
+      "transcript": "/a2/6de38d1a29/0/full.jsonl",
+      "content_hash": "/a2/6de38d1a29/0/content_hash.txt",
+      "prompt": "/a2/6de38d1a29/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 114,
+    "cache_creation_tokens": 338866,
+    "cache_read_tokens": 14597406,
+    "output_tokens": 103437,
+    "api_call_count": 90
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "a26de38d1a29",
+  "session_id": "8fffafd8-a7e9-4cef-ac02-58d8123aeef2",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-25T03:07:28.24429Z",
+  "branch": "feat/unit-6-trust",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md",
+    "docs/spec/trust-store-v1.md",
+    "go.mod",
+    "go.sum",
+    "internal/cli/cmd_trust.go",
+    "internal/cli/cmd_trust_test.go",
+    "internal/trust/pending.go",
+    "internal/trust/pending_test.go",
+    "internal/trust/policy.go",
+    "internal/trust/policy_test.go",
+    "internal/trust/prompt.go",
+    "internal/trust/prompt_test.go",
+    "internal/trust/store.go",
+    "internal/trust/store_test.go",
+    "internal/trust/types.go",
+    "internal/trust/types_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "2a16837a7265",
+  "token_usage": {
+    "input_tokens": 114,
+    "cache_creation_tokens": 338866,
+    "cache_read_tokens": 14597406,
+    "output_tokens": 103437,
+    "api_call_count": 90
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-25T03:07:28.223087Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 4011,
+    "human_modified": 7,
+    "human_removed": 0,
+    "total_committed": 4011,
+    "total_lines_changed": 4018,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
