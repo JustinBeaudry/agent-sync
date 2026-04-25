@@ -152,6 +152,41 @@ func TestOutputModes_StableValues(t *testing.T) {
 	}
 }
 
+func TestToolOwnedKinds_StableValues(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		got  ToolOwnedKind
+		want string
+	}{
+		{ToolOwnedKindJSONPointer, "json-pointer"},
+		{ToolOwnedKindTOMLPath, "toml-path"},
+		{ToolOwnedKindMarkdownSection, "markdown-section"},
+	}
+	for _, c := range cases {
+		if string(c.got) != c.want {
+			t.Errorf("want %q, got %q", c.want, c.got)
+		}
+	}
+}
+
+func TestWarningStatuses_StableValues(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		got  WarningStatus
+		want string
+	}{
+		{WarningStatusDegraded, "degraded"},
+		{WarningStatusPartial, "partial"},
+	}
+	for _, c := range cases {
+		if string(c.got) != c.want {
+			t.Errorf("want %q, got %q", c.want, c.got)
+		}
+	}
+}
+
 func TestOpKinds_StableValues(t *testing.T) {
 	t.Parallel()
 
@@ -279,6 +314,34 @@ func TestNewOpWriteFile_EnforcesPayloadCap(t *testing.T) {
 
 	tooBig := make([]byte, MaxOpPayloadBytes+1)
 	_, err := NewOpWriteFile("p", 0o644, tooBig)
+	if !errors.Is(err, ErrPayloadTooLarge) {
+		t.Fatalf("want ErrPayloadTooLarge, got %v", err)
+	}
+}
+
+func TestOpWriteFile_MarshalEnforcesCapOnDirectConstruction(t *testing.T) {
+	// Direct struct construction bypasses NewOpWriteFile's cap check.
+	// MarshalJSON is the second line of defense — without it, an
+	// oversized payload would land on the wire.
+	t.Parallel()
+
+	op := OpWriteFile{Path: "p", Mode: 0o644, Content: make([]byte, MaxOpPayloadBytes+1)}
+	_, err := MarshalOp(op)
+	if !errors.Is(err, ErrPayloadTooLarge) {
+		t.Fatalf("want ErrPayloadTooLarge, got %v", err)
+	}
+}
+
+func TestOpWriteToolOwned_MarshalEnforcesCapOnDirectConstruction(t *testing.T) {
+	t.Parallel()
+
+	op := OpWriteToolOwned{
+		Path:    ".mcp.json",
+		Kind:    ToolOwnedKindJSONPointer,
+		Locator: "/mcpServers/echo",
+		Content: make([]byte, MaxOpPayloadBytes+1),
+	}
+	_, err := MarshalOp(op)
 	if !errors.Is(err, ErrPayloadTooLarge) {
 		t.Fatalf("want ErrPayloadTooLarge, got %v", err)
 	}

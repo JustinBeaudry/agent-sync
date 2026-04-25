@@ -39,7 +39,7 @@
         "progress": {"type": "boolean"},
         "_meta": {}
       },
-      "required": ["concept_kinds", "write_tool_owned", "progress"]
+      "required": ["concept_kinds"]
     },
     "declared_output": {
       "type": "object",

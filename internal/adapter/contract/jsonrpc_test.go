@@ -217,6 +217,94 @@ func TestParseMessage_RejectsResponseWithBothResultAndError(t *testing.T) {
 	}
 }
 
+func TestParseMessage_RejectsResponseWithoutID(t *testing.T) {
+	// A response (result key present) without an id is invalid per
+	// JSON-RPC 2.0 §5.
+	t.Parallel()
+
+	raw := []byte(`{"jsonrpc":"2.0","result":42}`)
+	_, err := ParseMessage(raw)
+	if !errors.Is(err, ErrInvalidEnvelope) {
+		t.Fatalf("want ErrInvalidEnvelope, got %v", err)
+	}
+}
+
+func TestParseMessage_RejectsEnvelopeWithNoMethodOrResult(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"jsonrpc":"2.0"}`)
+	_, err := ParseMessage(raw)
+	if !errors.Is(err, ErrInvalidEnvelope) {
+		t.Fatalf("want ErrInvalidEnvelope, got %v", err)
+	}
+}
+
+func TestParseMessage_AcceptsNullIDOnErrorResponse(t *testing.T) {
+	// JSON-RPC 2.0 §5.1 mandates id:null on error responses to requests
+	// whose id couldn't be determined (e.g., parse errors). This shape
+	// must classify as a valid Response.
+	t.Parallel()
+
+	raw := []byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"parse error"}}`)
+	msg, err := ParseMessage(raw)
+	if err != nil {
+		t.Fatalf("ParseMessage: %v", err)
+	}
+	if msg.Kind != MessageKindResponse {
+		t.Fatalf("want MessageKindResponse, got %v", msg.Kind)
+	}
+	if !msg.HasID || !msg.ID.IsNull() {
+		t.Fatalf("want HasID=true with null id, got HasID=%v IsNull=%v", msg.HasID, msg.ID.IsNull())
+	}
+	if msg.Error == nil || msg.Error.Code != CodeParseError {
+		t.Fatalf("want CodeParseError, got %+v", msg.Error)
+	}
+}
+
+func TestParseMessage_AcceptsNullResultAsResponse(t *testing.T) {
+	// A result:null response is a valid void return. It must classify
+	// as MessageKindResponse, not be rejected as "no method/result/error".
+	t.Parallel()
+
+	raw := []byte(`{"jsonrpc":"2.0","id":1,"result":null}`)
+	msg, err := ParseMessage(raw)
+	if err != nil {
+		t.Fatalf("ParseMessage: %v", err)
+	}
+	if msg.Kind != MessageKindResponse {
+		t.Fatalf("want MessageKindResponse, got %v", msg.Kind)
+	}
+	if string(msg.Result) != "null" {
+		t.Fatalf("want Result=null bytes, got %q", msg.Result)
+	}
+}
+
+func TestResponse_RejectsZeroLengthRawMessage(t *testing.T) {
+	// A non-nil but zero-length json.RawMessage is treated as absent —
+	// emitting it would produce malformed wire bytes.
+	t.Parallel()
+
+	r := Response{ID: NewIntID(1), Result: json.RawMessage{}}
+	if _, err := json.Marshal(r); !errors.Is(err, ErrResponseEmpty) {
+		t.Fatalf("want ErrResponseEmpty, got %v", err)
+	}
+}
+
+func TestRequest_OmitsLiteralNullMeta(t *testing.T) {
+	// Meta = json.RawMessage("null") emits no _meta key, matching the
+	// omitempty behavior of typed _meta fields.
+	t.Parallel()
+
+	req := Request{ID: NewIntID(1), Method: "x", Meta: json.RawMessage("null")}
+	got, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(got), "_meta") {
+		t.Fatalf("expected no _meta key for null Meta, got %s", got)
+	}
+}
+
 func TestIDCorrelator_AssignsMonotonicIDs(t *testing.T) {
 	t.Parallel()
 

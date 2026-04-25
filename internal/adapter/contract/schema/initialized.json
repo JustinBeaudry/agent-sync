@@ -6,9 +6,10 @@
   "$defs": {
     "params": {
       "type": "object",
-      "properties": {},
-      "additionalProperties": false,
-      "description": "initialized is a notification with no params in v1; the empty params object is the wire form."
+      "properties": {
+        "_meta": {}
+      },
+      "description": "initialized is a notification with no defined params in v1; only the reserved _meta field is allowed."
     }
   }
 }

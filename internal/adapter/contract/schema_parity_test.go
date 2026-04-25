@@ -20,94 +20,94 @@ func TestSchemaParity_GoStructsMatchJSONSchemas(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name       string
-		schemaFile string
-		propsPath  []string // path through the schema JSON to the properties object
-		goType     reflect.Type
+		name          string
+		schemaFile    string
+		schemaNavPath []string // path through the schema JSON to the properties object
+		goType        reflect.Type
 	}{
 		{
-			name:       "InitializeParams",
-			schemaFile: "initialize.json",
-			propsPath:  []string{"$defs", "params", "properties"},
-			goType:     reflect.TypeOf(InitializeParams{}),
+			name:          "InitializeParams",
+			schemaFile:    "initialize.json",
+			schemaNavPath: []string{"$defs", "params", "properties"},
+			goType:        reflect.TypeOf(InitializeParams{}),
 		},
 		{
-			name:       "InitializeResult",
-			schemaFile: "initialize.json",
-			propsPath:  []string{"$defs", "result", "properties"},
-			goType:     reflect.TypeOf(InitializeResult{}),
+			name:          "InitializeResult",
+			schemaFile:    "initialize.json",
+			schemaNavPath: []string{"$defs", "result", "properties"},
+			goType:        reflect.TypeOf(InitializeResult{}),
 		},
 		{
-			name:       "Capabilities",
-			schemaFile: "initialize.json",
-			propsPath:  []string{"$defs", "capabilities", "properties"},
-			goType:     reflect.TypeOf(Capabilities{}),
+			name:          "Capabilities",
+			schemaFile:    "initialize.json",
+			schemaNavPath: []string{"$defs", "capabilities", "properties"},
+			goType:        reflect.TypeOf(Capabilities{}),
 		},
 		{
-			name:       "DeclaredOutput",
-			schemaFile: "initialize.json",
-			propsPath:  []string{"$defs", "declared_output", "properties"},
-			goType:     reflect.TypeOf(DeclaredOutput{}),
+			name:          "DeclaredOutput",
+			schemaFile:    "initialize.json",
+			schemaNavPath: []string{"$defs", "declared_output", "properties"},
+			goType:        reflect.TypeOf(DeclaredOutput{}),
 		},
 		{
-			name:       "EmitParams",
-			schemaFile: "emit.json",
-			propsPath:  []string{"$defs", "params", "properties"},
-			goType:     reflect.TypeOf(EmitParams{}),
+			name:          "EmitParams",
+			schemaFile:    "emit.json",
+			schemaNavPath: []string{"$defs", "params", "properties"},
+			goType:        reflect.TypeOf(EmitParams{}),
 		},
 		{
-			name:       "EmitResult",
-			schemaFile: "emit.json",
-			propsPath:  []string{"$defs", "result", "properties"},
-			goType:     reflect.TypeOf(EmitResult{}),
+			name:          "EmitResult",
+			schemaFile:    "emit.json",
+			schemaNavPath: []string{"$defs", "result", "properties"},
+			goType:        reflect.TypeOf(EmitResult{}),
 		},
 		{
-			name:       "OpRecord",
-			schemaFile: "emit.json",
-			propsPath:  []string{"$defs", "op_record", "properties"},
-			goType:     reflect.TypeOf(OpRecord{}),
+			name:          "OpRecord",
+			schemaFile:    "emit.json",
+			schemaNavPath: []string{"$defs", "op_record", "properties"},
+			goType:        reflect.TypeOf(OpRecord{}),
 		},
 		{
-			name:       "ShutdownParams",
-			schemaFile: "shutdown.json",
-			propsPath:  []string{"$defs", "params", "properties"},
-			goType:     reflect.TypeOf(ShutdownParams{}),
+			name:          "ShutdownParams",
+			schemaFile:    "shutdown.json",
+			schemaNavPath: []string{"$defs", "params", "properties"},
+			goType:        reflect.TypeOf(ShutdownParams{}),
 		},
 		{
-			name:       "ShutdownResult",
-			schemaFile: "shutdown.json",
-			propsPath:  []string{"$defs", "result", "properties"},
-			goType:     reflect.TypeOf(ShutdownResult{}),
+			name:          "ShutdownResult",
+			schemaFile:    "shutdown.json",
+			schemaNavPath: []string{"$defs", "result", "properties"},
+			goType:        reflect.TypeOf(ShutdownResult{}),
 		},
 		{
-			name:       "OpWriteFileWire",
-			schemaFile: "op_write_file.json",
-			propsPath:  []string{"properties"},
-			goType:     reflect.TypeOf(opWriteFileWire{}),
+			name:          "OpWriteFileWire",
+			schemaFile:    "op_write_file.json",
+			schemaNavPath: []string{"properties"},
+			goType:        reflect.TypeOf(opWriteFileWire{}),
 		},
 		{
-			name:       "OpWriteToolOwnedWire",
-			schemaFile: "op_write_tool_owned.json",
-			propsPath:  []string{"properties"},
-			goType:     reflect.TypeOf(opWriteToolOwnedWire{}),
+			name:          "OpWriteToolOwnedWire",
+			schemaFile:    "op_write_tool_owned.json",
+			schemaNavPath: []string{"properties"},
+			goType:        reflect.TypeOf(opWriteToolOwnedWire{}),
 		},
 		{
-			name:       "OpMkdirWire",
-			schemaFile: "op_mkdir.json",
-			propsPath:  []string{"properties"},
-			goType:     reflect.TypeOf(opMkdirWire{}),
+			name:          "OpMkdirWire",
+			schemaFile:    "op_mkdir.json",
+			schemaNavPath: []string{"properties"},
+			goType:        reflect.TypeOf(opMkdirWire{}),
 		},
 		{
-			name:       "OpDeleteWire",
-			schemaFile: "op_delete.json",
-			propsPath:  []string{"properties"},
-			goType:     reflect.TypeOf(opDeleteWire{}),
+			name:          "OpDeleteWire",
+			schemaFile:    "op_delete.json",
+			schemaNavPath: []string{"properties"},
+			goType:        reflect.TypeOf(opDeleteWire{}),
 		},
 		{
-			name:       "OpWarningWire",
-			schemaFile: "op_warning.json",
-			propsPath:  []string{"properties"},
-			goType:     reflect.TypeOf(opWarningWire{}),
+			name:          "OpWarningWire",
+			schemaFile:    "op_warning.json",
+			schemaNavPath: []string{"properties"},
+			goType:        reflect.TypeOf(opWarningWire{}),
 		},
 	}
 
@@ -115,9 +115,9 @@ func TestSchemaParity_GoStructsMatchJSONSchemas(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			schemaProps, err := loadSchemaProps(c.schemaFile, c.propsPath)
+			schemaProps, err := loadSchemaProps(c.schemaFile, c.schemaNavPath)
 			if err != nil {
-				t.Fatalf("load schema %s @ %v: %v", c.schemaFile, c.propsPath, err)
+				t.Fatalf("load schema %s @ %v: %v", c.schemaFile, c.schemaNavPath, err)
 			}
 			structTags := jsonTagSet(c.goType)
 

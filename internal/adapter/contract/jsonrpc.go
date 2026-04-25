@@ -146,7 +146,8 @@ func (id *ID) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	// Try int. JSON-RPC permits any number, but ints are the only useful
-	// shape for correlators; fractional IDs are accepted but truncated.
+	// shape for correlators; fractional and scientific-notation values
+	// are rejected by json.Number.Int64().
 	var n json.Number
 	if err := json.Unmarshal(trimmed, &n); err != nil {
 		return fmt.Errorf("contract: ID number: %w", err)
@@ -174,12 +175,11 @@ type Request struct {
 // byte-stable output (helpful for tests and conformance corpora).
 func (r Request) MarshalJSON() ([]byte, error) {
 	return marshalEnvelope(envelopeFields{
-		jsonrpc: true,
-		hasID:   true,
-		id:      r.ID,
-		method:  r.Method,
-		params:  r.Params,
-		meta:    r.Meta,
+		hasID:  true,
+		id:     r.ID,
+		method: r.Method,
+		params: r.Params,
+		meta:   r.Meta,
 	})
 }
 
@@ -194,10 +194,9 @@ type Notification struct {
 // MarshalJSON emits the canonical wire form.
 func (n Notification) MarshalJSON() ([]byte, error) {
 	return marshalEnvelope(envelopeFields{
-		jsonrpc: true,
-		method:  n.Method,
-		params:  n.Params,
-		meta:    n.Meta,
+		method: n.Method,
+		params: n.Params,
+		meta:   n.Meta,
 	})
 }
 
@@ -213,8 +212,14 @@ type Response struct {
 
 // MarshalJSON emits the canonical wire form. Returns ErrResponseHasResultAndError
 // or ErrResponseEmpty when the invariant is violated.
+//
+// Result is treated as set when it carries at least one byte. A non-nil
+// zero-length json.RawMessage is treated as absent — emitting "result":
+// with no payload would produce malformed JSON, and accepting "null" as
+// the explicit-void encoding is the responsibility of the caller (set
+// Result = json.RawMessage("null") to emit a void result).
 func (r Response) MarshalJSON() ([]byte, error) {
-	hasResult := r.Result != nil
+	hasResult := len(r.Result) > 0
 	hasError := r.Error != nil
 	if hasResult && hasError {
 		return nil, ErrResponseHasResultAndError
@@ -223,7 +228,6 @@ func (r Response) MarshalJSON() ([]byte, error) {
 		return nil, ErrResponseEmpty
 	}
 	return marshalEnvelope(envelopeFields{
-		jsonrpc:  true,
 		hasID:    true,
 		id:       r.ID,
 		result:   r.Result,
@@ -272,11 +276,11 @@ func (e Error) MarshalJSON() ([]byte, error) {
 	return json.Marshal(w)
 }
 
-// envelopeFields collects the canonical envelope keys in the order the
-// wire form requires. marshalEnvelope walks them and emits omitempty
-// behavior consistent across Request/Response/Notification.
+// envelopeFields collects the canonical envelope keys. marshalEnvelope
+// walks them and emits omitempty behavior consistent across
+// Request/Response/Notification. The "jsonrpc" field is always emitted
+// at the head of the object — there is no envelope shape that omits it.
 type envelopeFields struct {
-	jsonrpc  bool
 	hasID    bool
 	id       ID
 	method   string
@@ -292,22 +296,18 @@ type envelopeFields struct {
 func marshalEnvelope(f envelopeFields) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('{')
-	first := true
 
 	writeKey := func(key string) {
-		if !first {
+		if buf.Len() > 1 {
 			buf.WriteByte(',')
 		}
-		first = false
 		buf.WriteByte('"')
 		buf.WriteString(key)
 		buf.WriteString(`":`)
 	}
 
-	if f.jsonrpc {
-		writeKey("jsonrpc")
-		buf.WriteString(`"` + JSONRPCVersion + `"`)
-	}
+	writeKey("jsonrpc")
+	buf.WriteString(`"` + JSONRPCVersion + `"`)
 	if f.hasID {
 		writeKey("id")
 		idBytes, err := f.id.MarshalJSON()
@@ -324,11 +324,11 @@ func marshalEnvelope(f envelopeFields) ([]byte, error) {
 		}
 		buf.Write(mb)
 	}
-	if f.params != nil {
+	if len(f.params) > 0 {
 		writeKey("params")
 		buf.Write(f.params)
 	}
-	if f.result != nil {
+	if len(f.result) > 0 {
 		writeKey("result")
 		buf.Write(f.result)
 	}
@@ -340,7 +340,10 @@ func marshalEnvelope(f envelopeFields) ([]byte, error) {
 		}
 		buf.Write(eb)
 	}
-	if len(f.meta) != 0 {
+	// Suppress empty *and* literal-null _meta — `omitempty` on the Go
+	// struct fields does the same, so a json.RawMessage("null") sentinel
+	// here would otherwise diverge from the typed-struct behavior.
+	if len(f.meta) != 0 && !bytes.Equal(f.meta, []byte("null")) {
 		writeKey("_meta")
 		buf.Write(f.meta)
 	}
@@ -373,67 +376,86 @@ type Message struct {
 	HasID  bool
 }
 
-// envelopeWire is the inbound shape of any JSON-RPC frame. Pointer-typed
-// optional fields let ParseMessage tell "missing" from "present-but-null".
-type envelopeWire struct {
-	JSONRPC string           `json:"jsonrpc"`
-	ID      *json.RawMessage `json:"id,omitempty"`
-	Method  string           `json:"method,omitempty"`
-	Params  json.RawMessage  `json:"params,omitempty"`
-	Result  *json.RawMessage `json:"result,omitempty"`
-	Error   *errorWire       `json:"error,omitempty"`
-	Meta    json.RawMessage  `json:"_meta,omitempty"`
-}
-
 // ParseMessage decodes one frame's bytes into a classified Message.
 // Returns ErrInvalidEnvelope for shape violations (missing/wrong jsonrpc,
 // both result+error on a response, no method/result/error at all).
+//
+// The envelope is decoded into a generic key map first so ParseMessage
+// can distinguish "key absent" from "key present with null value". This
+// matters for two JSON-RPC 2.0-mandated wire shapes:
+//
+//   - {"jsonrpc":"2.0","id":null,"error":{...}} — the spec requires id:null
+//     on error responses to requests whose id couldn't be determined
+//     (§5.1). A pointer-to-RawMessage decode collapses null and absent
+//     to the same nil, breaking parse-error responses.
+//   - {"jsonrpc":"2.0","id":1,"result":null} — a void result. Treated
+//     as a valid response, not as "no result field present".
 func ParseMessage(raw []byte) (Message, error) {
-	var w envelopeWire
+	var fields map[string]json.RawMessage
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber() // preserve int IDs without float64 cast
-	if err := dec.Decode(&w); err != nil {
+	dec.UseNumber()
+	if err := dec.Decode(&fields); err != nil {
 		return Message{}, fmt.Errorf("contract: parse envelope: %w", err)
 	}
-	if w.JSONRPC != JSONRPCVersion {
-		return Message{}, fmt.Errorf("%w: jsonrpc=%q", ErrInvalidEnvelope, w.JSONRPC)
+
+	versionRaw, ok := fields["jsonrpc"]
+	if !ok {
+		return Message{}, fmt.Errorf("%w: jsonrpc field missing", ErrInvalidEnvelope)
+	}
+	var version string
+	if err := json.Unmarshal(versionRaw, &version); err != nil {
+		return Message{}, fmt.Errorf("%w: jsonrpc=%s", ErrInvalidEnvelope, versionRaw)
+	}
+	if version != JSONRPCVersion {
+		return Message{}, fmt.Errorf("%w: jsonrpc=%q", ErrInvalidEnvelope, version)
 	}
 
-	msg := Message{
-		Method: w.Method,
-		Params: w.Params,
-		Meta:   w.Meta,
-	}
+	msg := Message{}
 
-	if w.ID != nil {
+	if idRaw, present := fields["id"]; present {
 		var id ID
-		if err := id.UnmarshalJSON(*w.ID); err != nil {
+		if err := id.UnmarshalJSON(idRaw); err != nil {
 			return Message{}, fmt.Errorf("contract: parse id: %w", err)
 		}
 		msg.ID = id
 		msg.HasID = true
 	}
-
-	if w.Result != nil {
-		msg.Result = *w.Result
+	if methodRaw, present := fields["method"]; present {
+		if err := json.Unmarshal(methodRaw, &msg.Method); err != nil {
+			return Message{}, fmt.Errorf("contract: parse method: %w", err)
+		}
 	}
-	if w.Error != nil {
+	if paramsRaw, present := fields["params"]; present {
+		msg.Params = paramsRaw
+	}
+	if metaRaw, present := fields["_meta"]; present {
+		msg.Meta = metaRaw
+	}
+
+	resultRaw, hasResult := fields["result"]
+	errorRaw, hasError := fields["error"]
+	hasMethod := msg.Method != ""
+
+	if hasResult {
+		msg.Result = resultRaw
+	}
+	if hasError {
+		var ew errorWire
+		if err := json.Unmarshal(errorRaw, &ew); err != nil {
+			return Message{}, fmt.Errorf("contract: parse error: %w", err)
+		}
 		errData := ErrorData{}
-		if len(w.Error.Data) != 0 {
-			if err := json.Unmarshal(w.Error.Data, &errData); err != nil {
+		if len(ew.Data) != 0 && !bytes.Equal(ew.Data, []byte("null")) {
+			if err := json.Unmarshal(ew.Data, &errData); err != nil {
 				return Message{}, fmt.Errorf("contract: parse error data: %w", err)
 			}
 		}
 		msg.Error = &Error{
-			Code:    w.Error.Code,
-			Message: w.Error.Message,
+			Code:    ew.Code,
+			Message: ew.Message,
 			Data:    errData,
 		}
 	}
-
-	hasResult := msg.Result != nil
-	hasError := msg.Error != nil
-	hasMethod := msg.Method != ""
 
 	switch {
 	case hasResult && hasError:

@@ -127,6 +127,11 @@ type InitializeParams struct {
 
 // InitializeResult is the result object the adapter returns from
 // initialize.
+//
+// ProtocolVersion is the version the adapter is committing to speak for
+// this session. It must be one of the strings the CLI offered in
+// InitializeParams.ProtocolVersions; the runtime in PR 2 enforces this
+// and returns ErrorClassAdapterProtocolMismatch on mismatch.
 type InitializeResult struct {
 	Server          string           `json:"server"`
 	ProtocolVersion string           `json:"protocol_version"`
@@ -226,21 +231,23 @@ type opWriteFileWire struct {
 
 // MarshalJSON picks UTF-8 if the content is valid, base64 otherwise.
 // Most adapters write text; the binary path exists for skill assets.
+//
+// Enforces MaxOpPayloadBytes at encode time so a directly-constructed
+// op (bypassing NewOpWriteFile) cannot smuggle an oversized payload onto
+// the wire. The receiver also enforces the cap on decode.
 func (o OpWriteFile) MarshalJSON() ([]byte, error) {
-	w := opWriteFileWire{
-		Op:   OpKindWriteFile,
-		Path: o.Path,
-		Mode: o.Mode,
-		Meta: o.Meta,
+	if len(o.Content) > MaxOpPayloadBytes {
+		return nil, fmt.Errorf("%w: %d > %d", ErrPayloadTooLarge, len(o.Content), MaxOpPayloadBytes)
 	}
-	if utf8.Valid(o.Content) {
-		w.Encoding = EncodingUTF8
-		w.Content = string(o.Content)
-	} else {
-		w.Encoding = EncodingBase64
-		w.Content = base64.StdEncoding.EncodeToString(o.Content)
-	}
-	return json.Marshal(w)
+	encoding, content := encodeOpContent(o.Content)
+	return json.Marshal(opWriteFileWire{
+		Op:       OpKindWriteFile,
+		Path:     o.Path,
+		Mode:     o.Mode,
+		Encoding: encoding,
+		Content:  content,
+		Meta:     o.Meta,
+	})
 }
 
 func (o *OpWriteFile) UnmarshalJSON(data []byte) error {
@@ -297,21 +304,19 @@ type opWriteToolOwnedWire struct {
 }
 
 func (o OpWriteToolOwned) MarshalJSON() ([]byte, error) {
-	w := opWriteToolOwnedWire{
-		Op:      OpKindWriteToolOwned,
-		Path:    o.Path,
-		Kind:    o.Kind,
-		Locator: o.Locator,
-		Meta:    o.Meta,
+	if len(o.Content) > MaxOpPayloadBytes {
+		return nil, fmt.Errorf("%w: %d > %d", ErrPayloadTooLarge, len(o.Content), MaxOpPayloadBytes)
 	}
-	if utf8.Valid(o.Content) {
-		w.Encoding = EncodingUTF8
-		w.Content = string(o.Content)
-	} else {
-		w.Encoding = EncodingBase64
-		w.Content = base64.StdEncoding.EncodeToString(o.Content)
-	}
-	return json.Marshal(w)
+	encoding, content := encodeOpContent(o.Content)
+	return json.Marshal(opWriteToolOwnedWire{
+		Op:       OpKindWriteToolOwned,
+		Path:     o.Path,
+		Kind:     o.Kind,
+		Locator:  o.Locator,
+		Encoding: encoding,
+		Content:  content,
+		Meta:     o.Meta,
+	})
 }
 
 func (o *OpWriteToolOwned) UnmarshalJSON(data []byte) error {
@@ -495,7 +500,17 @@ func DecodeOp(data []byte) (Op, error) {
 	}
 }
 
-// decodeOpContent inverts the encoding picked by the marshaler.
+// encodeOpContent picks the wire encoding for op payload bytes. UTF-8
+// for valid text, base64 for everything else. Symmetric with
+// decodeOpContent so the encode side and the decode side cannot drift.
+func encodeOpContent(content []byte) (Encoding, string) {
+	if utf8.Valid(content) {
+		return EncodingUTF8, string(content)
+	}
+	return EncodingBase64, base64.StdEncoding.EncodeToString(content)
+}
+
+// decodeOpContent inverts the encoding picked by encodeOpContent.
 func decodeOpContent(encoding Encoding, content string) ([]byte, error) {
 	switch encoding {
 	case EncodingUTF8, "":

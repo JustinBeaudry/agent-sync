@@ -115,13 +115,13 @@ Unit 8 starting at line 599)
 
 ### Institutional Learnings
 
-- `docs/solutions/2026-04-22-go-cross-platform-ci.md` (referenced from
+- `docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md` (referenced from
   commit `763f994`) — Go test code that handles paths must use
   `filepath.ToSlash` and stay off Unix-only syscalls. Framing/JSON-RPC
   is pure byte work and has no path concerns, but the parity test
   must read `internal/adapter/contract/schema/*.json` via
   `filepath.Join`, not hard-coded forward slashes.
-- `docs/solutions/2026-04-23-spec-vs-impl-drift.md` (referenced from
+- `docs/solutions/workflow-issues/spec-impl-drift-at-pr-review-2026-04-25.md` (referenced from
   commit `922a832`) — a parent learning: when a doc is the source of
   truth, the parity test is what keeps the doc and code from drifting.
   PR 1 applies this discipline at the schema layer (schema vs Go
@@ -512,8 +512,8 @@ be the first commit of PR 1.
 - **Branch:** `feat/unit-8-pr1-wire-protocol` (already created off `main` at commit `5f9c964`).
 - **Carving conversation:** PR 1/2/3 split agreed in chat preceding this plan; PR 1 = wire types, PR 2 = runtime, PR 3 = conformance + spec freeze.
 - **Existing learnings:**
-  - `docs/solutions/2026-04-22-go-cross-platform-ci.md` — Windows path discipline.
-  - `docs/solutions/2026-04-23-spec-vs-impl-drift.md` — parity-test discipline at boundary docs.
+  - `docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md` — Windows path discipline.
+  - `docs/solutions/workflow-issues/spec-impl-drift-at-pr-review-2026-04-25.md` — parity-test discipline at boundary docs.
 - **External references:**
   - LSP 3.17 base protocol: <https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/>
   - JSON-RPC 2.0: <https://www.jsonrpc.org/specification>
