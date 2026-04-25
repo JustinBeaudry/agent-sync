@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "7903dafb16f0",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr1-wire-protocol",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/contract/jsonrpc.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/79/03dafb16f0/0/metadata.json",
+      "transcript": "/79/03dafb16f0/0/full.jsonl",
+      "content_hash": "/79/03dafb16f0/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 7,
+    "cache_creation_tokens": 12675,
+    "cache_read_tokens": 1112835,
+    "output_tokens": 8201,
+    "api_call_count": 7
+  }
+}
