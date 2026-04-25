@@ -1,0 +1,25 @@
+Whats next?
+
+---
+
+What is this for?
+
+---
+
+I'm trying to understand the purpose of Unit 8
+
+---
+
+Dope, lets also make sure we cover Pi in there
+
+---
+
+Pi agent
+
+---
+
+https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent
+
+---
+
+a

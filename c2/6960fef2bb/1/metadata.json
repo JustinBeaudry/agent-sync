@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "c26960fef2bb",
+  "session_id": "a1cbd198-4e37-41d3-a946-cfc2378b1333",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-25T06:58:40.399998Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md",
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "dd849a0a895c",
+  "token_usage": {
+    "input_tokens": 83,
+    "cache_creation_tokens": 299531,
+    "cache_read_tokens": 2912201,
+    "output_tokens": 17800,
+    "api_call_count": 38
+  },
+  "session_metrics": {
+    "turn_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-25T06:58:40.38633Z",
+    "agent_lines": 60,
+    "agent_removed": 10,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 60,
+    "total_lines_changed": 70,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 60,
+      "agent_lines_removed": 10
+    }
+  ]
+}
