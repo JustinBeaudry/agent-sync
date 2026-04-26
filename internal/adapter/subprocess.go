@@ -58,6 +58,13 @@ type Subprocess struct {
 	stderrRing *ringBuffer
 	stderrDone chan struct{}
 
+	// frames is the channel a dedicated reader goroutine pumps inbound
+	// frames into. Same pattern as InprocTransport — guarantees only
+	// one goroutine touches the FrameReader's bufio.Reader so ctx
+	// cancellation in one Recv doesn't race with a subsequent Recv.
+	frames     chan frameOrError
+	readerDone chan struct{}
+
 	timeouts SubprocessTimeouts
 
 	// closeOnce guards Close so a concurrent Recv-error and explicit
@@ -162,19 +169,33 @@ func Spawn(ctx context.Context, opts SpawnOptions) (sp *Subprocess, cookie strin
 		cmd:        cmd,
 		stdin:      stdin,
 		frameRead:  contract.NewFrameReader(bufio.NewReader(stdout)),
+		frameMax:   frameMax,
 		stderrRing: newRingBuffer(stderrRingBytes),
 		stderrDone: make(chan struct{}),
+		frames:     make(chan frameOrError, 1),
+		readerDone: make(chan struct{}),
 		timeouts:   timeouts,
 	}
 
-	// Drain stderr into the ring buffer until the pipe closes.
-	// frameMax is captured in Recv via a closure on Subprocess —
-	// retained here so future Recv calls don't recompute defaults.
-	sp.frameMax = frameMax
-
 	go sp.drainStderr(stderrPipe)
+	go sp.readLoop()
 
 	return sp, cookie, nil
+}
+
+// readLoop is the dedicated reader goroutine for the subprocess's
+// stdout. Pumps frames into sp.frames until EOF or an unrecoverable
+// read error. Same pattern as InprocTransport.readLoop.
+func (s *Subprocess) readLoop() {
+	defer close(s.readerDone)
+	defer close(s.frames)
+	for {
+		payload, err := s.frameRead.Read(s.frameMax)
+		s.frames <- frameOrError{payload: payload, err: err}
+		if err != nil {
+			return
+		}
+	}
 }
 
 // drainStderr reads stderr into the ring buffer until the pipe closes.
@@ -209,27 +230,19 @@ func (s *Subprocess) Send(ctx context.Context, payload []byte) error {
 	return nil
 }
 
-// Recv implements Transport.
+// Recv implements Transport. Pulls from the dedicated reader
+// goroutine's channel, honoring ctx for cancellation.
 func (s *Subprocess) Recv(ctx context.Context) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	type result struct {
-		payload []byte
-		err     error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		payload, err := s.frameRead.Read(s.frameMax)
-		ch <- result{payload: payload, err: err}
-	}()
 	select {
-	case r := <-ch:
-		return r.payload, r.err
+	case fr, ok := <-s.frames:
+		if !ok {
+			return nil, io.EOF
+		}
+		return fr.payload, fr.err
 	case <-ctx.Done():
-		// Context cancelled mid-read. Surface the context error; the
-		// pending Read goroutine will return when the pipe closes
-		// (typically because Close kills the process).
 		return nil, ctx.Err()
 	}
 }
@@ -276,9 +289,11 @@ func (s *Subprocess) Close(ctx context.Context) error {
 			<-exitCh
 		}
 
-		// Wait for the stderr drainer goroutine to finish so its
-		// last writes are visible to StderrTail callers.
+		// Wait for the stderr drainer + reader goroutines to finish
+		// so their last writes are visible to StderrTail callers and
+		// the frames channel is fully drained.
 		<-s.stderrDone
+		<-s.readerDone
 
 		s.closeErr = s.classifyExit()
 	})
