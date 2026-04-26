@@ -744,7 +744,7 @@ verification that `MarkProtocolShutdownAcked` was called).
 
 ---
 
-- [ ] **Unit 6: Reference echo adapter using adapterkit**
+- [x] **Unit 6: Reference echo adapter using adapterkit**
 
 **Goal:** A canonical Go adapter at `conformance/echo/main.go` that
 uses `pkg/adapterkit/` and handles every IR kind. Proves adapterkit
@@ -784,7 +784,7 @@ integration target.
 
 ---
 
-- [ ] **Unit 7: CLI subcommand — `aienvs adapter conformance-test <binary>`**
+- [x] **Unit 7: CLI subcommand — `aienvs adapter conformance-test <binary>`**
 
 **Goal:** Public CLI surface for running the conformance corpus
 against a target binary. Adapter authors invoke this from their CI.
@@ -833,7 +833,7 @@ against a target binary. Adapter authors invoke this from their CI.
 
 ---
 
-- [ ] **Unit 8: Spec freeze — `docs/spec/adapter-protocol-v1.md` + spec-locked tests**
+- [x] **Unit 8: Spec freeze — `docs/spec/adapter-protocol-v1.md` + spec-locked tests**
 
 **Goal:** The authoritative wire-format spec doc. Every canonical
 example in the spec is also a corpus fixture; a spec-locked test

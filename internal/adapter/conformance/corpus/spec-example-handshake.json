@@ -1,0 +1,55 @@
+{
+  "name": "spec-example-handshake",
+  "description": "Spec-locked initialize request example backed by a happy-path harness case.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "spec-handshake",
+        "kind": "rule",
+        "body": "Handshake example fixture."
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/spec-handshake.md"
+      }
+    ]
+  },
+  "spec_json": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "client": "aienvs",
+      "protocol_versions": [
+        "aienvs/v1"
+      ],
+      "cookie": "0123456789abcdef0123456789abcdef",
+      "workspace_root": "/tmp/aienvs-conformance",
+      "reserved_prefix": ".echo",
+      "ir_version": "v1"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "spec-example-emit",
+  "description": "Spec-locked emit request example backed by a happy-path harness case.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "spec-emit",
+        "kind": "rule",
+        "body": "Adapters emit declarative ops."
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/spec-emit.md"
+      }
+    ]
+  },
+  "spec_json": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "emit",
+    "params": {
+      "target": "spec-example-emit",
+      "ir": {
+        "nodes": [
+          {
+            "id": "spec-emit",
+            "kind": "rule",
+            "body": "Adapters emit declarative ops."
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "name": "spec-example-error-response",
+  "description": "Spec-locked error response example backed by a happy-path harness case.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "spec-error",
+        "kind": "rule",
+        "body": "Error response example fixture."
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/spec-error.md"
+      }
+    ]
+  },
+  "spec_json": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "error": {
+      "code": -32602,
+      "message": "adapter does not support any offered protocol version",
+      "data": {
+        "error_class": "adapter-protocol-mismatch"
+      }
+    }
+  }
+}
