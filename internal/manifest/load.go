@@ -138,5 +138,35 @@ func Validate(m *Manifest, opts LoadOptions) error {
 		m.Cache.Override = filepath.Clean(override)
 	}
 
+	if err := validateAdapters(m); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// reAdapterName mirrors the IR-id grammar. Adapter names must satisfy
+// it because they appear in PATH lookups (aienvs-adapter-<name>) and
+// must be safe across filesystems.
+var reAdapterName = regexp.MustCompile(`\A[a-z0-9][a-z0-9_-]{0,63}\z`)
+
+func validateAdapters(m *Manifest) error {
+	seen := make(map[string]bool, len(m.Adapters))
+	for i := range m.Adapters {
+		a := &m.Adapters[i]
+		if !reAdapterName.MatchString(a.Name) {
+			return fmt.Errorf("%w: adapters[%d].name=%q does not match required pattern", ErrInvalidManifest, i, a.Name)
+		}
+		if seen[a.Name] {
+			return fmt.Errorf("%w: adapters has duplicate name %q", ErrInvalidManifest, a.Name)
+		}
+		seen[a.Name] = true
+		for j, arg := range a.Command {
+			if strings.TrimSpace(arg) == "" {
+				return fmt.Errorf("%w: adapters[%d].command[%d] is empty", ErrInvalidManifest, i, j)
+			}
+		}
+		a.ReservedPrefix = strings.TrimRight(a.ReservedPrefix, "/")
+	}
 	return nil
 }

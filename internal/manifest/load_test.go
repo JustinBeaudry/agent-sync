@@ -288,6 +288,92 @@ func TestLoadFile_RejectsOversizedManifest(t *testing.T) {
 	}
 }
 
+func TestLoad_AdaptersBlock_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	src := `version: 1
+canonical:
+  url: https://example.com/repo.git
+adapters:
+  - name: claude
+    command: [aienvs-adapter-claude]
+    version: "0.1.0"
+    reserved_prefix: .claude/
+  - name: cursor
+    command: [aienvs-adapter-cursor, --strict]
+    reserved_prefix: .cursor
+`
+	m, err := manifest.LoadBytes([]byte(src), manifest.LoadOptions{})
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if len(m.Adapters) != 2 {
+		t.Fatalf("len(Adapters): want 2, got %d", len(m.Adapters))
+	}
+	if m.Adapters[0].Name != "claude" {
+		t.Errorf("adapters[0].name: %q", m.Adapters[0].Name)
+	}
+	if m.Adapters[0].ReservedPrefix != ".claude" {
+		t.Errorf("adapters[0].reserved_prefix should be normalized (no trailing slash), got %q", m.Adapters[0].ReservedPrefix)
+	}
+	if !equalSlices(m.Adapters[1].Command, []string{"aienvs-adapter-cursor", "--strict"}) {
+		t.Errorf("adapters[1].command: %v", m.Adapters[1].Command)
+	}
+}
+
+func TestLoad_AdaptersBlock_RejectsDuplicateName(t *testing.T) {
+	t.Parallel()
+
+	src := `version: 1
+canonical:
+  url: https://example.com/repo.git
+adapters:
+  - name: foo
+  - name: foo
+`
+	_, err := manifest.LoadBytes([]byte(src), manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("want duplicate-name error, got nil")
+	}
+	if !errors.Is(err, manifest.ErrInvalidManifest) {
+		t.Errorf("error not ErrInvalidManifest: %v", err)
+	}
+}
+
+func TestLoad_AdaptersBlock_RejectsInvalidName(t *testing.T) {
+	t.Parallel()
+
+	src := `version: 1
+canonical:
+  url: https://example.com/repo.git
+adapters:
+  - name: "Foo Bar"
+`
+	_, err := manifest.LoadBytes([]byte(src), manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("want invalid-name error, got nil")
+	}
+	if !errors.Is(err, manifest.ErrInvalidManifest) {
+		t.Errorf("error not ErrInvalidManifest: %v", err)
+	}
+}
+
+func TestLoad_AdaptersBlock_RejectsEmptyCommandArg(t *testing.T) {
+	t.Parallel()
+
+	src := `version: 1
+canonical:
+  url: https://example.com/repo.git
+adapters:
+  - name: foo
+    command: ["", "x"]
+`
+	_, err := manifest.LoadBytes([]byte(src), manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("want empty-command error, got nil")
+	}
+}
+
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
