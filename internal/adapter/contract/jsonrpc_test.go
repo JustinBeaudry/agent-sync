@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -460,24 +461,27 @@ func TestIDCorrelator_ConcurrentMarkAndCancel(t *testing.T) {
 	ids := NewIDCorrelator()
 	const n = 200
 	allocated := make(chan ID, n)
+	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			id := ids.Next()
 			ids.MarkPending(id, "x")
 			allocated <- id
 		}()
 	}
-	for i := 0; i < n; i++ {
-		id := <-allocated
-		go ids.Cancel(id)
+	wg.Wait()
+	close(allocated)
+	var cancelWg sync.WaitGroup
+	for id := range allocated {
+		cancelWg.Add(1)
+		go func(id ID) {
+			defer cancelWg.Done()
+			ids.Cancel(id)
+		}(id)
 	}
-	// Wait for all cancels to drain. A polling loop bounded by a
-	// generous deadline is enough — the test under -race surfaces any
-	// race condition regardless of timing.
-	deadline := 2 * 1000
-	for ids.Pending() != 0 && deadline > 0 {
-		deadline--
-	}
+	cancelWg.Wait()
 	if ids.Pending() != 0 {
 		t.Errorf("Pending after %d concurrent Mark+Cancel: want 0, got %d", n, ids.Pending())
 	}

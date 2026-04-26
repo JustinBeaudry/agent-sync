@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"sort"
@@ -47,18 +48,17 @@ func (s Source) String() string {
 
 // BundledAdapter is an adapter compiled into the aienvs binary itself.
 // The runtime spawns it as a goroutine speaking the wire protocol over
-// io.Pipe. Run is invoked by the in-process transport in inproc.go;
-// PR 2 ships only the registration surface here, leaving the transport
-// integration for Unit 5.
+// io.Pipe. Run is invoked by the in-process transport in inproc.go.
 type BundledAdapter struct {
 	Manifest AdapterManifest
 
-	// Run is the entry point invoked by the in-process transport. The
-	// transport supplies stdin / stdout pipes; the adapter speaks the
-	// same wire protocol as a subprocess adapter would. Returning from
-	// Run signals the session is done; an error is surfaced to the
-	// runtime as the adapter's exit reason.
-	Run func(ctx context.Context, stdin []byte, stdout func([]byte)) error
+	// Run is the entry point invoked by the in-process transport.
+	// stdin / stdout are pipes connected to the runtime — the bundled
+	// adapter wraps them with contract.NewFrameReader and
+	// contract.WriteFrame just as a subprocess adapter would. Returning
+	// from Run signals the session is done; an error is surfaced to
+	// the runtime as the adapter's exit reason.
+	Run func(ctx context.Context, stdin io.Reader, stdout io.Writer) error
 }
 
 // Adapter is one entry in the discovered registry. Source records how
