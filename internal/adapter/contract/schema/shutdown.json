@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/shutdown.json",
+  "title": "aienvs/v1 shutdown method",
+  "type": "object",
+  "$defs": {
+    "params": {
+      "type": "object",
+      "properties": {
+        "_meta": {}
+      },
+      "description": "shutdown takes no v1-defined params; _meta carries any future structured shutdown reason."
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "_meta": {}
+      },
+      "description": "shutdown returns no v1-defined result; _meta is reserved for future use."
+    }
+  }
+}

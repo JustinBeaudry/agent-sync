@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/initialized.json",
+  "title": "aienvs/v1 initialized notification",
+  "type": "object",
+  "$defs": {
+    "params": {
+      "type": "object",
+      "properties": {
+        "_meta": {}
+      },
+      "description": "initialized is a notification with no defined params in v1; only the reserved _meta field is allowed."
+    }
+  }
+}

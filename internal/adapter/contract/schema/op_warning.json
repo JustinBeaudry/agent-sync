@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/op_warning.json",
+  "title": "aienvs/v1 warning op",
+  "type": "object",
+  "properties": {
+    "op": {"const": "warning"},
+    "concept_id": {"type": "string"},
+    "status": {"enum": ["degraded", "partial"]},
+    "note": {"type": "string"},
+    "_meta": {}
+  },
+  "required": ["op", "concept_id", "status", "note"]
+}

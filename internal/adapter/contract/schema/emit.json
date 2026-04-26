@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aienvs.dev/schema/v1/emit.json",
+  "title": "aienvs/v1 emit method",
+  "type": "object",
+  "$defs": {
+    "params": {
+      "type": "object",
+      "properties": {
+        "target": {"type": "string"},
+        "ir": {"type": "object"},
+        "_meta": {}
+      },
+      "required": ["target", "ir"]
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "ops_performed": {"type": "array", "items": {"$ref": "#/$defs/op_record"}},
+        "_meta": {}
+      },
+      "required": ["ops_performed"]
+    },
+    "op_record": {
+      "type": "object",
+      "properties": {
+        "op": {"enum": ["write_file", "write_tool_owned", "mkdir", "delete", "warning"]},
+        "path": {"type": "string"}
+      },
+      "required": ["op", "path"]
+    }
+  }
+}
