@@ -177,3 +177,77 @@ func TestInproc_TwoAdaptersInParallel(t *testing.T) {
 		}
 	}
 }
+
+// TestInproc_CloseDoesNotDeadlockWithUndrainedFrame regresses REL-001:
+// without the closedCh signal, the reader goroutine blocks on
+// `frames <- ...` when the channel is full and no Recv is consuming,
+// so Close (which joins readerDone) hangs forever. With the fix,
+// closing the channel signal breaks the blocking send.
+func TestInproc_CloseDoesNotDeadlockWithUndrainedFrame(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	tr, err := adapter.NewInprocTransport(ctx, echoBundled(t))
+	if err != nil {
+		t.Fatalf("NewInprocTransport: %v", err)
+	}
+
+	// Send three frames. The echo adapter responds with a notification
+	// per frame, which queues into the bounded frames channel. We
+	// never call Recv — by the time Close runs, the channel is full
+	// and the reader goroutine is blocked on its next send.
+	for i := 0; i < 3; i++ {
+		if err := tr.Send(ctx, []byte(`{"jsonrpc":"2.0","method":"x"}`)); err != nil {
+			t.Fatalf("Send #%d: %v", i, err)
+		}
+	}
+	// Tiny sleep to let the echo adapter actually produce frames.
+	time.Sleep(50 * time.Millisecond)
+
+	// Close must return within the test timeout (without the fix, this
+	// deadlocks indefinitely and the t.Cleanup ctx cancel won't help).
+	// The Close result itself is allowed to surface a "pipe closed"
+	// error from the bundled adapter — what we're regressing here is
+	// the deadlock, not the result.
+	closed := make(chan error, 1)
+	go func() { closed <- tr.Close(context.Background()) }()
+	select {
+	case <-closed:
+		// Returned within the timeout — the deadlock is fixed.
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close deadlocked with undrained frames in channel")
+	}
+}
+
+// TestInproc_ConcurrentCloseSafe regresses REL-005: a second concurrent
+// Close call must not race the first one; both must observe the same
+// settled closeErr value.
+func TestInproc_ConcurrentCloseSafe(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	tr, err := adapter.NewInprocTransport(ctx, echoBundled(t))
+	if err != nil {
+		t.Fatalf("NewInprocTransport: %v", err)
+	}
+
+	const N = 8
+	results := make(chan error, N)
+	for i := 0; i < N; i++ {
+		go func() { results <- tr.Close(context.Background()) }()
+	}
+	for i := 0; i < N; i++ {
+		select {
+		case err := <-results:
+			if err != nil {
+				t.Errorf("close #%d: %v", i, err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("concurrent Close hung")
+		}
+	}
+}

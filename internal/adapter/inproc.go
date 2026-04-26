@@ -39,7 +39,14 @@ type InprocTransport struct {
 	// inbound frames into. Capacity 1 — the protocol is request-
 	// response, so buffering more than one frame doesn't help and
 	// could mask a runtime that's not draining.
-	frames chan frameOrError
+	//
+	// closedCh is closed by Close (under closeOnce) before joining
+	// readerDone, so the reader goroutine can break out of a blocking
+	// channel send when nobody is consuming. Without it, Close would
+	// deadlock: readerDone only closes when readLoop returns, and
+	// readLoop is blocked on `frames <- ...` when no Recv is listening.
+	frames   chan frameOrError
+	closedCh chan struct{}
 
 	// runDone is closed when the bundled adapter's Run returns.
 	// readerDone is closed when the reader goroutine exits.
@@ -47,9 +54,13 @@ type InprocTransport struct {
 	readerDone chan struct{}
 	runErr     error
 
-	// closeOnce / closeErr — Close is idempotent.
+	// closeOnce guards Close so concurrent callers don't both try to
+	// reap the bundled adapter goroutine. closeDone is closed at the
+	// end of Close's Do body so concurrent callers wait for the first
+	// to finish populating closeErr before reading it.
 	closeOnce sync.Once
 	closeErr  error
+	closeDone chan struct{}
 }
 
 type frameOrError struct {
@@ -79,8 +90,10 @@ func NewInprocTransport(ctx context.Context, bundled *BundledAdapter) (*InprocTr
 		frameRead:  contract.NewFrameReader(rtIn),
 		frameMax:   contract.DefaultMaxFrameBytes,
 		frames:     make(chan frameOrError, 1),
+		closedCh:   make(chan struct{}),
 		runDone:    make(chan struct{}),
 		readerDone: make(chan struct{}),
+		closeDone:  make(chan struct{}),
 	}
 
 	go tr.runBundled(ctx)
@@ -105,15 +118,25 @@ func (t *InprocTransport) runBundled(ctx context.Context) {
 }
 
 // readLoop is the dedicated reader goroutine. Pumps frames from the
-// FrameReader into the frames channel until the pipe closes or an
-// unrecoverable read error occurs. Closes the channel on exit so
-// Recv can detect end-of-stream.
+// FrameReader into the frames channel until the pipe closes, an
+// unrecoverable read error occurs, or Close signals via closedCh.
+// Closes the channel on exit so Recv can detect end-of-stream.
+//
+// The send is in a select against closedCh so a Close that races with
+// a frame-arrival doesn't deadlock: without the select, the goroutine
+// would block forever on `frames <- ...` when no Recv is consuming,
+// and Close (which waits on readerDone) would block forever waiting
+// for the goroutine to return.
 func (t *InprocTransport) readLoop() {
 	defer close(t.readerDone)
 	defer close(t.frames)
 	for {
 		payload, err := t.frameRead.Read(t.frameMax)
-		t.frames <- frameOrError{payload: payload, err: err}
+		select {
+		case t.frames <- frameOrError{payload: payload, err: err}:
+		case <-t.closedCh:
+			return
+		}
 		if err != nil {
 			return
 		}
@@ -171,8 +194,16 @@ func (t *InprocTransport) Recv(ctx context.Context) ([]byte, error) {
 // Close implements Transport. Closes the pipes (signaling EOF to the
 // bundled adapter), joins both background goroutines, and returns
 // the bundled adapter's return value or recovered panic.
+//
+// Close is safe to call multiple times; subsequent callers wait for
+// the first call to finish populating closeErr before returning.
 func (t *InprocTransport) Close(_ context.Context) error {
 	t.closeOnce.Do(func() {
+		// Signal the reader goroutine to exit even if it's blocked on
+		// a frame-send into a channel nobody is consuming. Must come
+		// BEFORE the join below.
+		close(t.closedCh)
+
 		// Closing the runtime → adapter writer signals EOF on the
 		// adapter's stdin. A well-behaved bundled adapter exits its
 		// read loop and returns from Run.
@@ -183,7 +214,11 @@ func (t *InprocTransport) Close(_ context.Context) error {
 		<-t.runDone
 		<-t.readerDone
 		t.closeErr = t.runErr
+		close(t.closeDone)
 	})
+	// Concurrent callers wait until the first Close has finished
+	// populating closeErr before returning.
+	<-t.closeDone
 	return t.closeErr
 }
 

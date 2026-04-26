@@ -62,8 +62,16 @@ type Subprocess struct {
 	// frames into. Same pattern as InprocTransport — guarantees only
 	// one goroutine touches the FrameReader's bufio.Reader so ctx
 	// cancellation in one Recv doesn't race with a subsequent Recv.
+	//
+	// closedCh is closed by Close (under closeOnce) before joining
+	// readerDone, so the reader goroutine can break out of a blocking
+	// channel send when nobody is consuming. Without it, Close would
+	// deadlock: readerDone only closes when readLoop returns, and
+	// readLoop is blocked on `s.frames <- ...` when no Recv is
+	// listening.
 	frames     chan frameOrError
 	readerDone chan struct{}
+	closedCh   chan struct{}
 
 	timeouts SubprocessTimeouts
 
@@ -71,6 +79,10 @@ type Subprocess struct {
 	// Close don't both try to reap the process.
 	closeOnce sync.Once
 	closeErr  error
+	// closeDone is closed at the end of Close's Do body so concurrent
+	// Close callers wait for the first one to finish populating
+	// closeErr before reading it.
+	closeDone chan struct{}
 
 	// waitOnce ensures cmd.Wait is called exactly once, and waitErr
 	// captures the result for any later observer (Close, classifier).
@@ -174,6 +186,8 @@ func Spawn(ctx context.Context, opts SpawnOptions) (sp *Subprocess, cookie strin
 		stderrDone: make(chan struct{}),
 		frames:     make(chan frameOrError, 1),
 		readerDone: make(chan struct{}),
+		closedCh:   make(chan struct{}),
+		closeDone:  make(chan struct{}),
 		timeouts:   timeouts,
 	}
 
@@ -184,14 +198,24 @@ func Spawn(ctx context.Context, opts SpawnOptions) (sp *Subprocess, cookie strin
 }
 
 // readLoop is the dedicated reader goroutine for the subprocess's
-// stdout. Pumps frames into sp.frames until EOF or an unrecoverable
-// read error. Same pattern as InprocTransport.readLoop.
+// stdout. Pumps frames into sp.frames until EOF, an unrecoverable
+// read error, or Close signals via closedCh.
+//
+// The send is in a select against closedCh so a Close that races with
+// a frame-arrival doesn't deadlock: without the select, the goroutine
+// would block forever on `frames <- ...` when no Recv is consuming,
+// and Close (which waits on readerDone) would block forever waiting
+// for the goroutine to return.
 func (s *Subprocess) readLoop() {
 	defer close(s.readerDone)
 	defer close(s.frames)
 	for {
 		payload, err := s.frameRead.Read(s.frameMax)
-		s.frames <- frameOrError{payload: payload, err: err}
+		select {
+		case s.frames <- frameOrError{payload: payload, err: err}:
+		case <-s.closedCh:
+			return
+		}
 		if err != nil {
 			return
 		}
@@ -258,6 +282,11 @@ func (s *Subprocess) Close(ctx context.Context) error {
 	s.closeOnce.Do(func() {
 		s.shutdownRequested = true
 
+		// Signal the reader goroutine to exit even if it's blocked on
+		// a frame-send into a channel nobody is consuming. Must come
+		// BEFORE the join below.
+		close(s.closedCh)
+
 		// Closing stdin gives the adapter the EOF signal on its read
 		// loop, which is the cleanest way for it to know we're done.
 		_ = s.stdin.Close()
@@ -296,7 +325,11 @@ func (s *Subprocess) Close(ctx context.Context) error {
 		<-s.readerDone
 
 		s.closeErr = s.classifyExit()
+		close(s.closeDone)
 	})
+	// Concurrent callers wait until the first Close has finished
+	// populating closeErr before returning.
+	<-s.closeDone
 	return s.closeErr
 }
 

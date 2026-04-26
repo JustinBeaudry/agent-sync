@@ -42,10 +42,18 @@ func ensureEchoBinary(t *testing.T) string {
 	return echoBinaryPath
 }
 
+// echoBinaryDir is a per-process directory created with random
+// permissions-restricted permissions, used to cache the compiled echo
+// binary across all tests in the run. Created lazily by
+// buildEchoBinary on first call; cleaned up by TestMain.
+var echoBinaryDir string
+
 // buildEchoBinary compiles internal/adapter/testdata/echo/main.go
-// into a temp file. The output path is keyed on the source's content
-// hash + Go version, so reruns within a development session reuse
-// the cache.
+// into a per-process temp directory. The output is content-hashed so
+// re-invocations within the same process reuse the cache, but the
+// directory itself is a randomized path that a co-tenant on the host
+// cannot predict — avoiding the well-known-location pitfall of
+// os.TempDir + a deterministic filename.
 func buildEchoBinary() (string, error) {
 	srcDir := "testdata/echo"
 	srcFile := filepath.Join(srcDir, "main.go")
@@ -53,13 +61,20 @@ func buildEchoBinary() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if echoBinaryDir == "" {
+		dir, err := os.MkdirTemp("", "aienvs-test-echo-")
+		if err != nil {
+			return "", err
+		}
+		echoBinaryDir = dir
+	}
 	hash := sha256.Sum256(append(src, []byte(runtime.Version())...))
 	suffix := hex.EncodeToString(hash[:8])
-	binName := "aienvs-test-echo-" + suffix
+	binName := "echo-" + suffix
 	if runtime.GOOS == "windows" {
 		binName += ".exe"
 	}
-	out := filepath.Join(os.TempDir(), binName)
+	out := filepath.Join(echoBinaryDir, binName)
 	if _, err := os.Stat(out); err == nil {
 		return out, nil
 	}
@@ -69,6 +84,15 @@ func buildEchoBinary() (string, error) {
 		return "", err
 	}
 	return out, nil
+}
+
+// TestMain cleans up the per-process echo binary cache directory.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if echoBinaryDir != "" {
+		_ = os.RemoveAll(echoBinaryDir)
+	}
+	os.Exit(code)
 }
 
 func TestSubprocess_HappyPath(t *testing.T) {

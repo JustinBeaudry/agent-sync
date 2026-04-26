@@ -101,7 +101,6 @@ const (
 	sessionStateNew sessionState = iota
 	sessionStateInitialized
 	sessionStateEmitting
-	sessionStateShutdown
 	sessionStateClosed
 )
 

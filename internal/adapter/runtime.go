@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/aienvs/aienvs/internal/adapter/contract"
 )
@@ -22,7 +24,7 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 		}
 	}
 
-	timeout := s.timeouts().Handshake
+	timeout := resolveTimeouts(s.options.Timeouts).Handshake
 	rctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -38,7 +40,7 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 		IRVersion:        s.options.IRVersion,
 	}
 
-	resp, err := s.requestResponse(rctx, id, contract.MethodInitialize, params)
+	resp, err := s.requestResponse(rctx, id, contract.MethodInitialize, params, contract.MethodInitialize, timeout)
 	if err != nil {
 		s.ids.Cancel(id)
 		return nil, err
@@ -53,15 +55,10 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 	}
 
 	// Cookie validation: bundled adapters skip (they share process).
-	// Subprocess adapters MUST echo the cookie verbatim.
+	// Subprocess adapters MUST echo the cookie verbatim. The cookie
+	// itself never appears in the error message — leaking it would
+	// undermine the auth boundary it exists to enforce.
 	if s.adapter.Source != SourceBundled {
-		if result.Meta != nil {
-			// _meta is reserved; we just don't read from it here.
-			_ = result.Meta
-		}
-		// The wire spec stores the echoed cookie either in the result
-		// directly (some adapters echo back the entire init params
-		// shape) or via _meta. Check both for compatibility.
 		echoed := extractCookieFromResult(resp.Result)
 		if echoed == "" {
 			return nil, &RuntimeError{
@@ -72,7 +69,7 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 		if echoed != s.cookie {
 			return nil, &RuntimeError{
 				Class: contract.ErrorClassAdapterExecDenied,
-				Err:   fmt.Errorf("%w: adapter echoed %q (want %q)", ErrAdapterCookieMismatch, echoed, s.cookie),
+				Err:   ErrAdapterCookieMismatch,
 			}
 		}
 	}
@@ -116,7 +113,7 @@ func (s *AdapterSession) Initialized(ctx context.Context) error {
 		}
 	}
 	if err := s.transport.Send(ctx, payload); err != nil {
-		return s.classifySendError(err)
+		return classifySendError(err)
 	}
 	return nil
 }
@@ -136,7 +133,7 @@ func (s *AdapterSession) Emit(ctx context.Context, target string, ir json.RawMes
 	}
 	s.state = sessionStateEmitting
 
-	timeout := s.timeouts().Emit
+	timeout := resolveTimeouts(s.options.Timeouts).Emit
 	rctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -148,7 +145,7 @@ func (s *AdapterSession) Emit(ctx context.Context, target string, ir json.RawMes
 		IR:     ir,
 	}
 
-	resp, err := s.requestResponse(rctx, id, contract.MethodEmit, params)
+	resp, err := s.requestResponse(rctx, id, contract.MethodEmit, params, contract.MethodEmit, timeout)
 	if err != nil {
 		s.ids.Cancel(id)
 		return nil, err
@@ -165,10 +162,12 @@ func (s *AdapterSession) Emit(ctx context.Context, target string, ir json.RawMes
 	// Declared-outputs integrity gate. Each performed op must target a
 	// path inside one of the declared outputs. Warnings are exempt
 	// (concept-level, no path).
+	nonWarningOps := 0
 	for i, op := range result.OpsPerformed {
 		if op.Op == contract.OpKindWarning {
 			continue
 		}
+		nonWarningOps++
 		if !s.pathInDeclaredOutputs(op.Path) {
 			return nil, &RuntimeError{
 				Class: contract.ErrorClassAdapterUndeclaredOutput,
@@ -178,7 +177,45 @@ func (s *AdapterSession) Emit(ctx context.Context, target string, ir json.RawMes
 		}
 	}
 
+	// Capability-lied detection: if the adapter declared any kind as
+	// "supported" in initialize and the IR contained nodes of those
+	// kinds, then the adapter must have emitted at least one
+	// non-warning op. An adapter that says "yes, I handle X" and then
+	// silently does nothing is a worse failure mode than a "won't
+	// handle X" honest decline — silent nullification breaks the
+	// determinism guarantee.
+	if nonWarningOps == 0 && irContainsSupportedKind(ir, s.gateChecks) {
+		return nil, &RuntimeError{
+			Class: contract.ErrorClassAdapterCapabilityLied,
+			Err:   ErrAdapterCapabilityLied,
+		}
+	}
+
 	return &result, nil
+}
+
+// irContainsSupportedKind reports whether the IR has at least one node
+// whose kind appears in the supported set. Best-effort: a malformed IR
+// returns false (no false positives — better to under-report than to
+// flag a legitimate adapter for what is really a runtime bug).
+func irContainsSupportedKind(ir json.RawMessage, supported map[contract.OpKind]bool) bool {
+	if len(supported) == 0 {
+		return false
+	}
+	var doc struct {
+		Nodes []struct {
+			Kind string `json:"kind"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal(ir, &doc); err != nil {
+		return false
+	}
+	for _, n := range doc.Nodes {
+		if supported[contract.OpKind(n.Kind)] {
+			return true
+		}
+	}
+	return false
 }
 
 // Shutdown sends the shutdown request and tears down the transport.
@@ -196,7 +233,7 @@ func (s *AdapterSession) Shutdown(ctx context.Context) error {
 		return s.transport.Close(ctx)
 	}
 
-	timeout := s.timeouts().Shutdown
+	timeout := resolveTimeouts(s.options.Timeouts).Shutdown
 	rctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -204,26 +241,21 @@ func (s *AdapterSession) Shutdown(ctx context.Context) error {
 	s.ids.MarkPending(id, contract.MethodShutdown)
 
 	params := contract.ShutdownParams{}
-	_, err := s.requestResponse(rctx, id, contract.MethodShutdown, params)
+	_, err := s.requestResponse(rctx, id, contract.MethodShutdown, params, contract.MethodShutdown, timeout)
 	if err != nil {
 		s.ids.Cancel(id)
 		// Don't return here; still tear down the transport so the
 		// process exits. Log the error via the closeErr.
 	}
 
-	s.state = sessionStateShutdown
-
 	closeErr := s.transport.Close(ctx)
 
-	// Cancel any pending ids that never got resolved; the transport
-	// has already torn down so they'd never resolve anyway.
-	if leaked := s.ids.Pending(); leaked > 0 {
-		// Cancel by walking known ids would require an enumeration
-		// API on IDCorrelator we don't have; the leak is bounded by
-		// the session lifetime, so we accept this — the runtime is
-		// about to drop the IDCorrelator entirely.
-		_ = leaked
-	}
+	// Any ids still pending here have been abandoned: the adapter
+	// returned an error or the transport was torn down before a
+	// response arrived. The IDCorrelator is about to be dropped along
+	// with this session, so the leak is bounded by session lifetime.
+	// IDCorrelator gained max-pending eviction in PR 2 (ADV-006) so a
+	// misbehaving adapter cannot grow this set without bound.
 
 	s.state = sessionStateClosed
 
@@ -239,7 +271,13 @@ func (s *AdapterSession) Shutdown(ctx context.Context) error {
 // requestResponse sends a request, waits for the matching response,
 // and returns it. Honors ctx for cancellation. Errors are wrapped in
 // RuntimeError with the appropriate ErrorClass.
-func (s *AdapterSession) requestResponse(ctx context.Context, id contract.ID, method string, params interface{}) (*contract.Message, error) {
+//
+// phase identifies the lifecycle phase for error messages (initialize,
+// emit, shutdown). phaseTimeout is the per-phase deadline so a timeout
+// error reports the correct duration — without this, a 5s handshake
+// timeout was being reported as "exceeded 30s" because the runtime
+// always read its handshake timeout for the message.
+func (s *AdapterSession) requestResponse(ctx context.Context, id contract.ID, method string, params interface{}, phase string, phaseTimeout time.Duration) (*contract.Message, error) {
 	paramsRaw, err := json.Marshal(params)
 	if err != nil {
 		return nil, &RuntimeError{
@@ -262,7 +300,7 @@ func (s *AdapterSession) requestResponse(ctx context.Context, id contract.ID, me
 	}
 
 	if err := s.transport.Send(ctx, payload); err != nil {
-		return nil, s.classifySendError(err)
+		return nil, classifySendError(err)
 	}
 
 	// Read the matching response. v1 doesn't allow adapter→runtime
@@ -274,7 +312,7 @@ func (s *AdapterSession) requestResponse(ctx context.Context, id contract.ID, me
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, &RuntimeError{
 				Class: contract.ErrorClassAdapterTimeout,
-				Err:   fmt.Errorf("%w: %s exceeded %s", ErrAdapterTimeout, method, s.timeouts().Handshake),
+				Err:   fmt.Errorf("%w: %s exceeded %s", ErrAdapterTimeout, phase, phaseTimeout),
 			}
 		}
 		return nil, classifyTransportError(err)
@@ -309,18 +347,38 @@ func (s *AdapterSession) requestResponse(ctx context.Context, id contract.ID, me
 	return &msg, nil
 }
 
-// pathInDeclaredOutputs returns true when path is contained within one
-// of the adapter's declared outputs. Empty path is rejected (the gate
-// is path-based; warnings exempt themselves at the caller).
-func (s *AdapterSession) pathInDeclaredOutputs(path string) bool {
-	if path == "" {
+// pathInDeclaredOutputs reports whether opPath is contained within
+// one of the adapter's declared_outputs. Both sides are normalized
+// with path.Clean before comparison so an adapter can't smuggle a
+// path containing ".." or duplicate "/" segments through the gate.
+//
+// Returns false for empty paths (warnings exempt themselves at the
+// caller), absolute paths (declared_outputs are workspace-relative),
+// and paths whose cleaned form starts with ".." (escapes the
+// workspace).
+func (s *AdapterSession) pathInDeclaredOutputs(opPath string) bool {
+	if opPath == "" {
 		return false
 	}
 	if s.initResult == nil {
 		return false
 	}
+	if path.IsAbs(opPath) {
+		return false
+	}
+	clean := path.Clean(opPath)
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return false
+	}
 	for _, decl := range s.initResult.DeclaredOutputs {
-		if path == decl.Path || strings.HasPrefix(path, decl.Path+"/") {
+		if decl.Path == "" {
+			continue
+		}
+		declClean := path.Clean(decl.Path)
+		if path.IsAbs(declClean) {
+			continue
+		}
+		if clean == declClean || strings.HasPrefix(clean, declClean+"/") {
 			return true
 		}
 	}
@@ -329,8 +387,9 @@ func (s *AdapterSession) pathInDeclaredOutputs(path string) bool {
 
 // classifySendError wraps a transport.Send error in a RuntimeError.
 // Send failures are typically transport-level (process died, pipe
-// closed); classify as adapter-panic.
-func (s *AdapterSession) classifySendError(err error) *RuntimeError {
+// closed); classify as adapter-panic. Free function — does not need
+// session state.
+func classifySendError(err error) *RuntimeError {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return &RuntimeError{
 			Class: contract.ErrorClassAdapterTimeout,
@@ -358,10 +417,10 @@ func classifyTransportError(err error) *RuntimeError {
 	return rt
 }
 
-// timeouts returns the session's resolved timeouts (option overrides
-// applied on top of defaults).
-func (s *AdapterSession) timeouts() SubprocessTimeouts {
-	t := s.options.Timeouts
+// resolveTimeouts fills zero fields in the supplied timeout struct
+// from DefaultSubprocessTimeouts. Pure function so it's trivial to
+// test in isolation.
+func resolveTimeouts(t SubprocessTimeouts) SubprocessTimeouts {
 	d := DefaultSubprocessTimeouts()
 	if t.Handshake == 0 {
 		t.Handshake = d.Handshake
@@ -376,29 +435,16 @@ func (s *AdapterSession) timeouts() SubprocessTimeouts {
 }
 
 // extractCookieFromResult parses the raw initialize result JSON for a
-// "cookie" field. Adapters may echo the cookie at the top level or
-// inside _meta; both forms are accepted.
+// top-level "cookie" field. The contract pins the cookie to a single
+// canonical location to avoid ambiguity — adapters that echo the
+// cookie elsewhere fail validation the same way as adapters that omit
+// it entirely.
 func extractCookieFromResult(raw json.RawMessage) string {
-	var loose map[string]json.RawMessage
+	var loose struct {
+		Cookie string `json:"cookie"`
+	}
 	if err := json.Unmarshal(raw, &loose); err != nil {
 		return ""
 	}
-	if v, ok := loose["cookie"]; ok {
-		var s string
-		if err := json.Unmarshal(v, &s); err == nil {
-			return s
-		}
-	}
-	if v, ok := loose["_meta"]; ok {
-		var meta map[string]json.RawMessage
-		if err := json.Unmarshal(v, &meta); err == nil {
-			if c, ok := meta["cookie"]; ok {
-				var s string
-				if err := json.Unmarshal(c, &s); err == nil {
-					return s
-				}
-			}
-		}
-	}
-	return ""
+	return loose.Cookie
 }

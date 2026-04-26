@@ -409,6 +409,175 @@ func TestSession_ContextCancellationDuringEmit(t *testing.T) {
 	}
 }
 
+func TestSession_RejectsDotDotPathInDeclaredOutputsGate(t *testing.T) {
+	// SEC-002: an adapter that declares ".out" but emits an op whose
+	// path normalizes to ".." or escapes the declared subtree must be
+	// rejected. Without path.Clean, ".out/../etc/passwd" would slip
+	// through HasPrefix(".out/") even though it escapes the workspace.
+	t.Parallel()
+
+	sa := &scriptedAdapter{
+		name:            "escape",
+		declaredOutputs: []contract.DeclaredOutput{{Path: ".escape", Mode: contract.OutputModeOwnedSubdir}},
+		conceptKinds:    map[string]contract.CapabilityLevel{},
+		emitOps: []contract.OpRecord{
+			{Op: contract.OpKindWriteFile, Path: ".escape/../etc/passwd"},
+		},
+	}
+	sess, ctx, _ := runScriptedSession(t, sa)
+
+	if _, err := sess.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if err := sess.Initialized(ctx); err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+	_, err := sess.Emit(ctx, "escape", json.RawMessage(`{"nodes":[]}`))
+	if !errors.Is(err, adapter.ErrAdapterUndeclaredOutput) {
+		t.Fatalf("want ErrAdapterUndeclaredOutput for path-escape, got %v", err)
+	}
+}
+
+func TestSession_RejectsAbsolutePathInDeclaredOutputsGate(t *testing.T) {
+	t.Parallel()
+
+	sa := &scriptedAdapter{
+		name:            "abs",
+		declaredOutputs: []contract.DeclaredOutput{{Path: ".abs", Mode: contract.OutputModeOwnedSubdir}},
+		conceptKinds:    map[string]contract.CapabilityLevel{},
+		emitOps: []contract.OpRecord{
+			{Op: contract.OpKindWriteFile, Path: "/abs/foo.md"},
+		},
+	}
+	sess, ctx, _ := runScriptedSession(t, sa)
+
+	if _, err := sess.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if err := sess.Initialized(ctx); err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+	_, err := sess.Emit(ctx, "abs", json.RawMessage(`{"nodes":[]}`))
+	if !errors.Is(err, adapter.ErrAdapterUndeclaredOutput) {
+		t.Fatalf("want ErrAdapterUndeclaredOutput for absolute path, got %v", err)
+	}
+}
+
+func TestSession_DetectsCapabilityLied(t *testing.T) {
+	// MAINT-001: an adapter that declares "rule" as supported but emits
+	// no ops for an IR containing rule nodes must trigger
+	// ErrAdapterCapabilityLied. Silent nullification breaks the
+	// determinism guarantee.
+	t.Parallel()
+
+	sa := &scriptedAdapter{
+		name:            "liar",
+		declaredOutputs: []contract.DeclaredOutput{{Path: ".liar", Mode: contract.OutputModeOwnedSubdir}},
+		conceptKinds:    map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+		emitOps:         []contract.OpRecord{}, // declared support but does nothing
+	}
+	sess, ctx, _ := runScriptedSession(t, sa)
+
+	if _, err := sess.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if err := sess.Initialized(ctx); err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+	_, err := sess.Emit(ctx, "liar", json.RawMessage(`{"nodes":[{"id":"x","kind":"rule"}]}`))
+	if !errors.Is(err, adapter.ErrAdapterCapabilityLied) {
+		t.Fatalf("want ErrAdapterCapabilityLied, got %v", err)
+	}
+}
+
+func TestSession_CapabilityLiedNotTriggeredForUnsupportedKinds(t *testing.T) {
+	// IR contains nodes of a kind the adapter never declared as
+	// supported. Emitting nothing is the correct behavior — not a lie.
+	t.Parallel()
+
+	sa := &scriptedAdapter{
+		name:            "honest",
+		declaredOutputs: []contract.DeclaredOutput{{Path: ".honest", Mode: contract.OutputModeOwnedSubdir}},
+		conceptKinds:    map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+		emitOps:         []contract.OpRecord{},
+	}
+	sess, ctx, _ := runScriptedSession(t, sa)
+
+	if _, err := sess.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if err := sess.Initialized(ctx); err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+	// IR contains "agent" kind (which adapter did NOT declare). No ops
+	// emitted is honest decline, not a lie.
+	if _, err := sess.Emit(ctx, "honest", json.RawMessage(`{"nodes":[{"id":"a","kind":"agent"}]}`)); err != nil {
+		t.Fatalf("Emit: want nil, got %v", err)
+	}
+}
+
+func TestSession_TimeoutErrorMentionsPhaseAndDuration(t *testing.T) {
+	// REL-002/MAINT-008: the timeout error message must report the
+	// phase that timed out (initialize / emit / shutdown) and its
+	// configured duration. Earlier the message hardcoded handshake's
+	// timeout regardless of phase.
+	t.Parallel()
+
+	blocker := make(chan struct{})
+	sa := &scriptedAdapter{
+		name:            "slow",
+		declaredOutputs: []contract.DeclaredOutput{{Path: ".slow", Mode: contract.OutputModeOwnedSubdir}},
+		conceptKinds:    map[string]contract.CapabilityLevel{},
+		respondToEmit: func(_ contract.EmitParams) (json.RawMessage, *contract.Error) {
+			<-blocker
+			b, _ := json.Marshal(contract.EmitResult{})
+			return b, nil
+		},
+	}
+
+	b := sa.bundled(t)
+	a := &adapter.Adapter{Manifest: b.Manifest, Source: adapter.SourceBundled, Bundled: b}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	sess, err := a.NewSession(ctx, adapter.SessionOptions{
+		IRVersion: "v1",
+		Timeouts: adapter.SubprocessTimeouts{
+			Handshake: 5 * time.Second,
+			Emit:      100 * time.Millisecond,
+			Shutdown:  5 * time.Second,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	// Cleanup ordering matters here: t.Cleanup is LIFO. Shutdown talks
+	// to the adapter, so the blocker must be closed BEFORE Shutdown
+	// runs — register the unblock cleanup AFTER the Shutdown cleanup
+	// so it fires first.
+	t.Cleanup(func() { _ = sess.Shutdown(context.Background()) })
+	t.Cleanup(func() { close(blocker) })
+
+	if _, err := sess.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if err := sess.Initialized(ctx); err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+	_, err = sess.Emit(ctx, "slow", json.RawMessage(`{"nodes":[]}`))
+	if !errors.Is(err, adapter.ErrAdapterTimeout) {
+		t.Fatalf("want ErrAdapterTimeout, got %v", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "emit") {
+		t.Errorf("error should mention 'emit' phase: %q", msg)
+	}
+	if !strings.Contains(msg, "100ms") {
+		t.Errorf("error should mention 100ms (the emit timeout): %q", msg)
+	}
+}
+
 func TestSession_AdaptersInParallelDontInterfere(t *testing.T) {
 	t.Parallel()
 
@@ -427,7 +596,7 @@ func TestSession_AdaptersInParallelDontInterfere(t *testing.T) {
 	s2 := mkSession("para2")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	for _, s := range []*adapter.AdapterSession{s1, s2} {
 		if _, err := s.Initialize(ctx); err != nil {
