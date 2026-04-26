@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "ceaa42f526b0",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr3-conformance-spec",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "conformance/echo/echo_test.go",
+    "conformance/echo/main.go",
+    "docs/spec/adapter-protocol-v1.md",
+    "internal/adapter/conformance/assertions.go",
+    "internal/adapter/conformance/corpus_test.go",
+    "internal/adapter/conformance/harness.go",
+    "internal/adapter/conformance/harness_test.go",
+    "internal/adapter/conformance/spec_locked_test.go",
+    "internal/adapter/contract/jsonrpc.go",
+    "internal/adapter/contract/jsonrpc_test.go",
+    "internal/adapter/contract/protocol.go",
+    "internal/adapter/contract/schema/initialize.json",
+    "internal/adapter/errors.go",
+    "internal/adapter/runtime.go",
+    "internal/adapter/runtime_test.go",
+    "internal/adapter/testdata/echo/main.go",
+    "internal/cli/cmd_adapter.go",
+    "internal/cli/cmd_adapter_test.go",
+    "pkg/adapterkit/capabilities.go",
+    "pkg/adapterkit/capabilities_test.go",
+    "pkg/adapterkit/dispatcher.go",
+    "pkg/adapterkit/doc.go",
+    "pkg/adapterkit/example_test.go",
+    "pkg/adapterkit/schema_parity_test.go",
+    "pkg/adapterkit/server.go",
+    "pkg/adapterkit/server_test.go",
+    "pkg/adapterkit/testing.go",
+    "pkg/adapterkit/testing_test.go",
+    "pkg/adapterkit/types.go",
+    "pkg/adapterkit/types_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ce/aa42f526b0/0/metadata.json",
+      "transcript": "/ce/aa42f526b0/0/full.jsonl",
+      "content_hash": "/ce/aa42f526b0/0/content_hash.txt",
+      "prompt": "/ce/aa42f526b0/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 14612078,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 14411392,
+    "output_tokens": 66996,
+    "api_call_count": 107
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "ceaa42f526b0",
+  "session_id": "019dcc1c-d773-78f2-a7d5-c54ceaacf8c8",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-26T23:49:41.852998Z",
+  "branch": "feat/unit-8-pr3-conformance-spec",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "conformance/echo/echo_test.go",
+    "conformance/echo/main.go",
+    "docs/spec/adapter-protocol-v1.md",
+    "internal/adapter/conformance/assertions.go",
+    "internal/adapter/conformance/corpus_test.go",
+    "internal/adapter/conformance/harness.go",
+    "internal/adapter/conformance/harness_test.go",
+    "internal/adapter/conformance/spec_locked_test.go",
+    "internal/adapter/contract/jsonrpc.go",
+    "internal/adapter/contract/jsonrpc_test.go",
+    "internal/adapter/contract/protocol.go",
+    "internal/adapter/contract/schema/initialize.json",
+    "internal/adapter/errors.go",
+    "internal/adapter/runtime.go",
+    "internal/adapter/runtime_test.go",
+    "internal/adapter/testdata/echo/main.go",
+    "internal/cli/cmd_adapter.go",
+    "internal/cli/cmd_adapter_test.go",
+    "pkg/adapterkit/capabilities.go",
+    "pkg/adapterkit/capabilities_test.go",
+    "pkg/adapterkit/dispatcher.go",
+    "pkg/adapterkit/doc.go",
+    "pkg/adapterkit/example_test.go",
+    "pkg/adapterkit/schema_parity_test.go",
+    "pkg/adapterkit/server.go",
+    "pkg/adapterkit/server_test.go",
+    "pkg/adapterkit/testing.go",
+    "pkg/adapterkit/testing_test.go",
+    "pkg/adapterkit/types.go",
+    "pkg/adapterkit/types_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.4",
+  "turn_id": "9d9ef0bea627",
+  "token_usage": {
+    "input_tokens": 14612078,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 14411392,
+    "output_tokens": 66996,
+    "api_call_count": 107
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-26T23:49:41.819785Z",
+    "agent_lines": 788,
+    "agent_removed": 162,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 788,
+    "total_lines_changed": 950,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

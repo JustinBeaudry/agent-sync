@@ -1,0 +1,175 @@
+# ce:review autofix queue — PR 3 Unit 8
+
+You are a code review fixer agent. Apply the fixes below as one coherent pass. Run the verification gate (`go vet ./...`, `go test -race -timeout 120s ./...`, `golangci-lint run ./...`, `GOOS=windows GOARCH=amd64 go vet ./...`) at the end and re-fix on any failure. Do not commit, push, or modify branches — orchestrator handles those.
+
+All file paths are repo-relative from `/Users/justinbeaudry/Projects/aienvs`.
+
+## Group 1 — Reliability (REL-PR3 + COR-001)
+
+**Fix R1.** `pkg/adapterkit/dispatcher.go` ~line 100: in `dispatchRequest` for `MethodShutdown`, `s.setProtocolShutdownAcked()` currently fires before `writeResultResponse`. Swap the order so the flag is only set after a successful response write. Add a regression test in `pkg/adapterkit/server_test.go` that uses a transport with a stubbed write failure and asserts `AssertProtocolShutdownAcked` returns false.
+
+**Fix R2.** `internal/adapter/conformance/harness.go` ~line 107-113 in `runCase`: when `a.NewSession` returns an error, currently `runCase` returns `(CaseResult{}, error)` and the outer `Run` loop propagates as fatal. Convert to a `CaseResult{Status: StatusFail, Reason: fmt.Sprintf("session spawn failed: %v", err)}` and return `nil` for the error so subsequent cases still run. Add a test in `harness_test.go` that uses a binary path resolving to `/dev/null` (or t.TempDir + a non-executable file) and verifies the rest of the corpus still completes.
+
+**Fix R3.** `pkg/adapterkit/dispatcher.go` ~line 57-60: when `handleInitialized` returns an `*Error`, `serve()` returns the error without writing anything to stdout (correct — initialized is a notification). Before returning, write a single line to `s.stderr` describing the error so the runtime's stderr ring buffer captures the reason. Format: `fmt.Fprintf(s.stderr, "adapterkit: initialized handler error: %s\n", err.Error())`.
+
+**Fix R4.** `internal/adapter/conformance/spec_locked_test.go` ~line 33-36: when the spec doc cannot be opened, currently `t.Fatalf` reports the raw OS error. Wrap with a targeted message: if `errors.Is(err, os.ErrNotExist)`, fail with `t.Fatalf("spec doc not found at %s -- run go test from the repo root", specDocPath)`.
+
+**Fix R5.** `internal/adapter/conformance/harness.go` ~line 115-146 in `runCase` (COR-001): on the success path the function explicitly calls `session.Shutdown(ctx)` AND has a deferred cleanup that also calls Shutdown. Remove the explicit call on the success path; capture the shutdown result via the deferred closure (or a named return). The adapter should see exactly one shutdown request per case.
+
+## Group 2 — Correctness
+
+**Fix C1.** `internal/adapter/conformance/harness.go` ~line 65-68 (COR-003): on context cancellation mid-corpus, `report.Summary.Total = len(report.Cases)` is set but `Passed`/`Failed`/`Skipped` are zero. Tally them by walking `report.Cases` so the invariant `Total == Passed + Failed + Skipped` holds.
+
+**Fix C2.** `pkg/adapterkit/server.go::handleShutdown` ~line 220 (COR-005): error message is hard-coded to "shutdown called before initialize" but fires for any non-`Initialized`/`Ready` state — including `serverStateClosed`. Use a state-aware message: `fmt.Sprintf("shutdown called from invalid state %s", s.state.String())` (or equivalent). Apply the same fix to `handleEmit` if it has the same pattern.
+
+## Group 3 — Protocol-order error class (3-way cross-agreement: AC-004 + COR-002 + M-6)
+
+**Fix P1.** Add a new `ErrorClass` constant for protocol-order violations.
+- In `internal/adapter/contract/jsonrpc.go`: add `ErrorClassAdapterProtocolOrder ErrorClass = "adapter-protocol-order"` next to the existing constants. Document it in the comment block: "lifecycle/order violation (e.g., emit-before-initialized, double-initialize) — distinct from adapter-panic which signals a bug."
+- In `pkg/adapterkit/types.go`: mirror the constant.
+- In `pkg/adapterkit/server.go::newProtocolOrderError`: change the `ErrorClass` field from `ErrorClassAdapterPanic` to `ErrorClassAdapterProtocolOrder`.
+- In `internal/adapter/runtime.go`: any place that flags protocol-order violations (search for `ErrAdapterProtocolOrderViolation`) should map to `ErrorClassAdapterProtocolOrder` not `ErrorClassAdapterPanic` in the synthesized error response.
+- In `docs/spec/adapter-protocol-v1.md` §8 (Errors): add `adapter-protocol-order` to the error class table.
+- Update `internal/adapter/errors.go` if there's a mapping comment that needs adjustment.
+- Add a test that confirms the new class flows through (scripted adapter that emits before initialized).
+
+## Group 4 — Cookie field on InitializeResult (AC-001)
+
+**Fix CK1.** Add a `Cookie string` field to the typed `InitializeResult` so the wire and the typed surface match.
+- In `internal/adapter/contract/protocol.go::InitializeResult` (~line 141): add `Cookie string \`json:"cookie,omitempty"\`` field with a comment "Echoed magic cookie value; runtime validates against the per-spawn AIENVS_ADAPTER_COOKIE."
+- In `pkg/adapterkit/types.go::InitializeResult`: mirror the same field.
+- In `pkg/adapterkit/dispatcher.go::writeInitializeResponse`: stop using the anonymous wire struct that injects `cookie` separately. Set it on the typed `InitializeResult` and marshal directly. The cookie must still be set from `s.cookie` (the value the Server received via env).
+- Update `internal/adapter/contract/schema/initialize.json` to include `cookie` as an optional property in the result schema.
+- Adjust the schema parity test in `pkg/adapterkit/schema_parity_test.go` to round-trip with a cookie value and confirm it's present in the JSON.
+- The runtime's `extractCookieFromResult` in `internal/adapter/runtime.go` already extracts from raw JSON — this still works (the field is now both in the typed struct and the raw bytes; redundant but consistent).
+
+## Group 5 — adapterkit Server API (AC-002 + AC-003)
+
+**Fix S1 (AC-002).** Refactor `NewServer(name, version string)` to options struct (pre-release, safe to break).
+- Define `type ServerOptions struct { Name string; Version string; Stdin io.Reader; Stdout io.Writer; Stderr io.Writer; Getenv func(string) string }` (the last four currently mutated post-construction in `testing.go`).
+- Change signature to `NewServer(opts ServerOptions) *Server`. If `opts.Stdin/Stdout/Stderr` are nil, default to `os.Stdin/Stdout/Stderr`. If `opts.Getenv` is nil, default to `os.Getenv`.
+- Update all call sites: `pkg/adapterkit/example_test.go`, `pkg/adapterkit/server_test.go`, `pkg/adapterkit/testing.go`, `conformance/echo/main.go`.
+- Update `pkg/adapterkit/doc.go` Quickstart to reflect the new constructor.
+
+**Fix S2 (AC-003).** Add a mutex guard on the handler-registration setters.
+- In `pkg/adapterkit/server.go`: the setters `OnInitialize`, `OnEmit`, `OnShutdown` should take the existing `s.mu` lock when writing. The corresponding reads in `dispatchRequest` should take the lock as well (briefly, to copy the func pointer to a local var, then release before calling the user handler — don't hold the lock across user code).
+- Add a comment: "Handler registration is safe at any time including after Run(); calls during Run() are serialized but the registered handler is invoked outside the lock."
+
+## Group 6 — CapabilitiesBuilder (M-5 / AC-008)
+
+**Fix CB1.** `pkg/adapterkit/capabilities.go::Partial(kind, _ string)`: drop the unused second argument. Pre-release, no external consumers, but the existing `example_test.go` and `capabilities_test.go` pass strings like `"agent assets not yet handled"` — update those call sites to drop the second arg too. If you want to preserve the reason (the original intent), instead store it: change to `Partial(kind, reason string) *CapabilitiesBuilder` and store reason in a sibling map serialized as `concept_kinds_reasons` in the JSON. The cheapest fix is to drop the parameter; the more useful fix is to store it. **Pick: drop the parameter** — keeps the wire format identical to v1 spec, no schema change.
+
+## Group 7 — CaseResult schema (CLI-R-001 + CLI-R-006 + W2 from agent-native)
+
+**Fix CR1.** `internal/adapter/conformance/harness.go::CaseResult`:
+- Add field `ExpectedOps []contract.OpRecord \`json:"expected_ops"\`` (no omitempty) — populated for ops-kind cases regardless of pass/fail.
+- Add field `MissingOps []contract.OpRecord \`json:"missing_ops,omitempty"\`` — populated when MatchOps returns ok=false.
+- Add field `ExtraOps []contract.OpRecord \`json:"extra_ops,omitempty"\`` — same.
+- Remove `omitempty` from `Reason` so it's always present (empty string on pass) — this fixes the `jq` field-presence churn issue.
+- In `classifyCaseResult`, set ExpectedOps from `tc.Expect.Ops` for ops-kind cases. Set MissingOps/ExtraOps from MatchOps's return values when ok=false. Initialize ActualOps to `[]contract.OpRecord{}` (not nil) so JSON serializes as `[]` not `null` — drop omitempty on it too.
+- Add tests in `harness_test.go` that confirm a failing ops-kind case's CaseResult contains all of: expected_ops, actual_ops, missing_ops, extra_ops, reason.
+- Update `internal/cli/cmd_adapter.go::renderTextConformanceReport` to print missing/extra inline (not just in verbose mode) — at minimum the count, not omitting the data entirely.
+
+## Group 8 — CLI subcommand (CLI-R-002 + CLI-R-005 + CLI-R-007 + ADV-005)
+
+**Fix CL1 (CLI-R-002).** `internal/cli/cmd_adapter.go::newAdapterConformanceTestCmd`: append an exit-code table to the `Long` field so `--help` shows it. Format:
+```
+Exit codes:
+  0  All cases passed (skips don't count as failures)
+  1  One or more cases failed
+  2  Binary could not be spawned (path not found, not executable, is a directory)
+```
+
+**Fix CL2 (CLI-R-007).** Add a `cobra.Command{Example: ...}` field with 4 patterns: basic invocation, `--format=json` for CI, `--filter='^happy-' --timeout=5s` for targeted, `--include-adversarial` for full coverage.
+
+**Fix CL3 (CLI-R-005 + ADV-005).** Add an `--include-adversarial` bool flag (default false) that switches the default filter from `^(happy|spec-example)-` to `.*`. Update the `Long` to clarify: "By default, runs only positive (happy-*) and spec-locked (spec-example-*) fixtures. Use --include-adversarial to also run error-* fixtures, which require a hostile binary to pass — they will fail against a correct adapter." Remove the misleading prose hint about `--filter='.*'`.
+
+## Group 9 — Test gaps (T-003 + T-004 + T-005)
+
+**Fix T1 (T-004).** `pkg/adapterkit/example_test.go::ExampleNewServer`: add `// Output:` (with no following text) as the last comment so go test executes the function. Verify all three Examples pass.
+
+**Fix T2 (T-003).** `internal/cli/cmd_adapter_test.go::TestAdapterConformanceJSONOutput`: add assertions: `got.Summary.Total >= 1`, `got.Summary.Passed >= 1`, `len(got.Cases) >= 1`, and at least one CaseResult with `Name == "happy-rule"` and `Status == "pass"`.
+
+**Fix T3 (T-005).** Add four new tests in `internal/cli/cmd_adapter_test.go`:
+- `TestAdapterConformance_InvalidFilterRegex`: pass `--filter='['`, expect a plain error (not `*exitError`).
+- `TestAdapterConformance_BadFormat`: pass `--format=xml`, expect error mentioning unsupported format.
+- `TestAdapterConformance_VerboseOutput`: pass `--verbose` with a case that fails (use crashy binary or a synthetic one), assert `actual_ops=` (or equivalent verbose marker) appears in stdout.
+- `TestAdapterConformance_DirectoryPath`: pass `t.TempDir()` (a directory) as the binary path, expect exit code 2 / spawn-error classification.
+
+## Group 10 — Spec doc (SEC-004 + AC-005 + AC-006 + AC-007 + O2)
+
+**Fix SP1 (SEC-004).** `docs/spec/adapter-protocol-v1.md` §9 (Magic Cookie): add: "The runtime always delivers exactly 32 lowercase hexadecimal characters with no surrounding whitespace. Comparison is byte-exact; any trailing newline, space, encoding difference, or case change results in `adapter-exec-denied`. Adapters MUST NOT log, print, or otherwise expose the cookie value to logs, telemetry, or stderr — exposure weakens the auth boundary the cookie exists to enforce."
+
+**Fix SP2 (AC-005).** §12 (Versioning Policy): add: "The runtime performs an exact-string match on `protocol_version` against `aienvs/v1`. Any other value — including `aienvs/v1.1` or `aienvs/v1.0.0` — is rejected with `adapter-protocol-mismatch`. There is no minor-version negotiation in v1; capabilities grow additively under `Capabilities{}` instead. Counter-propose negotiation is reserved for Unit 8b."
+
+**Fix SP3 (AC-006 + AC-007).** §15 (Conformance) or new §16 (CLI Reference): document the `aienvs adapter conformance-test` JSON output schema and exit codes. Schema:
+```
+{
+  "version": "aienvs/v1",
+  "cases": [{"name": string, "status": "pass|fail|skip", "reason": string, "expected_ops": [...], "actual_ops": [...], "missing_ops": [...], "extra_ops": [...]}],
+  "summary": {"total": int, "passed": int, "failed": int, "skipped": int}
+}
+```
+Exit codes: 0 (all pass), 1 (any failure), 2 (spawn error).
+
+**Fix SP4 (O2 + agent-native).** Add a paragraph in §14 (Examples) or §15 (Conformance) explaining the `aienvs:fixture-name` directive convention: "Canonical examples in this spec are tagged with an `aienvs:fixture-name` directive immediately preceding the json code fence. The directive links a spec example to a corresponding corpus fixture in `internal/adapter/conformance/corpus/`. The spec-locked test in `internal/adapter/conformance/spec_locked_test.go` parses these directives and asserts that the example payload exactly matches the fixture's payload — drift in either direction fails CI."
+
+## Group 11 — Security (SEC-002 + SEC-005 + SEC-006 + ADV-004)
+
+**Fix SC1 (SEC-002).** `pkg/adapterkit/server.go::Run`: after the empty-cookie check, validate the format. Accept only `^[0-9a-f]{32}$`. On invalid format, exit with `MissingCookieExitCode` (or a new `InvalidCookieExitCode`) and write to stderr `adapterkit: AIENVS_ADAPTER_COOKIE has invalid format` (do NOT log the value). Update `pkg/adapterkit/testing.go` to inject a real 32-hex value (e.g., `"0123456789abcdef0123456789abcdef"`) instead of `"test-cookie"`. Add a test that confirms a non-hex value is rejected.
+
+**Fix SC2 (SEC-005 + ADV-004).** `internal/adapter/conformance/spec_locked_test.go::loadSpecExamples`: validate fixture names parsed from the markdown. Reject any name containing `/`, `\`, `..`, or non-`[a-z0-9-]` characters with a clear test failure message: `t.Fatalf("invalid fixture name %q: must match [a-z0-9][a-z0-9-]*", name)`. This is a diagnostics fix (embed.FS already prevents traversal), but it makes the boundary explicit.
+
+**Fix SC3 (SEC-006).** `conformance/echo/main.go::handleEmit`: before constructing the op path, validate `node.ID` against the IR ID grammar (you may copy the regex `^[a-z0-9][a-z0-9_-]{0,63}$` inline since adapterkit can't import internal/ir). Reject invalid IDs with an emit error. Apply the same fix to `internal/adapter/testdata/echo/main.go` (the PR 2 stub) for consistency. Add a test that confirms a bad ID is rejected (use scripted IR injection in the bundled tests).
+
+## Group 12 — adapterkit dispatcher EOF (ADV-003 + M-7)
+
+**Fix DP1.** `pkg/adapterkit/dispatcher.go::readBoundedLine`: track bytes-read before the error. If EOF arrives after at least one byte has been read, return `io.ErrUnexpectedEOF` wrapped with context (e.g., `fmt.Errorf("truncated header: %w", io.ErrUnexpectedEOF)`) instead of bare `io.EOF`. In `serve()`, only treat bare `io.EOF` as clean shutdown — `io.ErrUnexpectedEOF` should propagate so the adapter can log and exit non-zero. Match the semantics in `internal/adapter/contract/framing.go::readBoundedLine`. Add a test that pipes a truncated header into the dispatcher and asserts an error (not clean exit).
+
+## Group 13 — Cleanup (M-1 + M-2 + M-3 + M-10 + PSR-001 + PSR-003)
+
+**Fix CU1 (M-1).** Delete the unread `defaultServerIRVersion` constant from `pkg/adapterkit/server.go:17`. Verify it's not referenced anywhere.
+
+**Fix CU2 (M-2).** Delete the `jsonUnmarshal` wrapper alias from `internal/adapter/conformance/corpus_test.go:160`. Replace usages with direct `json.Unmarshal` calls.
+
+**Fix CU3 (M-3).** Move `isKnownExpectedError` from `internal/adapter/conformance/assertions.go` into `internal/adapter/conformance/corpus_test.go` since it has only test callers. Verify nothing else references it.
+
+**Fix CU4 (M-10).** Expand `pkg/adapterkit/doc.go` to include:
+- A 1-paragraph package overview ("adapterkit is the supported SDK for writing aienvs adapters in Go. It handles framing, JSON-RPC envelopes, the magic-cookie handshake, capability negotiation, and lifecycle dispatch — adapter authors write only handlers.").
+- A short Quickstart code block (matching the new `NewServer(opts)` signature).
+- A list of the sentinel errors callers might match on (point at the var block).
+- A pointer to `conformance/echo/main.go` as the canonical reference.
+- A note about `pkg/adapterkit/testing` for in-process testing.
+
+**Fix CU5 (PSR-001).** `conformance/echo/main.go:82`: add an inline comment above the path-construction line: `// Wire-protocol paths are forward-slash regardless of host OS; do not switch to filepath.Join here. See docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md Rule 3 for the exception.`
+
+**Fix CU6 (PSR-003).** `pkg/adapterkit/doc.go` line ~6: narrow the existing claim "The package intentionally does not depend on internal/ packages" to "The non-test package does not import internal/ packages; the schema parity test in `_test.go` files imports `internal/adapter/contract` only to validate type-shape parity."
+
+## Verification (run AFTER all fixes)
+
+```
+go vet ./...
+go test -race -timeout 120s ./...
+golangci-lint run ./...
+GOOS=windows GOARCH=amd64 go vet ./...
+```
+
+If any test fails: fix the issue and re-run. Do not declare done unless all four are clean.
+
+## Out of scope (orchestrator handles via todos)
+
+These are NOT in this batch — orchestrator will create todo files:
+- T-001/ADV-001: build hostile-binary suite for adversarial corpus
+- M-4: extract buildTestdataBinary helper across 4 sites
+- M-8: disambiguate echo binary names
+- M-9, M-11: design decisions on testing helpers
+- W1, O1: list-cases subcommand, AllConceptKinds()
+- CLI-R-003, CLI-R-004: --format=jsonl, --progress flag
+- AC-009/T-002: end-to-end error-response fixture (sends bad initialize)
+- AC-010: reuse contract.ParseMessage in adapterkit
+- ADV-002: process-group cleanup for forked binaries
+- COR-004: error-large-frame requires hostile binary (subset of T-001)
+
+## Output contract
+
+Return JSON via the schema with all fields filled. `summary` should briefly describe what each Group accomplished. `verification_summary` should report actual command output / pass-fail.
