@@ -8,7 +8,7 @@ import (
 )
 
 func ExampleNewServer() {
-	server := adapterkit.NewServer("echo", "0.1")
+	server := adapterkit.NewServer(adapterkit.ServerOptions{Name: "echo", Version: "0.1"})
 	server.OnInitialize(func(ctx context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
 		return adapterkit.InitializeResult{
 			Capabilities: adapterkit.NewCapabilities().Supports("rule").Build(),
@@ -18,12 +18,13 @@ func ExampleNewServer() {
 		}, nil
 	})
 	_ = server
+	// Output:
 }
 
 func ExampleNewCapabilities() {
 	caps := adapterkit.NewCapabilities().
 		Supports("rule").
-		Partial("skill", "assets not yet handled").
+		Partial("skill").
 		Unsupported("mcp-server-entry").
 		WithWriteToolOwned(true).
 		Build()
@@ -34,7 +35,7 @@ func ExampleNewCapabilities() {
 }
 
 func ExampleRunInprocServer() {
-	server := adapterkit.NewServer("echo", "0.1")
+	server := adapterkit.NewServer(adapterkit.ServerOptions{Name: "echo", Version: "0.1"})
 	server.OnInitialize(func(ctx context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
 		return adapterkit.InitializeResult{
 			Capabilities: adapterkit.NewCapabilities().Supports("rule").Build(),
@@ -57,7 +58,7 @@ func ExampleRunInprocServer() {
 	_, _ = client.Initialize(context.Background(), adapterkit.InitializeParams{
 		Client:           "example",
 		ProtocolVersions: []string{adapterkit.ContractVersionV1},
-		Cookie:           "test-cookie",
+		Cookie:           "0123456789abcdef0123456789abcdef",
 		WorkspaceRoot:    "/tmp/ws",
 		ReservedPrefix:   ".echo",
 		IRVersion:        "v1",

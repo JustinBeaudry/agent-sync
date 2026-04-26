@@ -20,7 +20,7 @@ func (b *CapabilitiesBuilder) Supports(kind string) *CapabilitiesBuilder {
 	return b.set(kind, CapabilitySupported)
 }
 
-func (b *CapabilitiesBuilder) Partial(kind, _ string) *CapabilitiesBuilder {
+func (b *CapabilitiesBuilder) Partial(kind string) *CapabilitiesBuilder {
 	return b.set(kind, CapabilityPartial)
 }
 

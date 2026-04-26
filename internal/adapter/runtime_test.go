@@ -134,17 +134,7 @@ func (a *scriptedAdapter) defaultInitResult(params contract.InitializeParams) (j
 	if declared == nil {
 		declared = []contract.DeclaredOutput{}
 	}
-	// Wire form: we synthesize the JSON manually to embed the cookie
-	// echo (the typed InitializeResult struct doesn't have a cookie
-	// field; the runtime extracts cookie from raw bytes).
-	wire := struct {
-		Server          string                     `json:"server"`
-		ProtocolVersion string                     `json:"protocol_version"`
-		Capabilities    contract.Capabilities      `json:"capabilities"`
-		DeclaredOutputs []contract.DeclaredOutput  `json:"declared_outputs"`
-		Cookie          string                     `json:"cookie,omitempty"`
-		Meta            map[string]json.RawMessage `json:"_meta,omitempty"`
-	}{
+	wire := contract.InitializeResult{
 		Server:          "scripted/0.1",
 		ProtocolVersion: adapter.ContractVersionV1,
 		Capabilities:    caps,
@@ -394,10 +384,62 @@ func TestSession_StateMachineEnforcesOrder(t *testing.T) {
 	if !errors.Is(err, adapter.ErrAdapterProtocolOrderViolation) {
 		t.Fatalf("Emit-before-Init: want ErrAdapterProtocolOrderViolation, got %v", err)
 	}
+	var emitRT *adapter.RuntimeError
+	if !errors.As(err, &emitRT) {
+		t.Fatalf("Emit-before-Init: want *RuntimeError, got %T", err)
+	}
+	if emitRT.Class != contract.ErrorClassAdapterProtocolOrder {
+		t.Fatalf("Emit-before-Init class=%q want %q", emitRT.Class, contract.ErrorClassAdapterProtocolOrder)
+	}
 
 	// Calling Initialized before Initialize must be rejected.
 	if err := sess.Initialized(ctx); !errors.Is(err, adapter.ErrAdapterProtocolOrderViolation) {
 		t.Errorf("Initialized-before-Init: want ErrAdapterProtocolOrderViolation, got %v", err)
+	} else {
+		var initRT *adapter.RuntimeError
+		if !errors.As(err, &initRT) {
+			t.Fatalf("Initialized-before-Init: want *RuntimeError, got %T", err)
+		}
+		if initRT.Class != contract.ErrorClassAdapterProtocolOrder {
+			t.Fatalf("Initialized-before-Init class=%q want %q", initRT.Class, contract.ErrorClassAdapterProtocolOrder)
+		}
+	}
+}
+
+func TestSession_AdapterProtocolOrderErrorClassFlowsThrough(t *testing.T) {
+	t.Parallel()
+
+	sa := &scriptedAdapter{
+		name:            "protocol-order",
+		declaredOutputs: []contract.DeclaredOutput{{Path: ".echo", Mode: contract.OutputModeOwnedSubdir}},
+		conceptKinds:    map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+		respondToEmit: func(_ contract.EmitParams) (json.RawMessage, *contract.Error) {
+			return nil, &contract.Error{
+				Code:    contract.CodeInvalidRequest,
+				Message: "emit called before initialized notification",
+				Data:    contract.ErrorData{ErrorClass: contract.ErrorClassAdapterProtocolOrder},
+			}
+		},
+	}
+	sess, ctx, _ := runScriptedSession(t, sa)
+
+	if _, err := sess.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if err := sess.Initialized(ctx); err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+
+	_, err := sess.Emit(ctx, "rule", json.RawMessage(`{"nodes":[{"id":"rule","kind":"rule"}]}`))
+	if err == nil {
+		t.Fatal("expected emit error")
+	}
+	var rt *adapter.RuntimeError
+	if !errors.As(err, &rt) {
+		t.Fatalf("want *RuntimeError, got %T: %v", err, err)
+	}
+	if rt.Class != contract.ErrorClassAdapterProtocolOrder {
+		t.Fatalf("class=%q want %q", rt.Class, contract.ErrorClassAdapterProtocolOrder)
 	}
 }
 

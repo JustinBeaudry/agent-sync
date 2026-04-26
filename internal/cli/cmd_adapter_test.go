@@ -113,8 +113,24 @@ func TestAdapterConformanceJSONOutput(t *testing.T) {
 	if got.Version != conformanceVersion {
 		t.Fatalf("version=%q want %q", got.Version, conformanceVersion)
 	}
+	if got.Summary.Total < 1 || got.Summary.Passed < 1 {
+		t.Fatalf("summary=%+v", got.Summary)
+	}
+	if len(got.Cases) < 1 {
+		t.Fatalf("cases=%+v", got.Cases)
+	}
 	if got.Summary.Failed != 0 {
 		t.Fatalf("summary=%+v", got.Summary)
+	}
+	foundHappyRule := false
+	for _, result := range got.Cases {
+		if result.Name == "happy-rule" && result.Status == conformance.StatusPass {
+			foundHappyRule = true
+			break
+		}
+	}
+	if !foundHappyRule {
+		t.Fatalf("cases=%+v", got.Cases)
 	}
 }
 
@@ -170,6 +186,64 @@ func TestAdapterConformanceTimeoutFailsCases(t *testing.T) {
 	}
 	if !strings.Contains(e.out.String(), "adapter: timeout") {
 		t.Fatalf("stdout=%q", e.out.String())
+	}
+}
+
+func TestAdapterConformanceInvalidFilterRegex(t *testing.T) {
+	t.Parallel()
+
+	e := newAdapterTestEnv(t)
+	err := e.run("conformance-test", ensureReferenceEchoBinaryForCLI(t), "--filter=[")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var exitErr *exitError
+	if errors.As(err, &exitErr) {
+		t.Fatalf("want plain error, got exit code %d", exitErr.ExitCode())
+	}
+	if !strings.Contains(err.Error(), "compile filter") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestAdapterConformanceBadFormat(t *testing.T) {
+	t.Parallel()
+
+	e := newAdapterTestEnv(t)
+	err := e.run("conformance-test", ensureReferenceEchoBinaryForCLI(t), "--format=xml")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "unsupported format") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestAdapterConformanceVerboseOutput(t *testing.T) {
+	t.Parallel()
+
+	e := newAdapterTestEnv(t)
+	err := e.run("conformance-test", ensureCrashyBinaryForCLI(t), "--filter=^happy-rule$", "--verbose")
+	exitErr := mustExitError(t, err)
+	if exitErr.ExitCode() != exitCodeConformanceFail {
+		t.Fatalf("exit code=%d want %d", exitErr.ExitCode(), exitCodeConformanceFail)
+	}
+	if !strings.Contains(e.out.String(), "actual_ops=") {
+		t.Fatalf("stdout=%q", e.out.String())
+	}
+}
+
+func TestAdapterConformanceDirectoryPath(t *testing.T) {
+	t.Parallel()
+
+	e := newAdapterTestEnv(t)
+	err := e.run("conformance-test", t.TempDir())
+	exitErr := mustExitError(t, err)
+	if exitErr.ExitCode() != exitCodeConformanceSpawn {
+		t.Fatalf("exit code=%d want %d", exitErr.ExitCode(), exitCodeConformanceSpawn)
+	}
+	if !strings.Contains(e.err.String(), "spawn error") {
+		t.Fatalf("stderr=%q", e.err.String())
 	}
 }
 

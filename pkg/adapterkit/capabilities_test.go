@@ -7,7 +7,7 @@ func TestCapabilitiesBuilder_BuildsConceptKinds(t *testing.T) {
 
 	caps := NewCapabilities().
 		Supports("rule").
-		Partial("skill", "assets pending").
+		Partial("skill").
 		Unsupported("mcp-server-entry").
 		WithWriteToolOwned(true).
 		WithProgress(true).

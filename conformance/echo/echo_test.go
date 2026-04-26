@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -71,6 +72,20 @@ func TestReferenceEchoRequiresCookie(t *testing.T) {
 	}
 }
 
+func TestHandleEmitRejectsInvalidNodeID(t *testing.T) {
+	t.Parallel()
+
+	_, err := handleEmit(context.Background(), adapterkit.EmitParams{
+		Target: "bad-id",
+		IR: mustJSON(t, emitDocument{
+			Nodes: []emitNode{{ID: "../escape", Body: json.RawMessage(`"bad"`)}},
+		}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid node id") {
+		t.Fatalf("handleEmit error=%v", err)
+	}
+}
+
 func mustPositiveCases(t *testing.T) []conformance.Case {
 	t.Helper()
 
@@ -99,6 +114,16 @@ func ensureReferenceEchoBinary(t *testing.T) string {
 		t.Fatalf("build reference echo binary: %v", echoBinaryErr)
 	}
 	return echoBinaryPath
+}
+
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	return data
 }
 
 func buildReferenceEchoBinary() (string, error) {

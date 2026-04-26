@@ -39,10 +39,13 @@ type Summary struct {
 
 // CaseResult is one case's outcome.
 type CaseResult struct {
-	Name      string              `json:"name"`
-	Status    string              `json:"status"`
-	Reason    string              `json:"reason,omitempty"`
-	ActualOps []contract.OpRecord `json:"actual_ops,omitempty"`
+	Name        string              `json:"name"`
+	Status      string              `json:"status"`
+	Reason      string              `json:"reason"`
+	ExpectedOps []contract.OpRecord `json:"expected_ops"`
+	ActualOps   []contract.OpRecord `json:"actual_ops"`
+	MissingOps  []contract.OpRecord `json:"missing_ops,omitempty"`
+	ExtraOps    []contract.OpRecord `json:"extra_ops,omitempty"`
 }
 
 // Run executes the supplied adapter binary against the corpus.
@@ -63,7 +66,7 @@ func Run(ctx context.Context, binary string, opts RunOptions) (Report, error) {
 
 	for _, tc := range cases {
 		if err := ctx.Err(); err != nil {
-			report.Summary.Total = len(report.Cases)
+			report.Summary = tallySummary(report.Cases)
 			return report, fmt.Errorf("conformance: run aborted before case %q: %w", tc.Name, err)
 		}
 
@@ -74,22 +77,12 @@ func Run(ctx context.Context, binary string, opts RunOptions) (Report, error) {
 		report.Cases = append(report.Cases, result)
 	}
 
-	report.Summary.Total = len(report.Cases)
-	for _, result := range report.Cases {
-		switch result.Status {
-		case StatusPass:
-			report.Summary.Passed++
-		case StatusFail:
-			report.Summary.Failed++
-		case StatusSkip:
-			report.Summary.Skipped++
-		}
-	}
+	report.Summary = tallySummary(report.Cases)
 
 	return report, nil
 }
 
-func runCase(ctx context.Context, binary string, opts RunOptions, tc Case) (CaseResult, error) {
+func runCase(ctx context.Context, binary string, opts RunOptions, tc Case) (result CaseResult, err error) {
 	if tc.Expect.Kind == ExpectedKindSkip {
 		return CaseResult{Name: tc.Name, Status: StatusSkip, Reason: tc.Expect.Skip}, nil
 	}
@@ -110,50 +103,66 @@ func runCase(ctx context.Context, binary string, opts RunOptions, tc Case) (Case
 		Timeouts:      opts.Timeouts,
 	})
 	if err != nil {
-		return CaseResult{}, fmt.Errorf("conformance: start session for %q: %w", tc.Name, err)
+		spawnFailure := CaseResult{
+			Name:   tc.Name,
+			Status: StatusFail,
+			Reason: fmt.Sprintf("session spawn failed: %v", err),
+		}
+		if tc.Expect.Kind == ExpectedKindOps {
+			spawnFailure.ExpectedOps = append([]contract.OpRecord(nil), tc.Expect.Ops...)
+			spawnFailure.ActualOps = []contract.OpRecord{}
+		}
+		return spawnFailure, nil
 	}
-	cleanup := func() {
+	var actualOps []contract.OpRecord
+	finalized := false
+	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolveShutdownTimeout(opts.Timeouts))
 		defer cancel()
-		_ = session.Shutdown(shutdownCtx)
-	}
-	defer cleanup()
+		shutdownErr := session.Shutdown(shutdownCtx)
+		if finalized {
+			return
+		}
+		result = classifyCaseResult(tc, actualOps, shutdownErr)
+	}()
 
 	initResult, err := session.Initialize(ctx)
 	if err != nil {
+		finalized = true
 		return classifyCaseResult(tc, nil, err), nil
 	}
 
 	if ok, reason := caseSupportedByAdapter(tc, initResult); !ok {
+		finalized = true
 		return CaseResult{Name: tc.Name, Status: StatusSkip, Reason: reason}, nil
 	}
 
 	if err := session.Initialized(ctx); err != nil {
+		finalized = true
 		return classifyCaseResult(tc, nil, err), nil
 	}
 
 	emitResult, err := session.Emit(ctx, tc.Name, tc.IR)
 	if err != nil {
+		finalized = true
 		return classifyCaseResult(tc, nil, err), nil
 	}
 
-	actualOps := emitResult.OpsPerformed
-	shutdownErr := session.Shutdown(ctx)
-	if shutdownErr != nil {
-		return classifyCaseResult(tc, actualOps, shutdownErr), nil
-	}
-
-	return classifyCaseResult(tc, actualOps, nil), nil
+	actualOps = emitResult.OpsPerformed
+	return CaseResult{}, nil
 }
 
 func classifyCaseResult(tc Case, actualOps []contract.OpRecord, err error) CaseResult {
-	result := CaseResult{Name: tc.Name}
-	if actualOps != nil {
-		result.ActualOps = actualOps
-	}
+	result := CaseResult{Name: tc.Name, Reason: ""}
 
 	switch tc.Expect.Kind {
 	case ExpectedKindOps:
+		result.ExpectedOps = append([]contract.OpRecord(nil), tc.Expect.Ops...)
+		if actualOps == nil {
+			result.ActualOps = []contract.OpRecord{}
+		} else {
+			result.ActualOps = append([]contract.OpRecord(nil), actualOps...)
+		}
 		if err != nil {
 			result.Status = StatusFail
 			result.Reason = fmt.Sprintf("unexpected runtime error: %v", err)
@@ -165,9 +174,14 @@ func classifyCaseResult(tc Case, actualOps []contract.OpRecord, err error) CaseR
 			return result
 		}
 		result.Status = StatusFail
+		result.MissingOps = missing
+		result.ExtraOps = extra
 		result.Reason = fmt.Sprintf("ops mismatch: missing=%v extra=%v", missing, extra)
 		return result
 	case ExpectedKindError:
+		if actualOps != nil {
+			result.ActualOps = append([]contract.OpRecord(nil), actualOps...)
+		}
 		if MatchError(tc.Expect.Error, err) {
 			result.Status = StatusPass
 			return result
@@ -184,6 +198,21 @@ func classifyCaseResult(tc Case, actualOps []contract.OpRecord, err error) CaseR
 		result.Reason = tc.Expect.Skip
 		return result
 	}
+}
+
+func tallySummary(results []CaseResult) Summary {
+	summary := Summary{Total: len(results)}
+	for _, result := range results {
+		switch result.Status {
+		case StatusPass:
+			summary.Passed++
+		case StatusFail:
+			summary.Failed++
+		case StatusSkip:
+			summary.Skipped++
+		}
+	}
+	return summary
 }
 
 func caseSupportedByAdapter(tc Case, initResult *contract.InitializeResult) (bool, string) {

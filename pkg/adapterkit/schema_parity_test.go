@@ -41,6 +41,7 @@ func TestSchemaParity_SamplesValidateAgainstContractSchemas(t *testing.T) {
 				ProtocolVersion: ContractVersionV1,
 				Capabilities:    NewCapabilities().Supports("rule").WithWriteToolOwned(true).Build(),
 				DeclaredOutputs: []DeclaredOutput{{Path: ".echo", Mode: OutputModeOwnedSubdir}},
+				Cookie:          "0123456789abcdef0123456789abcdef",
 			},
 		},
 		{
@@ -123,6 +124,9 @@ func TestSchemaParity_SamplesValidateAgainstContractSchemas(t *testing.T) {
 			valueBytes, err := json.Marshal(tc.value)
 			if err != nil {
 				t.Fatalf("Marshal: %v", err)
+			}
+			if tc.name == "InitializeResult" && !strings.Contains(string(valueBytes), `"cookie":"0123456789abcdef0123456789abcdef"`) {
+				t.Fatalf("initialize result json missing cookie: %s", valueBytes)
 			}
 			if err := validateJSONAgainstSchema(schemaBytes, tc.schemaPath, valueBytes); err != nil {
 				t.Fatalf("schema validation failed: %v\njson=%s", err, valueBytes)

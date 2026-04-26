@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/aienvs/aienvs/internal/ir"
 	"github.com/aienvs/aienvs/pkg/adapterkit"
@@ -16,6 +17,8 @@ const (
 	serverVersion = "0.1"
 	outputRoot    = ".echo"
 )
+
+var nodeIDPattern = regexp.MustCompile(`\A[a-z0-9][a-z0-9_-]{0,63}\z`)
 
 type emitDocument struct {
 	Nodes []emitNode `json:"nodes"`
@@ -38,7 +41,7 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	server := adapterkit.NewServer(serverName, serverVersion)
+	server := adapterkit.NewServer(adapterkit.ServerOptions{Name: serverName, Version: serverVersion})
 	server.OnInitialize(func(context.Context, adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
 		return adapterkit.InitializeResult{
 			Capabilities:    buildCapabilities(),
@@ -75,10 +78,20 @@ func handleEmit(_ context.Context, params adapterkit.EmitParams) (adapterkit.Emi
 	}
 
 	for _, node := range doc.Nodes {
+		if !nodeIDPattern.MatchString(node.ID) {
+			return adapterkit.EmitResult{}, &adapterkit.Error{
+				Code:    adapterkit.CodeInvalidParams,
+				Message: fmt.Sprintf("echo: invalid node id %q", node.ID),
+			}
+		}
 		content, err := nodeContent(node.Body)
 		if err != nil {
 			return adapterkit.EmitResult{}, fmt.Errorf("echo: node %q body: %w", node.ID, err)
 		}
+		// Wire-protocol paths are forward-slash regardless of host OS; do not
+		// switch to filepath.Join here. See
+		// docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md
+		// Rule 3 for the exception.
 		writeOp, err := adapterkit.NewOpWriteFile(outputRoot+"/"+node.ID+".md", 0o644, content)
 		if err != nil {
 			return adapterkit.EmitResult{}, fmt.Errorf("echo: build write_file op for %q: %w", node.ID, err)

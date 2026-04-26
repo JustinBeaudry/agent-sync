@@ -81,7 +81,7 @@ func TestSynthesizeInitResult_ProducesValidJSON(t *testing.T) {
 func TestAssertProtocolShutdownAcked_FailsWhenNoAck(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer("echo", "0.1")
+	server := NewServer(ServerOptions{Name: "echo", Version: "0.1"})
 	reporter := &stubReporter{}
 	AssertProtocolShutdownAcked(reporter, server)
 	if reporter.fatalMessage == "" {

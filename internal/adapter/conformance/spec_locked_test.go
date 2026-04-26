@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -32,6 +33,10 @@ func TestSpecLockedExamplesMatchFixturesAndHarness(t *testing.T) {
 
 	examples, err := loadSpecExamples(filepath.Join("..", "..", "..", "docs", "spec", "adapter-protocol-v1.md"))
 	if err != nil {
+		specDocPath := filepath.Join("..", "..", "..", "docs", "spec", "adapter-protocol-v1.md")
+		if errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("spec doc not found at %s -- run go test from the repo root", specDocPath)
+		}
 		t.Fatalf("load spec examples: %v", err)
 	}
 	if len(examples) == 0 {
@@ -135,6 +140,9 @@ func loadSpecExamples(path string) ([]specExample, error) {
 			if name == "" {
 				return nil, fmt.Errorf("directive at line %d has empty fixture name", i+1)
 			}
+			if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") || !validFixtureName(name) {
+				return nil, fmt.Errorf("invalid fixture name %q: must match [a-z0-9][a-z0-9-]*", name)
+			}
 			if i+2 >= len(lines) || strings.TrimSpace(lines[i+2]) != "```" {
 				return nil, fmt.Errorf("directive for %q missing closing fence", name)
 			}
@@ -198,4 +206,22 @@ func jsonEqual(a, b json.RawMessage) bool {
 		return false
 	}
 	return bytes.Equal(ab, bb)
+}
+
+func validFixtureName(name string) bool {
+	if name == "" {
+		return false
+	}
+	first := name[0]
+	if (first < 'a' || first > 'z') && (first < '0' || first > '9') {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }

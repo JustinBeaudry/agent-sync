@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -132,6 +134,31 @@ func TestRun_ContextCancellationAbortsCorpus(t *testing.T) {
 	}
 }
 
+func TestRun_SessionSpawnFailureMarksCasesFailedAndContinues(t *testing.T) {
+	t.Parallel()
+
+	binary := filepath.Join(t.TempDir(), "not-executable")
+	if err := os.WriteFile(binary, []byte("plain text"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	report, err := Run(context.Background(), binary, RunOptions{Cases: mustCasesByName(t, "happy-rule", "happy-command")})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(report.Cases) != 2 {
+		t.Fatalf("len(report.Cases)=%d want 2", len(report.Cases))
+	}
+	if report.Summary.Total != 2 || report.Summary.Failed != 2 {
+		t.Fatalf("summary=%+v", report.Summary)
+	}
+	for _, result := range report.Cases {
+		if result.Status != StatusFail || !strings.Contains(result.Reason, "session spawn failed") {
+			t.Fatalf("result=%+v", result)
+		}
+	}
+}
+
 func TestMatchOps_OrderInsensitiveByDefault(t *testing.T) {
 	t.Parallel()
 
@@ -171,6 +198,44 @@ func TestMatchOps_ReportsMissingAndExtra(t *testing.T) {
 	}
 	if len(extra) != 1 || extra[0].Path != ".echo/b.md" {
 		t.Fatalf("extra=%v", extra)
+	}
+}
+
+func TestRun_FailingOpsCaseIncludesExpectedActualMissingExtraAndReason(t *testing.T) {
+	t.Parallel()
+
+	echo := ensureEchoBinary(t)
+	cases := mustCasesByName(t, "happy-rule")
+	cases[0].Expect.Ops = []contract.OpRecord{{Op: contract.OpKindWriteFile, Path: ".echo/wrong.md"}}
+
+	report, err := Run(context.Background(), echo, RunOptions{Cases: cases})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(report.Cases) != 1 {
+		t.Fatalf("len(report.Cases)=%d want 1", len(report.Cases))
+	}
+
+	result := report.Cases[0]
+	if result.Status != StatusFail {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.ExpectedOps) == 0 || len(result.ActualOps) == 0 || len(result.MissingOps) == 0 || len(result.ExtraOps) == 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if result.Reason == "" {
+		t.Fatalf("result=%+v", result)
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	text := string(data)
+	for _, key := range []string{`"expected_ops":`, `"actual_ops":`, `"missing_ops":`, `"extra_ops":`, `"reason":`} {
+		if !strings.Contains(text, key) {
+			t.Fatalf("json=%s missing %s", text, key)
+		}
 	}
 }
 

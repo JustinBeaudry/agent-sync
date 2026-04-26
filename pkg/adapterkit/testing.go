@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync/atomic"
+	"time"
 )
 
 // ScriptedResponder is a convenience for building a Server from
@@ -21,7 +22,7 @@ type ScriptedResponder struct {
 }
 
 func (r *ScriptedResponder) AsServer(name, version string) *Server {
-	server := NewServer(name, version)
+	server := NewServer(ServerOptions{Name: name, Version: version})
 	server.OnInitialize(func(ctx context.Context, received InitializeParams) (InitializeResult, error) {
 		if r.RespondToInitialize != nil {
 			result, rpcErr := r.RespondToInitialize(ctx, received)
@@ -207,7 +208,7 @@ func RunInprocServer(t testReporter, server *Server) (*Client, func()) {
 	server.stdin = rtToAdapterR
 	server.stdout = adapterToRtW
 	server.stderr = io.Discard
-	server.getenv = func(string) string { return "test-cookie" }
+	server.getenv = func(string) string { return "0123456789abcdef0123456789abcdef" }
 
 	go func() {
 		errCh <- server.Run(ctx)
@@ -235,7 +236,15 @@ func RunInprocServer(t testReporter, server *Server) (*Client, func()) {
 
 func AssertProtocolShutdownAcked(t testReporter, server *Server) {
 	t.Helper()
-	if !server.protocolShutdownAcked() {
-		t.Fatal("server did not acknowledge protocol shutdown")
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for {
+		if server.protocolShutdownAcked() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("server did not acknowledge protocol shutdown")
+			return
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

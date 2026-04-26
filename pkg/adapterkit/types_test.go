@@ -34,6 +34,7 @@ func TestTypes_RoundTripJSON(t *testing.T) {
 				ProtocolVersion: ContractVersionV1,
 				Capabilities:    NewCapabilities().Supports("rule").Build(),
 				DeclaredOutputs: []DeclaredOutput{{Path: ".echo", Mode: OutputModeOwnedSubdir}},
+				Cookie:          "0123456789abcdef0123456789abcdef",
 			},
 			target: &InitializeResult{},
 		},

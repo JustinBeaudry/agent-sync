@@ -3,6 +3,7 @@ package adapterkit
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -12,7 +13,7 @@ import (
 func TestServerRun_Lifecycle(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer("echo", "0.1")
+	server := NewServer(ServerOptions{Name: "echo", Version: "0.1"})
 	server.OnInitialize(func(ctx context.Context, params InitializeParams) (InitializeResult, error) {
 		return InitializeResult{
 			Capabilities: NewCapabilities().Supports("rule").Build(),
@@ -72,12 +73,15 @@ func TestServerRun_Lifecycle(t *testing.T) {
 func TestServerRun_MissingCookieReturnsExit7(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer("echo", "0.1")
-	server.stdin = bytes.NewReader(nil)
-	server.stdout = io.Discard
 	stderr := &bytes.Buffer{}
-	server.stderr = stderr
-	server.getenv = func(string) string { return "" }
+	server := NewServer(ServerOptions{
+		Name:    "echo",
+		Version: "0.1",
+		Stdin:   bytes.NewReader(nil),
+		Stdout:  io.Discard,
+		Stderr:  stderr,
+		Getenv:  func(string) string { return "" },
+	})
 
 	err := server.Run(context.Background())
 	if ExitCode(err) != MissingCookieExitCode {
@@ -88,10 +92,32 @@ func TestServerRun_MissingCookieReturnsExit7(t *testing.T) {
 	}
 }
 
+func TestServerRun_InvalidCookieFormatReturnsExit7(t *testing.T) {
+	t.Parallel()
+
+	stderr := &bytes.Buffer{}
+	server := NewServer(ServerOptions{
+		Name:    "echo",
+		Version: "0.1",
+		Stdin:   bytes.NewReader(nil),
+		Stdout:  io.Discard,
+		Stderr:  stderr,
+		Getenv:  func(string) string { return "test-cookie" },
+	})
+
+	err := server.Run(context.Background())
+	if ExitCode(err) != MissingCookieExitCode {
+		t.Fatalf("ExitCode=%d want %d (err=%v)", ExitCode(err), MissingCookieExitCode, err)
+	}
+	if !strings.Contains(stderr.String(), "invalid format") {
+		t.Fatalf("stderr=%q", stderr.String())
+	}
+}
+
 func TestServerRun_ProtocolVersionMismatchReturnsTypedError(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer("echo", "0.1")
+	server := NewServer(ServerOptions{Name: "echo", Version: "0.1"})
 	client, cleanup := RunInprocServer(t, server)
 	t.Cleanup(cleanup)
 
@@ -118,7 +144,7 @@ func TestServerRun_ProtocolVersionMismatchReturnsTypedError(t *testing.T) {
 func TestServerRun_RecoversHandlerPanics(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer("echo", "0.1")
+	server := NewServer(ServerOptions{Name: "echo", Version: "0.1"})
 	server.OnInitialize(func(ctx context.Context, params InitializeParams) (InitializeResult, error) {
 		return InitializeResult{
 			Capabilities: NewCapabilities().Supports("rule").Build(),
@@ -163,4 +189,102 @@ func TestServerRun_RecoversHandlerPanics(t *testing.T) {
 	if rpcErr.Data.ErrorClass != ErrorClassAdapterPanic {
 		t.Fatalf("error_class=%q", rpcErr.Data.ErrorClass)
 	}
+}
+
+func TestDispatchRequest_ShutdownWriteFailureDoesNotAckProtocolShutdown(t *testing.T) {
+	t.Parallel()
+
+	server := NewServer(ServerOptions{
+		Name:    "echo",
+		Version: "0.1",
+		Stdout:  failingWriter{err: errors.New("write failed")},
+	})
+	server.setState(serverStateReady)
+
+	err := server.dispatchRequest(context.Background(), inboundMessage{
+		kind:   inboundKindRequest,
+		id:     json.RawMessage("1"),
+		method: MethodShutdown,
+	})
+	if err == nil || !strings.Contains(err.Error(), "write failed") {
+		t.Fatalf("dispatchRequest error=%v", err)
+	}
+	if server.protocolShutdownAcked() {
+		t.Fatal("shutdown should not be acknowledged after write failure")
+	}
+
+	reporter := &stubReporter{}
+	AssertProtocolShutdownAcked(reporter, server)
+	if reporter.fatalMessage == "" {
+		t.Fatal("AssertProtocolShutdownAcked should fail when shutdown was not acknowledged")
+	}
+}
+
+func TestServerRun_InitializedNotificationLogsErrorToStderr(t *testing.T) {
+	t.Parallel()
+
+	stderr := &bytes.Buffer{}
+	server := NewServer(ServerOptions{
+		Name:    "echo",
+		Version: "0.1",
+		Stdin: bytes.NewReader(mustFrame(t, map[string]any{
+			"jsonrpc": JSONRPCVersion,
+			"method":  MethodInitialized,
+		})),
+		Stdout: io.Discard,
+		Stderr: stderr,
+		Getenv: func(string) string { return "0123456789abcdef0123456789abcdef" },
+	})
+
+	err := server.Run(context.Background())
+	var rpcErr *Error
+	if !errors.As(err, &rpcErr) {
+		t.Fatalf("want *Error, got %T: %v", err, err)
+	}
+	if !strings.Contains(stderr.String(), "initialized handler error") {
+		t.Fatalf("stderr=%q", stderr.String())
+	}
+}
+
+func TestServerRun_TruncatedHeaderReturnsUnexpectedEOF(t *testing.T) {
+	t.Parallel()
+
+	server := NewServer(ServerOptions{
+		Name:    "echo",
+		Version: "0.1",
+		Stdin:   strings.NewReader("Content-Length: 10"),
+		Stdout:  io.Discard,
+		Stderr:  io.Discard,
+		Getenv:  func(string) string { return "0123456789abcdef0123456789abcdef" },
+	})
+
+	err := server.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("want io.ErrUnexpectedEOF, got %v", err)
+	}
+}
+
+type failingWriter struct {
+	err error
+}
+
+func (w failingWriter) Write([]byte) (int, error) {
+	return 0, w.err
+}
+
+func mustFrame(t *testing.T, payload any) []byte {
+	t.Helper()
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var buf bytes.Buffer
+	if err := writeFrame(&buf, data); err != nil {
+		t.Fatalf("writeFrame: %v", err)
+	}
+	return buf.Bytes()
 }

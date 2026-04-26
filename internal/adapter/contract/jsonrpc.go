@@ -38,6 +38,10 @@ const (
 type ErrorClass string
 
 const (
+	// ErrorClassAdapterProtocolOrder reports a lifecycle/order violation
+	// (for example, emit-before-initialized or double-initialize). This is
+	// distinct from adapter-panic, which signals a bug.
+	ErrorClassAdapterProtocolOrder    ErrorClass = "adapter-protocol-order"
 	ErrorClassAdapterPanic            ErrorClass = "adapter-panic"
 	ErrorClassAdapterTimeout          ErrorClass = "adapter-timeout"
 	ErrorClassAdapterProtocolMismatch ErrorClass = "adapter-protocol-mismatch"

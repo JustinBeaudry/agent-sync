@@ -124,7 +124,7 @@ func TestLoadCorpus_HappyFixturesCoverAllIRKinds(t *testing.T) {
 				Kind ir.Kind `json:"kind"`
 			} `json:"nodes"`
 		}
-		if err := jsonUnmarshal(tc.IR, &payload); err != nil {
+		if err := json.Unmarshal(tc.IR, &payload); err != nil {
 			t.Fatalf("case %s: decode IR: %v", tc.Name, err)
 		}
 		for _, node := range payload.Nodes {
@@ -157,8 +157,21 @@ func TestLoadCorpus_AllErrorExpectationsAreRecognized(t *testing.T) {
 	}
 }
 
-func jsonUnmarshal(data []byte, v any) error {
-	return json.Unmarshal(data, v)
+func isKnownExpectedError(name string) bool {
+	switch name {
+	case "ErrAdapterCookieMissing",
+		"ErrAdapterCookieMismatch",
+		"ErrAdapterProtocolMismatch",
+		"ErrAdapterUndeclaredOutput",
+		"ErrAdapterProtocolOrderViolation",
+		"ErrAdapterCapabilityLied",
+		"ErrAdapterTimeout",
+		"ErrFrameTooLarge",
+		"SubprocessExitError":
+		return true
+	default:
+		return false
+	}
 }
 
 func validCaseJSON(name, kind string) string {

@@ -37,6 +37,7 @@ wire contract from this document alone.
 - [13. Reserved for Unit 8b](#13-reserved-for-unit-8b)
 - [14. Canonical Examples](#14-canonical-examples)
 - [15. Conformance](#15-conformance)
+- [16. CLI Reference](#16-cli-reference)
 
 ## 1. Overview
 
@@ -54,7 +55,8 @@ The lifecycle is fixed:
 5. Runtime sends one or more `emit` requests.
 6. Runtime sends `shutdown`.
 
-The runtime treats any lifecycle-order violation as adapter fault.
+The runtime treats any lifecycle-order violation as
+`adapter-protocol-order`.
 
 ## 2. Framing
 
@@ -404,6 +406,7 @@ The runtime understands the following frozen classifier strings:
 
 | Value | Meaning |
 |---|---|
+| `adapter-protocol-order` | lifecycle/order violation such as emit-before-initialized or double-initialize |
 | `adapter-panic` | adapter bug, malformed behavior, or unexpected subprocess failure |
 | `adapter-timeout` | handshake, emit, or shutdown exceeded its timeout |
 | `adapter-protocol-mismatch` | version or framing mismatch |
@@ -430,10 +433,17 @@ Rules:
 
 - The adapter MUST treat a missing cookie as fatal and exit non-zero.
 - The cookie value is opaque to the adapter.
+- The runtime always delivers exactly 32 lowercase hexadecimal
+  characters with no surrounding whitespace.
+- Comparison is byte-exact; any trailing newline, space, encoding
+  difference, or case change results in `adapter-exec-denied`.
 - The runtime never reveals the expected cookie value in mismatch error
   messages.
 - A missing or mismatched cookie is classified as
   `adapter-exec-denied`.
+- Adapters MUST NOT log, print, or otherwise expose the cookie value to
+  logs, telemetry, or stderr; exposure weakens the auth boundary the
+  cookie exists to enforce.
 
 ## 10. Reserved `_meta`
 
@@ -465,6 +475,12 @@ overrides are reserved for future work.
 Versioning rules:
 
 - `aienvs/v1` framing and envelope rules are frozen.
+- The runtime performs an exact-string match on `protocol_version`
+  against `aienvs/v1`. Any other value, including `aienvs/v1.1` or
+  `aienvs/v1.0.0`, is rejected with `adapter-protocol-mismatch`.
+- There is no minor-version negotiation in v1; capabilities grow
+  additively under `Capabilities{}` instead. Counter-propose
+  negotiation is reserved for Unit 8b.
 - Additive growth happens under `capabilities`.
 - Adding or renaming an envelope field is a breaking change.
 - `aienvs/v2` is reserved for envelope-level or framing-level breaks.
@@ -483,6 +499,13 @@ Not part of v1:
 
 The following examples are spec-locked. Each directive fence names the
 matching corpus fixture under `internal/adapter/conformance/corpus/`.
+Canonical examples in this spec are tagged with an
+`aienvs:fixture-name` directive immediately preceding the JSON code
+fence. The directive links a spec example to a corresponding corpus
+fixture in `internal/adapter/conformance/corpus/`. The spec-locked test
+in `internal/adapter/conformance/spec_locked_test.go` parses these
+directives and asserts that the example payload exactly matches the
+fixture's payload; drift in either direction fails CI.
 
 ```aienvs:fixture-name
 spec-example-handshake
@@ -527,5 +550,40 @@ aienvs adapter conformance-test ./my-adapter --format=json
 ```
 
 Default CLI behavior runs the positive corpus (`happy-*` plus
-`spec-example-*`). Internal adversarial fixtures remain available via
-`--filter='.*'` or narrower expressions such as `--filter='^error-'`.
+`spec-example-*`). Use `--include-adversarial` to also run `error-*`
+fixtures; those require a hostile binary to pass and will fail against
+an otherwise-correct adapter.
+
+The JSON output schema is:
+
+```json
+{
+  "version": "aienvs/v1",
+  "cases": [
+    {
+      "name": "string",
+      "status": "pass|fail|skip",
+      "reason": "string",
+      "expected_ops": [],
+      "actual_ops": [],
+      "missing_ops": [],
+      "extra_ops": []
+    }
+  ],
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0
+  }
+}
+```
+
+## 16. CLI Reference
+
+`aienvs adapter conformance-test` exit codes:
+
+- `0`: all cases passed (skips do not count as failures)
+- `1`: one or more cases failed
+- `2`: adapter binary could not be spawned (path not found, not
+  executable, or is a directory)

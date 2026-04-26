@@ -143,7 +143,10 @@ type InitializeResult struct {
 	ProtocolVersion string           `json:"protocol_version"`
 	Capabilities    Capabilities     `json:"capabilities"`
 	DeclaredOutputs []DeclaredOutput `json:"declared_outputs"`
-	Meta            json.RawMessage  `json:"_meta,omitempty"`
+	// Echoed magic cookie value; runtime validates against the per-spawn
+	// AIENVS_ADAPTER_COOKIE.
+	Cookie string          `json:"cookie,omitempty"`
+	Meta   json.RawMessage `json:"_meta,omitempty"`
 }
 
 // Capabilities is the additive extension point for v1. New fields land

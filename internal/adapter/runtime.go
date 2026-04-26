@@ -29,7 +29,7 @@ var reWindowsVolumePrefix = regexp.MustCompile(`\A[A-Za-z]:`)
 func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeResult, error) {
 	if s.state != sessionStateNew {
 		return nil, &RuntimeError{
-			Class: contract.ErrorClassAdapterPanic,
+			Class: contract.ErrorClassAdapterProtocolOrder,
 			Err:   fmt.Errorf("%w: Initialize called from state %d", ErrAdapterProtocolOrderViolation, s.state),
 		}
 	}
@@ -110,7 +110,7 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 func (s *AdapterSession) Initialized(ctx context.Context) error {
 	if s.state != sessionStateInitialized {
 		return &RuntimeError{
-			Class: contract.ErrorClassAdapterPanic,
+			Class: contract.ErrorClassAdapterProtocolOrder,
 			Err:   fmt.Errorf("%w: Initialized called from state %d", ErrAdapterProtocolOrderViolation, s.state),
 		}
 	}
@@ -137,7 +137,7 @@ func (s *AdapterSession) Initialized(ctx context.Context) error {
 func (s *AdapterSession) Emit(ctx context.Context, target string, ir json.RawMessage) (*contract.EmitResult, error) {
 	if s.state != sessionStateInitialized && s.state != sessionStateEmitting {
 		return nil, &RuntimeError{
-			Class: contract.ErrorClassAdapterPanic,
+			Class: contract.ErrorClassAdapterProtocolOrder,
 			Err:   fmt.Errorf("%w: Emit called from state %d", ErrAdapterProtocolOrderViolation, s.state),
 		}
 	}

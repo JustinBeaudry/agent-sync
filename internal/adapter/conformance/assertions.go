@@ -84,20 +84,3 @@ func MatchError(expected string, err error) bool {
 		return false
 	}
 }
-
-func isKnownExpectedError(name string) bool {
-	switch name {
-	case "ErrAdapterCookieMissing",
-		"ErrAdapterCookieMismatch",
-		"ErrAdapterProtocolMismatch",
-		"ErrAdapterUndeclaredOutput",
-		"ErrAdapterProtocolOrderViolation",
-		"ErrAdapterCapabilityLied",
-		"ErrAdapterTimeout",
-		"ErrFrameTooLarge",
-		"SubprocessExitError":
-		return true
-	default:
-		return false
-	}
-}

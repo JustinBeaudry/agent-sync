@@ -10,11 +10,13 @@ import (
 	"os/exec"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/aienvs/aienvs/internal/adapter/conformance"
+	"github.com/aienvs/aienvs/internal/adapter/contract"
 )
 
 const (
@@ -80,17 +82,29 @@ func NewAdapterCommand(deps AdapterDeps) *cobra.Command {
 
 func newAdapterConformanceTestCmd(deps AdapterDeps) *cobra.Command {
 	var (
-		verbose bool
-		format  string
-		filter  string
-		timeout time.Duration
+		verbose            bool
+		format             string
+		filter             string
+		includeAdversarial bool
+		timeout            time.Duration
 	)
 
 	cmd := &cobra.Command{
 		Use:   "conformance-test <binary>",
 		Short: "Run the frozen adapter conformance corpus against a binary",
-		Long: "Run the positive `aienvs/v1` adapter conformance fixtures against a binary. " +
-			"Use --filter='.*' to include internal adversarial fixtures.",
+		Long: "Run the `aienvs/v1` adapter conformance corpus against a binary. " +
+			"By default, runs only positive (`happy-*`) and spec-locked (`spec-example-*`) fixtures. " +
+			"Use --include-adversarial to also run `error-*` fixtures, which require a hostile binary to pass — they will fail against a correct adapter.\n\n" +
+			"Exit codes:\n" +
+			"  0  All cases passed (skips don't count as failures)\n" +
+			"  1  One or more cases failed\n" +
+			"  2  Binary could not be spawned (path not found, not executable, is a directory)",
+		Example: strings.Join([]string{
+			"aienvs adapter conformance-test ./my-adapter",
+			"aienvs adapter conformance-test ./my-adapter --format=json",
+			"aienvs adapter conformance-test ./my-adapter --filter='^happy-' --timeout=5s",
+			"aienvs adapter conformance-test ./my-adapter --include-adversarial",
+		}, "\n"),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			binary, err := resolveBinaryPath(args[0])
@@ -99,6 +113,9 @@ func newAdapterConformanceTestCmd(deps AdapterDeps) *cobra.Command {
 				return &exitError{code: exitCodeConformanceSpawn, err: fmt.Errorf("resolve binary %q: %w", args[0], err)}
 			}
 
+			if !cmd.Flags().Changed("filter") && includeAdversarial {
+				filter = ".*"
+			}
 			compiled, err := regexp.Compile(filter)
 			if err != nil {
 				return fmt.Errorf("compile filter %q: %w", filter, err)
@@ -138,6 +155,7 @@ func newAdapterConformanceTestCmd(deps AdapterDeps) *cobra.Command {
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "include failure detail in the report")
 	cmd.Flags().StringVar(&format, "format", reportFormatText, "output format: text or json")
 	cmd.Flags().StringVar(&filter, "filter", defaultCLIConformanceRE, "regular expression selecting corpus cases by name")
+	cmd.Flags().BoolVar(&includeAdversarial, "include-adversarial", false, "include adversarial error-* fixtures in addition to the default happy/spec corpus")
 	cmd.Flags().DurationVar(&timeout, "timeout", 0, "override handshake, emit, and shutdown timeouts for every case")
 	return cmd
 }
@@ -200,16 +218,41 @@ func renderTextConformanceReport(w io.Writer, report conformance.Report, verbose
 		if result.Reason != "" {
 			line += ": " + result.Reason
 		}
+		if len(result.MissingOps) > 0 || len(result.ExtraOps) > 0 {
+			line += fmt.Sprintf(" (missing=%d extra=%d)", len(result.MissingOps), len(result.ExtraOps))
+		}
 		if _, err := fmt.Fprintln(w, line); err != nil {
 			return err
 		}
-		if verbose && len(result.ActualOps) > 0 {
-			data, err := json.Marshal(result.ActualOps)
+		if verbose {
+			actualOps := result.ActualOps
+			if actualOps == nil {
+				actualOps = []contract.OpRecord{}
+			}
+			data, err := json.Marshal(actualOps)
 			if err != nil {
 				return fmt.Errorf("marshal actual ops for %q: %w", result.Name, err)
 			}
 			if _, err := fmt.Fprintf(w, "  actual_ops=%s\n", data); err != nil {
 				return err
+			}
+			if len(result.MissingOps) > 0 {
+				data, err := json.Marshal(result.MissingOps)
+				if err != nil {
+					return fmt.Errorf("marshal missing ops for %q: %w", result.Name, err)
+				}
+				if _, err := fmt.Fprintf(w, "  missing_ops=%s\n", data); err != nil {
+					return err
+				}
+			}
+			if len(result.ExtraOps) > 0 {
+				data, err := json.Marshal(result.ExtraOps)
+				if err != nil {
+					return fmt.Errorf("marshal extra ops for %q: %w", result.Name, err)
+				}
+				if _, err := fmt.Fprintf(w, "  extra_ops=%s\n", data); err != nil {
+					return err
+				}
 			}
 		}
 	}

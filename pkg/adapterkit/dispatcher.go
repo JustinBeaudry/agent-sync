@@ -56,6 +56,7 @@ func (s *Server) serve(ctx context.Context) error {
 		case inboundKindNotification:
 			if msg.method == MethodInitialized {
 				if rpcErr := s.handleInitialized(); rpcErr != nil {
+					_, _ = fmt.Fprintf(s.stderr, "adapterkit: initialized handler error: %s\n", rpcErr.Error())
 					return rpcErr
 				}
 				continue
@@ -74,33 +75,36 @@ func (s *Server) serve(ctx context.Context) error {
 func (s *Server) dispatchRequest(ctx context.Context, msg inboundMessage) error {
 	switch msg.method {
 	case MethodInitialize:
+		handler := s.initializeHandler()
 		var params InitializeParams
 		if err := decodeParams(msg.params, &params); err != nil {
 			return writeErrorResponse(s.stdout, msg.id, &Error{Code: CodeInvalidParams, Message: err.Error()})
 		}
-		result, rpcErr := s.handleInitialize(ctx, params)
+		result, rpcErr := s.handleInitialize(ctx, params, handler)
 		if rpcErr != nil {
 			return writeErrorResponse(s.stdout, msg.id, rpcErr)
 		}
 		return writeInitializeResponse(s.stdout, msg.id, result, s.cookie)
 	case MethodEmit:
+		handler := s.emitHandler()
 		var params EmitParams
 		if err := decodeParams(msg.params, &params); err != nil {
 			return writeErrorResponse(s.stdout, msg.id, &Error{Code: CodeInvalidParams, Message: err.Error()})
 		}
-		result, rpcErr := s.handleEmit(ctx, params)
+		result, rpcErr := s.handleEmit(ctx, params, handler)
 		if rpcErr != nil {
 			return writeErrorResponse(s.stdout, msg.id, rpcErr)
 		}
 		return writeResultResponse(s.stdout, msg.id, result)
 	case MethodShutdown:
-		if rpcErr := s.handleShutdown(ctx); rpcErr != nil {
+		handler := s.shutdownHandler()
+		if rpcErr := s.handleShutdown(ctx, handler); rpcErr != nil {
 			return writeErrorResponse(s.stdout, msg.id, rpcErr)
 		}
-		s.setProtocolShutdownAcked()
 		if err := writeResultResponse(s.stdout, msg.id, ShutdownResult{}); err != nil {
 			return err
 		}
+		s.setProtocolShutdownAcked()
 		return nil
 	default:
 		return writeErrorResponse(s.stdout, msg.id, &Error{
@@ -172,22 +176,8 @@ func parseInboundMessage(raw []byte) (inboundMessage, error) {
 }
 
 func writeInitializeResponse(w io.Writer, id json.RawMessage, result InitializeResult, cookie string) error {
-	wire := struct {
-		Server          string           `json:"server"`
-		ProtocolVersion string           `json:"protocol_version"`
-		Capabilities    Capabilities     `json:"capabilities"`
-		DeclaredOutputs []DeclaredOutput `json:"declared_outputs"`
-		Cookie          string           `json:"cookie,omitempty"`
-		Meta            json.RawMessage  `json:"_meta,omitempty"`
-	}{
-		Server:          result.Server,
-		ProtocolVersion: result.ProtocolVersion,
-		Capabilities:    result.Capabilities,
-		DeclaredOutputs: result.DeclaredOutputs,
-		Cookie:          cookie,
-		Meta:            result.Meta,
-	}
-	return writeResponse(w, id, wire, nil)
+	result.Cookie = cookie
+	return writeResponse(w, id, result, nil)
 }
 
 func writeResultResponse(w io.Writer, id json.RawMessage, result any) error {
@@ -320,6 +310,12 @@ func readBoundedLine(br *bufio.Reader, maxBytes int) (string, error) {
 	for i := 0; i <= maxBytes; i++ {
 		b, err := br.ReadByte()
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				if len(buf) == 0 {
+					return "", io.EOF
+				}
+				return "", fmt.Errorf("truncated header: %w", io.ErrUnexpectedEOF)
+			}
 			return "", err
 		}
 		buf = append(buf, b)

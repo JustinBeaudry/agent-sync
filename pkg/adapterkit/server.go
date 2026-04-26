@@ -7,15 +7,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sync"
 )
 
 const (
-	CookieEnvVar           = "AIENVS_ADAPTER_COOKIE"
-	MissingCookieExitCode  = 7
-	DefaultMaxFrameBytes   = 16 * 1024 * 1024
-	defaultServerIRVersion = "v1"
+	CookieEnvVar          = "AIENVS_ADAPTER_COOKIE"
+	MissingCookieExitCode = 7
+	DefaultMaxFrameBytes  = 16 * 1024 * 1024
 )
+
+var magicCookiePattern = regexp.MustCompile(`\A[0-9a-f]{32}\z`)
 
 type InitializeFunc func(ctx context.Context, params InitializeParams) (InitializeResult, error)
 type EmitFunc func(ctx context.Context, params EmitParams) (EmitResult, error)
@@ -71,6 +73,15 @@ type Server struct {
 	shutdownAcked bool
 }
 
+type ServerOptions struct {
+	Name    string
+	Version string
+	Stdin   io.Reader
+	Stdout  io.Writer
+	Stderr  io.Writer
+	Getenv  func(string) string
+}
+
 type serverState uint8
 
 const (
@@ -80,27 +91,54 @@ const (
 	serverStateClosed
 )
 
-func NewServer(name, version string) *Server {
+func NewServer(opts ServerOptions) *Server {
+	stdin := opts.Stdin
+	if stdin == nil {
+		stdin = os.Stdin
+	}
+	stdout := opts.Stdout
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	stderr := opts.Stderr
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	getenv := opts.Getenv
+	if getenv == nil {
+		getenv = os.Getenv
+	}
 	return &Server{
-		name:    name,
-		version: version,
-		stdin:   os.Stdin,
-		stdout:  os.Stdout,
-		stderr:  os.Stderr,
-		getenv:  os.Getenv,
+		name:    opts.Name,
+		version: opts.Version,
+		stdin:   stdin,
+		stdout:  stdout,
+		stderr:  stderr,
+		getenv:  getenv,
 	}
 }
 
+// OnInitialize registers the initialize handler. Handler registration is safe
+// at any time including after Run(); calls during Run() are serialized but the
+// registered handler is invoked outside the lock.
 func (s *Server) OnInitialize(fn InitializeFunc) {
+	s.mu.Lock()
 	s.onInitialize = fn
+	s.mu.Unlock()
 }
 
+// OnEmit registers the emit handler.
 func (s *Server) OnEmit(fn EmitFunc) {
+	s.mu.Lock()
 	s.onEmit = fn
+	s.mu.Unlock()
 }
 
+// OnShutdown registers the shutdown handler.
 func (s *Server) OnShutdown(fn ShutdownFunc) {
+	s.mu.Lock()
 	s.onShutdown = fn
+	s.mu.Unlock()
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -108,6 +146,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if cookie == "" {
 		_, _ = fmt.Fprintln(s.stderr, "adapterkit: AIENVS_ADAPTER_COOKIE not set")
 		return &ExitError{Code: MissingCookieExitCode, Err: errors.New("adapterkit: missing AIENVS_ADAPTER_COOKIE")}
+	}
+	if !magicCookiePattern.MatchString(cookie) {
+		_, _ = fmt.Fprintln(s.stderr, "adapterkit: AIENVS_ADAPTER_COOKIE has invalid format")
+		return &ExitError{Code: MissingCookieExitCode, Err: errors.New("adapterkit: invalid AIENVS_ADAPTER_COOKIE format")}
 	}
 	s.mu.Lock()
 	s.cookie = cookie
@@ -146,7 +188,25 @@ func (s *Server) setState(state serverState) {
 	s.mu.Unlock()
 }
 
-func (s *Server) handleInitialize(ctx context.Context, params InitializeParams) (InitializeResult, *Error) {
+func (s *Server) initializeHandler() InitializeFunc {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.onInitialize
+}
+
+func (s *Server) emitHandler() EmitFunc {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.onEmit
+}
+
+func (s *Server) shutdownHandler() ShutdownFunc {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.onShutdown
+}
+
+func (s *Server) handleInitialize(ctx context.Context, params InitializeParams, handler InitializeFunc) (InitializeResult, *Error) {
 	if s.currentState() != serverStateNew {
 		return InitializeResult{}, newProtocolOrderError("initialize called more than once")
 	}
@@ -167,9 +227,9 @@ func (s *Server) handleInitialize(ctx context.Context, params InitializeParams) 
 		DeclaredOutputs: []DeclaredOutput{},
 	}
 
-	if s.onInitialize != nil {
+	if handler != nil {
 		var err error
-		result, err = safelyCallInitialize(ctx, s.onInitialize, params)
+		result, err = safelyCallInitialize(ctx, handler, params)
 		if err != nil {
 			return InitializeResult{}, toRPCError(err)
 		}
@@ -198,16 +258,17 @@ func (s *Server) handleInitialized() *Error {
 	return nil
 }
 
-func (s *Server) handleEmit(ctx context.Context, params EmitParams) (EmitResult, *Error) {
-	if s.currentState() != serverStateReady {
-		return EmitResult{}, newProtocolOrderError("emit called before initialized notification")
+func (s *Server) handleEmit(ctx context.Context, params EmitParams, handler EmitFunc) (EmitResult, *Error) {
+	state := s.currentState()
+	if state != serverStateReady {
+		return EmitResult{}, newProtocolOrderError(fmt.Sprintf("emit called from invalid state %s", state.String()))
 	}
 
 	result := EmitResult{OpsPerformed: []OpRecord{}}
-	if s.onEmit == nil {
+	if handler == nil {
 		return result, nil
 	}
-	got, err := safelyCallEmit(ctx, s.onEmit, params)
+	got, err := safelyCallEmit(ctx, handler, params)
 	if err != nil {
 		return EmitResult{}, toRPCError(err)
 	}
@@ -217,13 +278,13 @@ func (s *Server) handleEmit(ctx context.Context, params EmitParams) (EmitResult,
 	return got, nil
 }
 
-func (s *Server) handleShutdown(ctx context.Context) *Error {
+func (s *Server) handleShutdown(ctx context.Context, handler ShutdownFunc) *Error {
 	state := s.currentState()
 	if state != serverStateInitialized && state != serverStateReady {
-		return newProtocolOrderError("shutdown called before initialize")
+		return newProtocolOrderError(fmt.Sprintf("shutdown called from invalid state %s", state.String()))
 	}
-	if s.onShutdown != nil {
-		if err := safelyCallShutdown(ctx, s.onShutdown); err != nil {
+	if handler != nil {
+		if err := safelyCallShutdown(ctx, handler); err != nil {
 			return toRPCError(err)
 		}
 	}
@@ -254,7 +315,7 @@ func newProtocolOrderError(message string) *Error {
 	return &Error{
 		Code:    CodeInvalidRequest,
 		Message: message,
-		Data:    ErrorData{ErrorClass: ErrorClassAdapterPanic},
+		Data:    ErrorData{ErrorClass: ErrorClassAdapterProtocolOrder},
 	}
 }
 
@@ -306,5 +367,20 @@ func panicAsError(recovered any) error {
 			ErrorClass: ErrorClassAdapterPanic,
 			Detail:     detail,
 		},
+	}
+}
+
+func (s serverState) String() string {
+	switch s {
+	case serverStateNew:
+		return "new"
+	case serverStateInitialized:
+		return "initialized"
+	case serverStateReady:
+		return "ready"
+	case serverStateClosed:
+		return "closed"
+	default:
+		return fmt.Sprintf("unknown(%d)", s)
 	}
 }
