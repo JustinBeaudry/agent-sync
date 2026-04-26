@@ -1,0 +1,29 @@
+{
+  "name": "error-capability-lied",
+  "description": "Adapter declares a kind as supported but emits no non-warning ops for that kind.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "lied-about-rule",
+        "kind": "rule"
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      }
+    }
+  },
+  "expect": {
+    "kind": "error",
+    "error": "ErrAdapterCapabilityLied"
+  }
+}

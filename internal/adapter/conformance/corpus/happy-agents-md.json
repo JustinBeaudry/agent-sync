@@ -1,0 +1,40 @@
+{
+  "name": "happy-agents-md",
+  "description": "Adapter declares agents-md support and emits mkdir + write_file for an AGENTS.md node.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "workspace-agents",
+        "kind": "agents-md",
+        "body": "Always propagate request IDs."
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "agents-md": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/workspace-agents.md"
+      }
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "happy-skill",
+  "description": "Adapter declares skill support and emits mkdir + write_file for a skill node.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "debug-loop",
+        "kind": "skill",
+        "body": "Investigate root causes before patching."
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "skill": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/debug-loop.md"
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "error-protocol-order",
+  "description": "Adapter violates initialize/initialized/emit ordering and should be classified as a protocol-order violation.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "order-check",
+        "kind": "rule"
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      }
+    }
+  },
+  "expect": {
+    "kind": "error",
+    "error": "ErrAdapterProtocolOrderViolation"
+  }
+}

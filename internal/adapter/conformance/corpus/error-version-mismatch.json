@@ -1,0 +1,29 @@
+{
+  "name": "error-version-mismatch",
+  "description": "Adapter responds to initialize with a protocol version other than aienvs/v1.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "version-check",
+        "kind": "rule"
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      }
+    }
+  },
+  "expect": {
+    "kind": "error",
+    "error": "ErrAdapterProtocolMismatch"
+  }
+}

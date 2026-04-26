@@ -483,7 +483,7 @@ ignored.
 
 ## Implementation Units
 
-- [ ] **Unit 1: Conformance package — types, corpus loader, embed.FS**
+- [x] **Unit 1: Conformance package — types, corpus loader, embed.FS**
 
 **Goal:** Establish `internal/adapter/conformance/` with the case
 data model, the embedded corpus, and a loader. No driver yet — that's
@@ -520,7 +520,7 @@ Unit 2. This unit is foundation: it lets Unit 2 compile.
 
 ---
 
-- [ ] **Unit 2: Initial corpus fixtures — happy paths + adversarial**
+- [x] **Unit 2: Initial corpus fixtures — happy paths + adversarial**
 
 **Goal:** Populate `corpus/*.json` with the initial set: one happy-path
 fixture per IR kind in `internal/ir.AllKinds()` (six total) plus the
@@ -582,7 +582,7 @@ adversarial cases the parent plan calls out.
 
 ---
 
-- [ ] **Unit 3: Conformance harness driver**
+- [x] **Unit 3: Conformance harness driver**
 
 **Goal:** Implement the actual driver that takes a binary path, spawns
 it, runs each corpus case through the lifecycle, and reports results.
@@ -631,7 +631,7 @@ it, runs each corpus case through the lifecycle, and reports results.
 
 ---
 
-- [ ] **Unit 4: Adapterkit — public types + Server + dispatcher**
+- [x] **Unit 4: Adapterkit — public types + Server + dispatcher**
 
 **Goal:** First inhabitant of `pkg/`. Define the public Go types
 mirroring the wire format, plus a `Server` type that handles the
@@ -689,7 +689,7 @@ capability negotiation) so adapter authors only write business logic.
 
 ---
 
-- [ ] **Unit 5: Adapterkit — capability builder + testing helpers**
+- [x] **Unit 5: Adapterkit — capability builder + testing helpers**
 
 **Goal:** Helper APIs for adapter authors. (a) Capability builder
 fluent API for constructing `Capabilities{}` without manually wiring

@@ -1,0 +1,40 @@
+{
+  "name": "happy-command",
+  "description": "Adapter declares command support and emits mkdir + write_file for a command node.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "build",
+        "kind": "command",
+        "body": "bun run build"
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "command": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/build.md"
+      }
+    ]
+  }
+}
