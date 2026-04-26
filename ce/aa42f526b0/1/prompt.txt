@@ -1504,3 +1504,7 @@ go!
 ---
 
 /compound-engineering:ce-work-beta defer to codex
+
+---
+
+/ce:review mode:autofix plan:docs/plans/2026-04-26-002-feat-unit-8-pr3-conformance-spec-plan.md
