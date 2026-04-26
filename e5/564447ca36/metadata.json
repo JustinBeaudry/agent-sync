@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "e5564447ca36",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr2-runtime",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/adapter/discover.go",
+    "internal/adapter/discover_test.go",
+    "internal/adapter/inproc.go",
+    "internal/adapter/inproc_test.go",
+    "internal/adapter/manifest.go",
+    "internal/adapter/manifest_test.go",
+    "internal/adapter/runtime.go",
+    "internal/adapter/runtime_internal_test.go",
+    "internal/adapter/runtime_test.go",
+    "internal/adapter/subprocess.go",
+    "internal/adapter/subprocess_internal_test.go",
+    "internal/adapter/subprocess_test.go",
+    "internal/adapter/subprocess_windows.go",
+    "internal/adapter/testdata/crashy/main.go",
+    "internal/adapter/transport.go",
+    "internal/manifest/load.go",
+    "internal/manifest/load_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e5/564447ca36/0/metadata.json",
+      "transcript": "/e5/564447ca36/0/full.jsonl",
+      "content_hash": "/e5/564447ca36/0/content_hash.txt",
+      "prompt": "/e5/564447ca36/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 659,
+    "cache_creation_tokens": 2058880,
+    "cache_read_tokens": 148421065,
+    "output_tokens": 389654,
+    "api_call_count": 463
+  }
+}

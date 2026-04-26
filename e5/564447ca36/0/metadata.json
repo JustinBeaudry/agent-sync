@@ -1,0 +1,62 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "e5564447ca36",
+  "session_id": "8450dd0b-8ed9-4ead-a403-bbe167a87346",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-26T17:24:39.46049Z",
+  "branch": "feat/unit-8-pr2-runtime",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/adapter/discover.go",
+    "internal/adapter/discover_test.go",
+    "internal/adapter/inproc.go",
+    "internal/adapter/inproc_test.go",
+    "internal/adapter/manifest.go",
+    "internal/adapter/manifest_test.go",
+    "internal/adapter/runtime.go",
+    "internal/adapter/runtime_internal_test.go",
+    "internal/adapter/runtime_test.go",
+    "internal/adapter/subprocess.go",
+    "internal/adapter/subprocess_internal_test.go",
+    "internal/adapter/subprocess_test.go",
+    "internal/adapter/subprocess_windows.go",
+    "internal/adapter/testdata/crashy/main.go",
+    "internal/adapter/transport.go",
+    "internal/manifest/load.go",
+    "internal/manifest/load_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "28d9d12b5181",
+  "token_usage": {
+    "input_tokens": 659,
+    "cache_creation_tokens": 2058880,
+    "cache_read_tokens": 148421065,
+    "output_tokens": 389654,
+    "api_call_count": 463
+  },
+  "session_metrics": {
+    "turn_count": 22
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-26T17:24:39.334377Z",
+    "agent_lines": 1464,
+    "agent_removed": 121,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1464,
+    "total_lines_changed": 1585,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
