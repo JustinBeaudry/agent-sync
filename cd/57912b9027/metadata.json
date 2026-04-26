@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "cd57912b9027",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr3-conformance-spec",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "conformance/echo/README.md",
+    "conformance/echo/echo_test.go",
+    "conformance/echo/main.go",
+    "docs/plans/2026-04-26-002-feat-unit-8-pr3-conformance-spec-plan.md",
+    "docs/spec/adapter-protocol-v1.md",
+    "internal/adapter/conformance/corpus/spec-example-emit.json",
+    "internal/adapter/conformance/corpus/spec-example-error-response.json",
+    "internal/adapter/conformance/corpus/spec-example-handshake.json",
+    "internal/adapter/conformance/spec_locked_test.go",
+    "internal/cli/cmd_adapter.go",
+    "internal/cli/cmd_adapter_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cd/57912b9027/0/metadata.json",
+      "transcript": "/cd/57912b9027/0/full.jsonl",
+      "content_hash": "/cd/57912b9027/0/content_hash.txt",
+      "prompt": "/cd/57912b9027/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4659737,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4381952,
+    "output_tokens": 50936,
+    "api_call_count": 42
+  }
+}

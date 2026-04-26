@@ -1,0 +1,204 @@
+<task>
+Implement Units 6–8 of `docs/plans/2026-04-26-002-feat-unit-8-pr3-conformance-spec-plan.md`. Batch 1 (units 1-5: conformance pkg + adapterkit) is already committed and visible in the repo at HEAD. This batch is the integration + spec freeze layer.
+
+Read the plan file completely before starting. Below is a per-unit summary; the plan is the source of truth.
+
+**Unit 6 — Reference echo adapter using adapterkit**
+Goal: A canonical Go adapter at `conformance/echo/main.go` that uses the `pkg/adapterkit/` SDK (already present in this commit) and handles every IR kind in the v1 capability matrix. Becomes the harness's primary positive integration target. Distinct from `internal/adapter/testdata/echo/main.go` (the minimal test stub from PR 2).
+
+**Unit 7 — CLI subcommand: `aienvs adapter conformance-test <binary>`**
+Goal: Public CLI surface for running the conformance corpus against a target binary. Adapter authors invoke this from their CI. Returns a structured JSON report (or human-readable text) plus an exit code (0 pass, 1 fail, 2 spawn error).
+
+**Unit 8 — Spec freeze: `docs/spec/adapter-protocol-v1.md` + spec-locked tests**
+Goal: The authoritative wire-format spec doc. Every canonical example in the spec is also a corpus fixture (or directly parseable as one). A spec-locked test parses examples out of the markdown and runs them through the harness — failure means spec/impl drift. Per the spec-impl-drift learning, this is the only way to prevent drift.
+
+End state: All three units complete, all tests passing, all linters clean. Plan checkboxes for units 6–8 ticked. The reference echo binary builds (`go build ./conformance/echo/`), the CLI subcommand works against it, and the spec doc parses cleanly with all canonical examples mapped to corpus fixtures.
+</task>
+
+<files>
+**Unit 6:**
+- Create: `conformance/echo/main.go`
+- Create: `conformance/echo/echo_test.go`
+- Create: `conformance/echo/README.md`
+
+**Unit 7:**
+- Create: `internal/cli/cmd_adapter.go` (`NewAdapterCommand(deps AdapterDeps) *cobra.Command` + `newAdapterConformanceTestCmd(deps)` leaf)
+- Test: `internal/cli/cmd_adapter_test.go`
+
+**Unit 8:**
+- Create: `docs/spec/adapter-protocol-v1.md` (the authoritative frozen wire spec)
+- Create: `internal/adapter/conformance/spec_locked_test.go` (parses canonical examples out of the spec markdown, runs them through the harness)
+
+**Read for context (do not modify in this batch):**
+- `docs/plans/2026-04-26-002-feat-unit-8-pr3-conformance-spec-plan.md` (the full plan)
+- `pkg/adapterkit/` — the SDK from batch 1 (use it in `conformance/echo/main.go`)
+- `internal/adapter/conformance/` — the harness from batch 1 (use it in `cmd_adapter.go`)
+- `internal/adapter/contract/` — wire types + JSON schemas (the spec doc must accurately describe these)
+- `internal/cli/cmd_trust.go` — Cobra factory pattern (mirror exactly for `cmd_adapter.go`)
+- `internal/cli/cmd_trust_test.go` — testEnv pattern for CLI tests
+- `internal/adapter/runtime.go` — what the spec doc must accurately describe (lifecycle, declared-outputs gate, capability-lied detection)
+- `internal/adapter/errors.go` — sentinel errors + ErrorClass values for the spec's error table
+- `internal/ir/types.go` — IR kinds the reference echo must handle
+- `internal/capmatrix/types.go` — CapabilityStatus values
+- `docs/spec/manifest-v1.md` — frontmatter + section style to mirror in adapter-protocol-v1.md
+- `docs/spec/ir-v1.md` — table-for-enumerations style to mirror
+</files>
+
+<patterns>
+- Cobra factory: `internal/cli/cmd_trust.go` (lines 36-89). Mirror exactly: `AdapterDeps` struct with optional fields, `NewAdapterCommand(deps) *cobra.Command` returning the parent, private `newAdapter<Verb>Cmd` factories for sub-subcommands, lazy `resolveX` helpers for each Deps field, `outWriter`/`errWriter` helpers for cmd-context-aware output, `SilenceUsage: true, SilenceErrors: true` at root, `RunE` over `Run`.
+- CLI tests: `internal/cli/cmd_trust_test.go` `testEnv` pattern — `bytes.Buffer` capturing Out/Err, deterministic Now, fixed Actor/Hostname.
+- Spec doc style: `docs/spec/manifest-v1.md` (frontmatter `title`/`status`/`date`/`owner`, top-level `# <Title>`, intro linking to package + source-of-truth doc, "Contents" or table-of-links, numbered sections, tables for enumerations, code fences with language tags). Use `status: frozen` + `version: aienvs/v1` to mark the spec as frozen.
+- Reference adapter: `internal/adapter/testdata/echo/main.go` is a minimal protocol-direct stub for comparison. The new `conformance/echo/main.go` does the equivalent work via `pkg/adapterkit/` instead of speaking the protocol directly.
+- Adapter manifest: `internal/adapter/manifest.go::AdapterManifest` shape; the conformance-target manifests in `cmd_adapter.go` synthesize one with `Command: []string{binary}, ContractVersion: ContractVersionV1, Name: "conformance-target"`.
+</patterns>
+
+<approach>
+**Execution order**: Units 6 → 7 → 8 (each builds on the previous; all serial).
+
+**Unit 6 approach** (`conformance/echo/`):
+- Single `main.go` that:
+  1. Constructs an `adapterkit.Server` named `echo/v0.1` (or whatever shape the adapterkit Server constructor expects).
+  2. Builds capabilities declaring every IR kind from `internal/ir.AllKinds()` as supported using `adapterkit.NewCapabilities()`.
+  3. Declares one output: `{Path: ".echo", Mode: OutputModeOwnedSubdir}`.
+  4. Registers an `OnEmit` handler that, for each IR node, emits one `mkdir` + one `write_file` under `.echo/<id>.md` with the node body as content.
+  5. Calls `s.Run(ctx)`.
+- The handler does NOT write files — it returns ops in the EmitResult, and the runtime applies them. (AGENTS.md invariant: "Adapters never write files directly.")
+- The README.md is a one-page "this is the canonical reference adapter; copy this directory as a starting point, change the manifest, change the OnEmit handler" guide.
+- The test file (`echo_test.go`) builds the echo binary and runs the conformance harness against it. Asserts every happy-path corpus case passes (or skips appropriately for cases that test invariants the echo binary doesn't naturally trigger). Use the same `buildTestdataBinary`-style content-hashed cache pattern as `internal/adapter/subprocess_test.go`.
+- The `conformance/echo/` directory is at the repo root (not under `internal/` or `cmd/`) so it ships as a real Go program in `go build ./...` and is reachable as a published reference.
+
+**Unit 7 approach** (CLI subcommand):
+- `internal/cli/cmd_adapter.go` follows the `cmd_trust.go` factory pattern strictly:
+  - `AdapterDeps` struct with `Out io.Writer`, `Err io.Writer`, `In io.Reader`, `Now func() time.Time` (for deterministic JSON timestamps if any).
+  - `NewAdapterCommand(deps)` returns the `adapter` parent.
+  - `newAdapterConformanceTestCmd(deps)` returns the `conformance-test` leaf.
+- Subcommand flags:
+  - Positional arg: `binary` (required, validated to exist + be executable).
+  - `--verbose, -v`: per-case detail (frames sent/received, ops emitted, expected vs actual diffs) on failure.
+  - `--format=json|text`: output format (default `text` for human use; `json` for CI parsing).
+  - `--filter=<regex>`: run only cases matching the pattern.
+  - `--timeout=<duration>`: override per-case timeout (default: runtime defaults).
+- Implementation:
+  - Build `conformance.RunOptions` from the flags.
+  - Call `conformance.Run(ctx, binary, opts)`.
+  - Render the resulting `Report` per the chosen format.
+  - Return an exit error sized to: 0 if all cases passed (skips don't count as failures), 1 if any failed, 2 if the binary itself couldn't be spawned.
+- Output schemas:
+  - Text: human-readable per-case `pass`/`fail`/`skip` lines + final summary table.
+  - JSON: `{"cases": [{"name", "status", "reason"}], "summary": {"total", "passed", "failed", "skipped"}, "version": "aienvs/v1"}`.
+- DO NOT modify `cmd/aienvs/main.go` — Unit 16 of the parent plan owns root-level command wiring. Just make `NewAdapterCommand` independently testable via the same `testEnv` pattern as `cmd_trust_test.go`.
+- Tests:
+  - Happy path: `aienvs adapter conformance-test <built-echo-binary>` exits 0; text output matches expected per-case lines + summary.
+  - JSON format: `--format=json` produces parseable JSON matching the documented schema.
+  - Spawn error: `aienvs adapter conformance-test /does/not/exist` exits 2; error message clearly distinguishes "binary doesn't exist" from "binary exists but failed conformance".
+  - All-fail: `aienvs adapter conformance-test <crashy-binary>` exits 1; per-case failures reported.
+  - `--filter='happy-.*'` runs only happy-path cases.
+  - `--timeout=1ms` causes every case to timeout; exits 1 with timeout-classified failures.
+
+**Unit 8 approach** (spec freeze):
+- Write `docs/spec/adapter-protocol-v1.md` with YAML frontmatter:
+  ```
+  ---
+  title: aienvs Adapter Protocol v1
+  status: frozen
+  version: aienvs/v1
+  date: 2026-04-26
+  ---
+  ```
+- Section structure (final ordering at your discretion; the plan suggests):
+  1. Overview — what the protocol is, who it's for
+  2. Framing — LSP-style `Content-Length: <n>\r\n\r\n<body>`. `Content-Type` reserved; v1 ignores
+  3. JSON-RPC envelope — request/response/notification shapes; ID correlation; error object format including `data.error_class`
+  4. Lifecycle — `initialize` → `initialized` → `emit*` → `shutdown`. Magic-cookie handshake. Adapter MUST NOT emit ops before receiving `initialized`
+  5. Capabilities object — `concept_kinds` map (kind → `supported` | `partial` | `unsupported`), `write_tool_owned`, future-extension reservations
+  6. Declared outputs — `path` + `mode` (`owned-subdir` only in v1; `tool-owned` reserved). The integrity gate: any op outside `declared_outputs` is `adapter-undeclared-output`
+  7. Op set — `write_file`, `write_tool_owned`, `mkdir`, `delete`, `warning`. Field-by-field schema for each. Encoding rules (`utf8` vs `base64`; required when bytes are non-UTF-8)
+  8. Errors — JSON-RPC standard codes; `data.error_class` values: `adapter-panic`, `adapter-timeout`, `adapter-protocol-mismatch`, `adapter-undeclared-output`, `adapter-exec-denied`, `adapter-capability-lied`. Exit-code taxonomy (adapter `exit_code` + `stderr_tail`)
+  9. Magic cookie — `AIENVS_ADAPTER_COOKIE` env var, MUST echo verbatim in `initialize` result. Adapters that don't echo it fail with `adapter-exec-denied`
+  10. `_meta` field — reserved on every envelope; v1 ignores; future versions may carry implementation hints additively
+  11. Timeouts — handshake 5s, per-emit 30s, shutdown 5s. Defaults only; per-method overrides reserved for future
+  12. Versioning policy — Capabilities grow additively under `Capabilities{}`. `aienvs/v1` envelope/framing is frozen. `aienvs/v2` is reserved for envelope-level breaking changes
+  13. Reserved for Unit 8b — `$/cancelRequest`, `$/progress`, per-method timeouts, LSP error codes (`-32800`/`-32801`/`-32803`), version counter-proposal
+  14. Examples — canonical handshake, canonical emit, error response. Each example tagged with the directive convention below
+  15. Conformance — points at `internal/adapter/conformance/corpus/` and `aienvs adapter conformance-test`
+- **Example directive convention** for spec-locked tests:
+  Use a fenced code block with language `aienvs:fixture-name` immediately before the corresponding `json` block:
+  ````
+  ```aienvs:fixture-name
+  spec-example-handshake
+  ```
+  ```json
+  {"jsonrpc":"2.0","id":1,"method":"initialize", ...}
+  ```
+  ````
+  This lets the spec-locked test mechanically map an example to a corpus fixture name. Other code fences without the directive are documentation-only.
+- The spec MUST accurately reflect what's actually shipped:
+  - Wire format from `internal/adapter/contract/framing.go`
+  - JSON-RPC envelope from `internal/adapter/contract/jsonrpc.go`
+  - Method names + params/results from `internal/adapter/contract/protocol.go`
+  - Sentinel errors + ErrorClass from `internal/adapter/errors.go` and `internal/adapter/contract/jsonrpc.go`
+  - Manifest fields from `internal/adapter/manifest.go`
+- Spec-locked test (`internal/adapter/conformance/spec_locked_test.go`):
+  - Reads `docs/spec/adapter-protocol-v1.md` from the repo root.
+  - Walks the markdown with a simple regex/state-machine looking for `aienvs:fixture-name` fences followed by ```json fences.
+  - For each match, asserts that `corpus/<fixture-name>.json` exists in the embedded corpus and that the JSON in the spec matches the corresponding payload field in the corpus fixture (e.g., the spec's `initialize` payload equals the corpus fixture's `ir` or expected request).
+  - Failure modes: spec example with no matching corpus fixture → fail. Corpus fixture without a spec example for it → does NOT fail (corpus is a superset).
+- You may need to add 2-3 NEW corpus fixtures specifically for spec examples: `spec-example-handshake.json`, `spec-example-emit.json`, `spec-example-error-response.json`. Add these to `internal/adapter/conformance/corpus/` if needed and they'll be picked up by the existing embed.FS.
+</approach>
+
+<constraints>
+- Do NOT run git commit, git push, or create PRs — the orchestrating agent handles all git operations
+- Restrict all modifications to files within the repository root
+- Keep changes tightly scoped — avoid unrelated refactors, renames, or cleanup
+- Resolve the task fully before stopping
+- DO NOT modify `internal/adapter/contract/protocol.go`, `jsonrpc.go`, `framing.go` — wire spec, frozen as of PR 1
+- DO NOT modify `internal/adapter/runtime.go`, `subprocess.go`, `inproc.go`, `manifest.go`, `discover.go`, `errors.go`, `transport.go` — runtime, frozen as of PR 2
+- DO NOT modify any file under `internal/adapter/testdata/` — those are PR 2 test stubs, intentionally minimal
+- DO NOT modify `pkg/adapterkit/` files (they were just landed in batch 1 — extending them is a future PR)
+- DO NOT modify `internal/adapter/conformance/{harness,assertions,corpus}.go` (also from batch 1) — only ADD `spec_locked_test.go` as a NEW test file, and optionally add new spec-example corpus fixtures under `corpus/`
+- DO NOT modify `cmd/aienvs/main.go` — Unit 16 of the parent plan owns root command wiring
+- DO NOT add new external dependencies. Use only stdlib + what's already in go.mod (Cobra is already there)
+- File paths in the plan are repo-relative; respect them exactly
+- Every I/O function takes `context.Context` as first param
+- All errors handled, wrapped with `%w`. Sentinel errors with `errors.Is` branching
+- No `init()`. No global mutable state. No `defer` in tests — use `t.Cleanup`
+- Cross-platform: if any test path-compares, normalize via `filepath.ToSlash`. The reference echo binary will be built with a `.exe` suffix on Windows — handle that in the test build helper
+- The spec doc MUST be detailed enough that a third-party can implement an adapter from it WITHOUT reading our Go code. Be precise about wire bytes, header rules, JSON formatting, error envelope shape. Use concrete examples for every non-trivial concept
+</constraints>
+
+<testing>
+Apply Test Scenario Completeness — supplement gaps:
+- Happy path: reference echo handles every IR kind; CLI subcommand reports pass/fail correctly; spec examples map to corpus fixtures
+- Edge cases: CLI binary that doesn't exist (exit 2), CLI with no flags (uses defaults), spec doc with no aienvs directives (test passes — directives are opt-in)
+- Error/failure paths: CLI against crashy binary exits 1; spec example with no matching fixture fails the spec-locked test
+- Integration: end-to-end — built reference echo, run via CLI subcommand, all happy-path corpus cases pass
+- The spec-locked test IS the integration test for the spec-vs-impl drift mitigation. It must actually exercise both sides — parse the markdown AND run through the harness
+
+Per the spec-impl-drift learning: do NOT use t.Skip to hide unimplemented behavior. If a test would skip, either implement the missing piece or delete the test entirely.
+</testing>
+
+<verify>
+After implementing all three units, run ALL tests in a single command:
+
+```bash
+go vet ./... && go test -race -timeout 120s ./... && golangci-lint run ./...
+```
+
+Also run cross-platform vet:
+```bash
+GOOS=windows GOARCH=amd64 go vet ./...
+```
+
+If any test fails, fix the issues and re-run until all pass. Do not report status "completed" unless all four commands pass cleanly.
+
+Report actual command output (or summary) in `verification_summary`.
+</verify>
+
+<output_contract>
+Report your result via the --output-schema mechanism. Fill in every field:
+- status: "completed" ONLY if all three units are implemented AND all four verification commands pass cleanly, "partial" if some units done but others incomplete, "failed" if no meaningful progress
+- files_modified: array of all file paths you created or changed (repo-relative)
+- issues: array of strings describing any problems, gaps, or out-of-scope work discovered
+- summary: one-paragraph description of what was done, organized by unit
+- verification_summary: actual command output or summary
+</output_contract>
