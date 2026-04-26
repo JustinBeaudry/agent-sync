@@ -384,6 +384,105 @@ func TestIDCorrelator_IsRaceFreeUnderConcurrentAllocs(t *testing.T) {
 	}
 }
 
+func TestIDCorrelator_CancelEvictsPendingEntry(t *testing.T) {
+	t.Parallel()
+
+	ids := NewIDCorrelator()
+	id := ids.Next()
+	ids.MarkPending(id, "emit")
+
+	if ids.Pending() != 1 {
+		t.Fatalf("Pending: want 1, got %d", ids.Pending())
+	}
+
+	ids.Cancel(id)
+
+	if _, ok := ids.Resolve(id); ok {
+		t.Error("Resolve after Cancel should return ok=false")
+	}
+	if ids.Pending() != 0 {
+		t.Errorf("Pending after Cancel: want 0, got %d", ids.Pending())
+	}
+}
+
+func TestIDCorrelator_CancelOfUnknownIDIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	ids := NewIDCorrelator()
+	// Cancel without a prior MarkPending — must not panic, must not
+	// affect Pending().
+	ids.Cancel(NewIntID(999))
+	if ids.Pending() != 0 {
+		t.Errorf("Pending: want 0, got %d", ids.Pending())
+	}
+}
+
+func TestIDCorrelator_CancelOfStringIDIsNoOp(t *testing.T) {
+	// String IDs are not tracked by MarkPending (the correlator is
+	// designed for the int IDs the CLI emits). Cancel mirrors that.
+	t.Parallel()
+
+	ids := NewIDCorrelator()
+	ids.Cancel(NewStringID("req-abc"))
+	if ids.Pending() != 0 {
+		t.Errorf("Pending: want 0, got %d", ids.Pending())
+	}
+}
+
+func TestIDCorrelator_PendingReflectsLiveCount(t *testing.T) {
+	t.Parallel()
+
+	ids := NewIDCorrelator()
+	for i := 0; i < 5; i++ {
+		ids.MarkPending(ids.Next(), "x")
+	}
+	if ids.Pending() != 5 {
+		t.Fatalf("Pending after 5 marks: want 5, got %d", ids.Pending())
+	}
+	id1 := NewIntID(1)
+	id2 := NewIntID(2)
+	if _, ok := ids.Resolve(id1); !ok {
+		t.Fatal("Resolve(1) should succeed")
+	}
+	ids.Cancel(id2)
+	if ids.Pending() != 3 {
+		t.Errorf("Pending after one Resolve and one Cancel: want 3, got %d", ids.Pending())
+	}
+}
+
+func TestIDCorrelator_ConcurrentMarkAndCancel(t *testing.T) {
+	// Concurrent marks paired with concurrent cancels must leave the
+	// pending count at zero. This catches a missing mutex on Cancel
+	// under -race and proves the eviction API matches MarkPending's
+	// concurrency contract.
+	t.Parallel()
+
+	ids := NewIDCorrelator()
+	const n = 200
+	allocated := make(chan ID, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			id := ids.Next()
+			ids.MarkPending(id, "x")
+			allocated <- id
+		}()
+	}
+	for i := 0; i < n; i++ {
+		id := <-allocated
+		go ids.Cancel(id)
+	}
+	// Wait for all cancels to drain. A polling loop bounded by a
+	// generous deadline is enough — the test under -race surfaces any
+	// race condition regardless of timing.
+	deadline := 2 * 1000
+	for ids.Pending() != 0 && deadline > 0 {
+		deadline--
+	}
+	if ids.Pending() != 0 {
+		t.Errorf("Pending after %d concurrent Mark+Cancel: want 0, got %d", n, ids.Pending())
+	}
+}
+
 func TestID_StringIDsRoundTrip(t *testing.T) {
 	// JSON-RPC permits string IDs. We accept them on parse and round-trip
 	// them on emit so we can echo client-provided string IDs verbatim.
