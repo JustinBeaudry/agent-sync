@@ -53,6 +53,21 @@ type AdapterDecl struct {
 	// Source may point to an out-of-tree adapter implementation. Bundled
 	// adapters use an implicit source.
 	Source string `yaml:"source,omitempty"`
+
+	// Command, when set, overrides the argv slice the runtime would
+	// otherwise infer from PATH. The first element is resolved against
+	// $PATH unless it contains a path separator.
+	Command []string `yaml:"command,omitempty"`
+
+	// Version is a free-form version pin for the adapter. Compared by
+	// humans; the runtime does not interpret it.
+	Version string `yaml:"version,omitempty"`
+
+	// ReservedPrefix is the path prefix (relative to the workspace root)
+	// the adapter owns. Trailing slashes are stripped on load. The
+	// runtime rejects configurations where one adapter's prefix is
+	// nested inside another's.
+	ReservedPrefix string `yaml:"reserved_prefix,omitempty"`
 }
 
 type TrustConfig struct {

@@ -530,6 +530,29 @@ func (c *IDCorrelator) MarkPending(id ID, method string) {
 	c.pending[id.AsInt()] = method
 }
 
+// Cancel removes the pending entry for id without reporting "ok".
+// Idempotent — Cancel of an unknown id, a string id, or a null id is
+// a no-op. Used by the runtime when an emit's context cancels:
+// without an explicit eviction, the pending map would leak entries
+// for any session whose response never arrives.
+func (c *IDCorrelator) Cancel(id ID) {
+	if !id.IsInt() {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.pending, id.AsInt())
+}
+
+// Pending returns the number of in-flight requests the correlator is
+// tracking. Read-only; useful for observability and for tests asserting
+// no leaked entries at session teardown.
+func (c *IDCorrelator) Pending() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.pending)
+}
+
 // Resolve looks up the method that was sent for a pending request,
 // returning ("", false) if no entry exists. Resolution is one-shot —
 // the entry is removed on first lookup so a duplicate response is
