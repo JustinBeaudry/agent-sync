@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -168,8 +169,23 @@ func DiscoverAdapters(ctx context.Context, opts DiscoverOptions) (*Registry, err
 				// Lower-precedence source already lost — keep first.
 				continue
 			}
+			// Pin the manifest's command to the absolute path discovered
+			// in this directory. Storing just "aienvs-adapter-<name>"
+			// would force a second $PATH resolution at spawn time, which
+			// can race against the discovery scan (a different directory
+			// earlier on PATH might shadow the binary we just validated).
+			// Using the resolved path makes spawn TOCTOU-safe relative to
+			// discovery.
+			absPath, err := filepath.Abs(filepath.Join(dir, e.Name()))
+			if err != nil {
+				// Abs effectively never fails for a path we just read
+				// out of os.ReadDir on a real OS, but if it does the
+				// safest move is to skip this entry rather than register
+				// an adapter we cannot reliably exec.
+				continue
+			}
 			r.byName[name] = &Adapter{
-				Manifest: *SyntheticAdapterManifest(name),
+				Manifest: *SyntheticAdapterManifest(name, absPath),
 				Source:   SourcePATH,
 			}
 		}
@@ -220,7 +236,10 @@ func manifestFromDecl(d *manifest.AdapterDecl) (*AdapterManifest, error) {
 		Version:         d.Version,
 		ContractVersion: ContractVersionV1,
 		Command:         command,
-		ReservedPrefix:  strings.TrimRight(d.ReservedPrefix, "/"),
+		// validateAdapterManifest runs ValidateReservedPrefix which
+		// normalizes (path.Clean + trailing-slash trim) and rejects
+		// absolute / Windows-volume / backslash / ".." shapes.
+		ReservedPrefix: d.ReservedPrefix,
 	}
 	if err := validateAdapterManifest(m); err != nil {
 		return nil, err
@@ -286,8 +305,17 @@ func validateNoNestedPrefixes(r *Registry) error {
 // Equal strings count as prefixes of each other (caller has already
 // dedup'd by sorting). Both strings are forward-slash form (the YAML
 // stores them this way per the schema's normalization).
+//
+// The workspace-root case "." is special: path.Clean turns "" or "./" into
+// ".", and "." is a path-segment prefix of every relative path even though
+// no real path literally starts with "./". An adapter declaring "." as
+// reserved_prefix would otherwise nest every other adapter beneath itself
+// without being detected by the HasPrefix check.
 func isPathPrefix(short, long string) bool {
 	if short == long {
+		return true
+	}
+	if short == "." {
 		return true
 	}
 	// Use forward slash as the path separator; reserved_prefix is a

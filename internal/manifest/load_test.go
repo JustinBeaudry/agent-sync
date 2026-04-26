@@ -5,11 +5,18 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/aienvs/aienvs/internal/manifest"
 )
+
+// strconvQuote is a tiny shim so the YAML literal builder reads cleanly.
+// Wrapping the value in double-quotes via strconv.Quote produces a
+// YAML-safe quoted string for paths that contain backslashes or other
+// special characters.
+func strconvQuote(s string) string { return strconv.Quote(s) }
 
 func fixture(t *testing.T, name string) string {
 	t.Helper()
@@ -371,6 +378,79 @@ adapters:
 	_, err := manifest.LoadBytes([]byte(src), manifest.LoadOptions{})
 	if err == nil {
 		t.Fatal("want empty-command error, got nil")
+	}
+}
+
+func TestLoad_AdaptersBlock_RejectsInvalidReservedPrefix(t *testing.T) {
+	// SEC: workspace-manifest reserved_prefix values must round-trip
+	// through ValidateReservedPrefix the same way adapter.yaml's do.
+	// Reject absolute paths, Windows volume prefixes, backslashes, and
+	// ".." segments — they are not safe regardless of host OS.
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		prefix string
+	}{
+		{"absolute-posix", "/abs/path"},
+		{"windows-volume", "C:/foo"},
+		{"backslash", `.\foo`},
+		{"dotdot", "../etc"},
+		{"dotdot-nested", "foo/../bar"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := `version: 1
+canonical:
+  url: https://example.com/repo.git
+adapters:
+  - name: foo
+    command: [aienvs-adapter-foo]
+    reserved_prefix: ` + strconvQuote(tc.prefix) + "\n"
+			_, err := manifest.LoadBytes([]byte(src), manifest.LoadOptions{})
+			if err == nil {
+				t.Fatalf("prefix=%q: want error, got nil", tc.prefix)
+			}
+			if !errors.Is(err, manifest.ErrInvalidManifest) {
+				t.Errorf("prefix=%q: error not ErrInvalidManifest: %v", tc.prefix, err)
+			}
+			if !errors.Is(err, manifest.ErrInvalidReservedPrefix) {
+				t.Errorf("prefix=%q: error not ErrInvalidReservedPrefix: %v", tc.prefix, err)
+			}
+		})
+	}
+}
+
+func TestValidateReservedPrefix_RoundTrips(t *testing.T) {
+	// Empty (no claim) and well-formed relative paths must round-trip
+	// cleanly. Trailing slashes are stripped; leading "./" is normalized.
+	t.Parallel()
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{".claude", ".claude"},
+		{".claude/", ".claude"},
+		{"./.claude", ".claude"},
+		{".claude/skills", ".claude/skills"},
+		{".", "."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := manifest.ValidateReservedPrefix(tc.in)
+			if err != nil {
+				t.Fatalf("ValidateReservedPrefix(%q): unexpected error %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Errorf("ValidateReservedPrefix(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 

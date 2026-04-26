@@ -153,6 +153,30 @@ func TestDiscover_NestedReservedPrefixRejected(t *testing.T) {
 	}
 }
 
+func TestDiscover_RootDotReservedPrefixNestsEverything(t *testing.T) {
+	// SEC: an adapter declaring "." (workspace root) as its reserved
+	// prefix claims ownership of every other adapter's prefix. Without
+	// the "short == \".\"" branch in isPathPrefix the nested check fails
+	// because no real prefix literally starts with "./".
+	t.Parallel()
+
+	m := &manifest.Manifest{
+		Adapters: []manifest.AdapterDecl{
+			{Name: "rooty", Command: []string{"r"}, ReservedPrefix: "."},
+			{Name: "claude", Command: []string{"c"}, ReservedPrefix: ".claude"},
+		},
+	}
+	_, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+		Workspace: m,
+	})
+	if !errors.Is(err, adapter.ErrAdapterPrefixNested) {
+		t.Fatalf("want ErrAdapterPrefixNested when one adapter declares \".\", got %v", err)
+	}
+	if !strings.Contains(err.Error(), "rooty") || !strings.Contains(err.Error(), "claude") {
+		t.Errorf("error should mention both adapter names: %v", err)
+	}
+}
+
 func TestDiscover_NonexistentPATHEntrySkipped(t *testing.T) {
 	t.Parallel()
 
@@ -220,6 +244,109 @@ func TestDiscover_RegistryNamesSortedDeterministically(t *testing.T) {
 	for i := range names {
 		if names[i] != want[i] {
 			t.Errorf("names[%d]: want %q, got %q", i, want[i], names[i])
+		}
+	}
+}
+
+func TestDiscover_PATHAdapterManifestPinsAbsolutePath(t *testing.T) {
+	// SEC/TOCTOU: once discovery has located a PATH adapter binary, the
+	// manifest's Command must reference that exact file by absolute path.
+	// Storing only "aienvs-adapter-<name>" would force a second $PATH
+	// resolution at spawn time, which can pick up a different binary if
+	// PATH (or the directory contents) changed since discovery.
+	t.Parallel()
+
+	dir := t.TempDir()
+	expectedPath := makeFakeAdapterBinary(t, dir, "pinned")
+
+	r, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+		PATH: []string{dir},
+	})
+	if err != nil {
+		t.Fatalf("DiscoverAdapters: %v", err)
+	}
+	a, ok := r.Get("pinned")
+	if !ok {
+		t.Fatalf("pinned not found; names=%v", r.Names())
+	}
+	if len(a.Manifest.Command) != 1 {
+		t.Fatalf("command len: %d (%v)", len(a.Manifest.Command), a.Manifest.Command)
+	}
+	got := a.Manifest.Command[0]
+	if !filepath.IsAbs(got) {
+		t.Errorf("command must be absolute, got %q", got)
+	}
+	if got != expectedPath {
+		t.Errorf("command: want %q, got %q", expectedPath, got)
+	}
+}
+
+func TestDiscover_PATHAdapterAbsolutePathFromRelativeDir(t *testing.T) {
+	// Discovery must resolve to an absolute path even when the caller
+	// passes a relative directory in DiscoverOptions.PATH; otherwise a
+	// later cwd change between discovery and spawn would break exec.
+	t.Parallel()
+
+	absDir := t.TempDir()
+	expectedPath := makeFakeAdapterBinary(t, absDir, "relfind")
+
+	// Compute a relative path from cwd to absDir for this test only.
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	relDir, err := filepath.Rel(cwd, absDir)
+	if err != nil {
+		t.Skipf("cannot derive relative path: %v", err)
+	}
+
+	r, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+		PATH: []string{relDir},
+	})
+	if err != nil {
+		t.Fatalf("DiscoverAdapters: %v", err)
+	}
+	a, ok := r.Get("relfind")
+	if !ok {
+		t.Fatalf("relfind not found; names=%v", r.Names())
+	}
+	got := a.Manifest.Command[0]
+	if !filepath.IsAbs(got) {
+		t.Errorf("command must be absolute even when PATH dir is relative, got %q", got)
+	}
+	// The resolved path must point to the same file as the absolute
+	// fixture; compare via filepath.Clean to neutralize any "./" noise.
+	if filepath.Clean(got) != filepath.Clean(expectedPath) {
+		t.Errorf("command: want %q (clean), got %q (clean)", filepath.Clean(expectedPath), filepath.Clean(got))
+	}
+}
+
+func TestDiscover_AdjacentNonNestedPrefixesRegister(t *testing.T) {
+	// Regression for the prefix-validation algorithm. After lex sorting,
+	// reserved_prefix values that are *adjacent* but not in a path-prefix
+	// relationship — for example ".claude" and ".claude-config", or
+	// "a-b" sitting between "a" and "a/b" — must NOT be flagged as
+	// nested. Equally, ".claude" plus a sibling ".cursor" must register
+	// without complaint. This guards against an over-eager adjacency
+	// shortcut in the validator.
+	t.Parallel()
+
+	m := &manifest.Manifest{
+		Adapters: []manifest.AdapterDecl{
+			{Name: "claude", Command: []string{"c"}, ReservedPrefix: ".claude"},
+			{Name: "claude-config", Command: []string{"cc"}, ReservedPrefix: ".claude-config"},
+			{Name: "cursor", Command: []string{"cu"}, ReservedPrefix: ".cursor"},
+		},
+	}
+	r, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+		Workspace: m,
+	})
+	if err != nil {
+		t.Fatalf("DiscoverAdapters: %v", err)
+	}
+	for _, n := range []string{"claude", "claude-config", "cursor"} {
+		if _, ok := r.Get(n); !ok {
+			t.Errorf("%q should register; names=%v", n, r.Names())
 		}
 	}
 }

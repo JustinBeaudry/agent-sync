@@ -351,6 +351,38 @@ func TestSession_AdapterErrorResponseSurfaced(t *testing.T) {
 	}
 }
 
+func TestSession_AdapterErrorWithEmptyClassDefaultsToAdapterPanic(t *testing.T) {
+	// The adapter contract treats RuntimeError.Class as always-populated.
+	// If the adapter omits the optional error_class data field, the
+	// runtime must default to adapter-panic so callers never see an
+	// empty classifier.
+	t.Parallel()
+
+	sa := &scriptedAdapter{
+		name: "no-class",
+		respondToInit: func(_ contract.InitializeParams) (json.RawMessage, *contract.Error) {
+			return nil, &contract.Error{
+				Code:    contract.CodeInternalError,
+				Message: "adapter exploded",
+				// Data omitted — ErrorClass is the zero value "".
+			}
+		},
+	}
+	sess, ctx, _ := runScriptedSession(t, sa)
+
+	_, err := sess.Initialize(ctx)
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	var rt *adapter.RuntimeError
+	if !errors.As(err, &rt) {
+		t.Fatalf("want *RuntimeError, got %T: %v", err, err)
+	}
+	if rt.Class != contract.ErrorClassAdapterPanic {
+		t.Errorf("class: want %q, got %q", contract.ErrorClassAdapterPanic, rt.Class)
+	}
+}
+
 func TestSession_StateMachineEnforcesOrder(t *testing.T) {
 	t.Parallel()
 
@@ -460,6 +492,79 @@ func TestSession_RejectsAbsolutePathInDeclaredOutputsGate(t *testing.T) {
 	_, err := sess.Emit(ctx, "abs", json.RawMessage(`{"nodes":[]}`))
 	if !errors.Is(err, adapter.ErrAdapterUndeclaredOutput) {
 		t.Fatalf("want ErrAdapterUndeclaredOutput for absolute path, got %v", err)
+	}
+}
+
+func TestSession_DeclaredOutputDotAcceptsAnyRelativePath(t *testing.T) {
+	// SEC: an adapter declaring "." as a declared_output (the workspace
+	// root) must have ops at any relative path accepted by the gate.
+	// Without the "declClean == \".\"" branch the prefix check fails for
+	// normalized paths like "foo.md" because path.Clean strips "./".
+	t.Parallel()
+
+	sa := &scriptedAdapter{
+		name:            "rooty",
+		declaredOutputs: []contract.DeclaredOutput{{Path: ".", Mode: contract.OutputModeOwnedSubdir}},
+		conceptKinds:    map[string]contract.CapabilityLevel{},
+		emitOps: []contract.OpRecord{
+			{Op: contract.OpKindWriteFile, Path: "foo.md"},
+			{Op: contract.OpKindMkdir, Path: "subdir"},
+			{Op: contract.OpKindWriteFile, Path: "subdir/nested.md"},
+		},
+	}
+	sess, ctx, _ := runScriptedSession(t, sa)
+
+	if _, err := sess.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if err := sess.Initialized(ctx); err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+	if _, err := sess.Emit(ctx, "rooty", json.RawMessage(`{"nodes":[]}`)); err != nil {
+		t.Fatalf("Emit with declared_output \".\": want nil, got %v", err)
+	}
+}
+
+func TestSession_RejectsWindowsUnsafeOpPathsInGate(t *testing.T) {
+	// SEC: path.IsAbs uses POSIX rules and won't catch Windows drive-letter
+	// paths or backslashes. The gate must reject both shapes on every OS so
+	// declared-outputs containment holds regardless of host platform.
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"backslash-separator", `.outs\foo.md`},
+		{"windows-drive-uppercase", `C:\foo.md`},
+		{"windows-drive-forward-slash", `C:/foo.md`},
+		{"windows-drive-lowercase", `d:foo`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			sa := &scriptedAdapter{
+				name:            "win",
+				declaredOutputs: []contract.DeclaredOutput{{Path: ".outs", Mode: contract.OutputModeOwnedSubdir}},
+				conceptKinds:    map[string]contract.CapabilityLevel{},
+				emitOps: []contract.OpRecord{
+					{Op: contract.OpKindWriteFile, Path: tc.path},
+				},
+			}
+			sess, ctx, _ := runScriptedSession(t, sa)
+
+			if _, err := sess.Initialize(ctx); err != nil {
+				t.Fatalf("Initialize: %v", err)
+			}
+			if err := sess.Initialized(ctx); err != nil {
+				t.Fatalf("Initialized: %v", err)
+			}
+			_, err := sess.Emit(ctx, "win", json.RawMessage(`{"nodes":[]}`))
+			if !errors.Is(err, adapter.ErrAdapterUndeclaredOutput) {
+				t.Fatalf("path=%q: want ErrAdapterUndeclaredOutput, got %v", tc.path, err)
+			}
+		})
 	}
 }
 

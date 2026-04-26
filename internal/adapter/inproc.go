@@ -195,34 +195,58 @@ func (t *InprocTransport) Recv(ctx context.Context) ([]byte, error) {
 // bundled adapter), joins both background goroutines, and returns
 // the bundled adapter's return value or recovered panic.
 //
+// Close honors ctx: if a bundled adapter ignores its ctx and refuses
+// to exit on pipe close, Close will not block past ctx's deadline.
+// In that case it returns a wrapped ctx error. The reaping goroutine
+// continues running so the bundled adapter is not abandoned silently
+// — but the caller is no longer held hostage to it.
+//
 // Close is safe to call multiple times; subsequent callers wait for
-// the first call to finish populating closeErr before returning.
-func (t *InprocTransport) Close(_ context.Context) error {
+// the first call to finish populating closeErr (or for ctx to fire)
+// before returning.
+func (t *InprocTransport) Close(ctx context.Context) error {
 	t.closeOnce.Do(func() {
-		// Signal the reader goroutine to exit even if it's blocked on
-		// a frame-send into a channel nobody is consuming. Must come
-		// BEFORE the join below.
-		close(t.closedCh)
+		// The reaping work runs in its own goroutine so the caller can
+		// abandon the wait if ctx fires before a misbehaving bundled
+		// adapter exits. closeDone is closed when the reap finishes;
+		// closeErr is settled before that close.
+		go func() {
+			defer close(t.closeDone)
 
-		// Closing the runtime → adapter writer signals EOF on the
-		// adapter's stdin. A well-behaved bundled adapter exits its
-		// read loop and returns from Run.
-		_ = t.rtToAd.Close()
-		// Closing the runtime-side reader unblocks the reader loop.
-		_ = t.rtIn.Close()
-		// Wait for both goroutines to finish.
-		<-t.runDone
-		<-t.readerDone
-		t.closeErr = t.runErr
-		close(t.closeDone)
+			// Signal the reader goroutine to exit even if it's blocked
+			// on a frame-send into a channel nobody is consuming. Must
+			// come BEFORE the join below.
+			close(t.closedCh)
+
+			// Closing the runtime → adapter writer signals EOF on the
+			// adapter's stdin. A well-behaved bundled adapter exits its
+			// read loop and returns from Run.
+			_ = t.rtToAd.Close()
+			// Closing the runtime-side reader unblocks the reader loop.
+			_ = t.rtIn.Close()
+			// Wait for both goroutines to finish.
+			<-t.runDone
+			<-t.readerDone
+			t.closeErr = t.runErr
+		}()
 	})
-	// Concurrent callers wait until the first Close has finished
-	// populating closeErr before returning.
-	<-t.closeDone
-	return t.closeErr
+	// Concurrent callers wait on the same closeDone channel, so they
+	// see consistent behavior. Honor ctx so a stuck bundled adapter
+	// can't block the caller indefinitely.
+	select {
+	case <-t.closeDone:
+		return t.closeErr
+	case <-ctx.Done():
+		return fmt.Errorf("adapter: inproc close: %w", ctx.Err())
+	}
 }
 
 // StderrTail implements Transport. Inproc adapters have no stderr.
 func (t *InprocTransport) StderrTail() []byte {
 	return nil
 }
+
+// MarkProtocolShutdownAcked implements Transport. No-op for inproc:
+// there is no exit code to classify, so a successful protocol shutdown
+// has no impact on what Close returns.
+func (t *InprocTransport) MarkProtocolShutdownAcked() {}

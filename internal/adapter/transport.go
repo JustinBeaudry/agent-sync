@@ -25,11 +25,17 @@ type Transport interface {
 	// for cancellation. Returns io.EOF when the adapter exits cleanly.
 	Recv(ctx context.Context) ([]byte, error)
 
-	// Close terminates the adapter. For subprocess: graceful stop
-	// (SIGTERM on Unix, os.Interrupt on Windows) bounded by the
-	// configured shutdown timeout, then SIGKILL / Kill(). For inproc:
-	// closes the pipes and waits for the bundled adapter's Run to
-	// return.
+	// Close terminates the adapter. For subprocess on Unix: SIGTERM,
+	// then wait up to the configured shutdown timeout, then SIGKILL.
+	// For subprocess on Windows: wait up to the configured shutdown
+	// timeout for the process to exit on its own, then Kill(). The
+	// graceful-signal step is intentionally skipped on Windows because
+	// Go's os/exec stdlib cannot reliably deliver os.Interrupt to a
+	// child process via Process.Signal — Console Ctrl events require
+	// the child to share the parent's console and explicit
+	// CREATE_NEW_PROCESS_GROUP / GenerateConsoleCtrlEvent handling that
+	// the stdlib does not expose. For inproc: closes the pipes and
+	// waits for the bundled adapter's Run to return.
 	//
 	// Returns the classified error describing how the adapter exited
 	// (nil for clean exit). After Close, no further Send / Recv may
@@ -41,4 +47,13 @@ type Transport interface {
 	// buffer size. For inproc, returns nil. Used by the runtime to
 	// attach stderr context to abnormal-termination error reports.
 	StderrTail() []byte
+
+	// MarkProtocolShutdownAcked signals that the runtime received a
+	// successful response to the protocol-level `shutdown` request.
+	// The transport may use this to suppress non-zero exit-code
+	// classification during the subsequent Close (a clean shutdown
+	// round-trip is the authoritative signal that the adapter exited
+	// on purpose, regardless of what exit code main returned).
+	// For inproc, this is a no-op — there is no exit code to classify.
+	MarkProtocolShutdownAcked()
 }

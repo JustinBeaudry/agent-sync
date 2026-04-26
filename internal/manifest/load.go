@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -20,8 +21,67 @@ type LoadOptions struct {
 var (
 	ErrInvalidManifest = errors.New("invalid manifest")
 
+	// ErrInvalidReservedPrefix is returned by ValidateReservedPrefix when
+	// a reserved_prefix value is not a clean, workspace-relative,
+	// forward-slash path. Wrapped by ErrInvalidManifest at call sites in
+	// the workspace-manifest validator so existing callers can continue
+	// to branch on errors.Is(err, ErrInvalidManifest).
+	ErrInvalidReservedPrefix = errors.New("manifest: reserved_prefix must be a clean workspace-relative forward-slash path")
+
 	reHex40 = regexp.MustCompile(`\A[0-9a-f]{40}\z`)
+
+	// reWindowsVolumePrefix matches a leading drive letter ("C:", "d:", ...)
+	// — absolute on Windows when interpreted by OS path rules. We reject
+	// it on every OS so workspace-relative paths stay portable.
+	reWindowsVolumePrefix = regexp.MustCompile(`\A[A-Za-z]:`)
 )
+
+// ValidateReservedPrefix is the single canonical validator for
+// adapter-style reserved_prefix values. The contract: an empty string
+// (no claim) is allowed and returns ""; otherwise the value must be a
+// clean, workspace-relative, forward-slash path. The returned string is
+// the normalized form (path.Clean with any trailing "/" already
+// stripped).
+//
+// Rejected shapes (all wrap ErrInvalidReservedPrefix):
+//   - any backslash (always reserved on POSIX, ambiguous on Windows)
+//   - Windows volume prefix ("C:foo", "d:/x")
+//   - absolute paths under POSIX rules (leading "/")
+//   - any path segment equal to ".." (workspace escape)
+func ValidateReservedPrefix(s string) (string, error) {
+	if s == "" {
+		return "", nil
+	}
+	// Always-applicable Windows-safety checks: backslashes and volume
+	// prefixes never belong in a forward-slash workspace path, and on
+	// POSIX path.IsAbs misses both shapes — so we reject them on every
+	// OS rather than relying on the caller's runtime.GOOS.
+	if strings.ContainsRune(s, '\\') {
+		return "", fmt.Errorf("%w: contains backslash: %q", ErrInvalidReservedPrefix, s)
+	}
+	if reWindowsVolumePrefix.MatchString(s) {
+		return "", fmt.Errorf("%w: contains Windows volume prefix: %q", ErrInvalidReservedPrefix, s)
+	}
+	if path.IsAbs(s) {
+		return "", fmt.Errorf("%w: must be relative, got absolute: %q", ErrInvalidReservedPrefix, s)
+	}
+	// Reject ".." segments before Clean collapses them. path.Clean
+	// would silently turn "foo/../bar" into "bar", losing the
+	// traversal intent — rejecting on the original segments preserves
+	// the operator's signal that they wrote something that escapes the
+	// declared subtree.
+	for _, seg := range strings.Split(s, "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("%w: contains parent-directory segment: %q", ErrInvalidReservedPrefix, s)
+		}
+	}
+	// Trim trailing "/" before Clean so a value like ".claude/" round-trips
+	// to ".claude" (preserving the existing public contract) rather than
+	// being treated as a directory by path.Clean.
+	trimmed := strings.TrimRight(s, "/")
+	cleaned := path.Clean(trimmed)
+	return cleaned, nil
+}
 
 // MaxManifestSize is the maximum allowed manifest file size (1 MiB).
 const MaxManifestSize = 1 << 20
@@ -166,7 +226,15 @@ func validateAdapters(m *Manifest) error {
 				return fmt.Errorf("%w: adapters[%d].command[%d] is empty", ErrInvalidManifest, i, j)
 			}
 		}
-		a.ReservedPrefix = strings.TrimRight(a.ReservedPrefix, "/")
+		cleaned, err := ValidateReservedPrefix(a.ReservedPrefix)
+		if err != nil {
+			// Keep ErrInvalidManifest in the chain so existing callers
+			// branching on errors.Is(err, ErrInvalidManifest) still match;
+			// callers wanting the specific cause can branch on
+			// ErrInvalidReservedPrefix as well.
+			return fmt.Errorf("%w: adapters[%d].reserved_prefix: %w", ErrInvalidManifest, i, err)
+		}
+		a.ReservedPrefix = cleaned
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -59,7 +60,8 @@ reserved_prefix: .cursor
 func TestSyntheticAdapterManifest_DefaultsFromBinaryName(t *testing.T) {
 	t.Parallel()
 
-	m := SyntheticAdapterManifest("foo")
+	// Empty binaryPath -> bare PATH-relative kubectl-plugin name.
+	m := SyntheticAdapterManifest("foo", "")
 	if m.Name != "foo" {
 		t.Errorf("name: %q", m.Name)
 	}
@@ -68,6 +70,19 @@ func TestSyntheticAdapterManifest_DefaultsFromBinaryName(t *testing.T) {
 	}
 	if len(m.Command) != 1 || m.Command[0] != "aienvs-adapter-foo" {
 		t.Errorf("command: %v", m.Command)
+	}
+}
+
+func TestSyntheticAdapterManifest_PinsResolvedBinaryPath(t *testing.T) {
+	// PATH discovery resolves a concrete location for the adapter
+	// binary; the manifest must record that path so spawn-time exec
+	// hits the same binary even if PATH changes between discovery and
+	// run.
+	t.Parallel()
+
+	m := SyntheticAdapterManifest("foo", "/opt/aienvs/bin/aienvs-adapter-foo")
+	if len(m.Command) != 1 || m.Command[0] != "/opt/aienvs/bin/aienvs-adapter-foo" {
+		t.Errorf("command should be the resolved absolute path, got %v", m.Command)
 	}
 }
 
@@ -162,6 +177,70 @@ reserved_prefix: .foo/
 	}
 	if m.ReservedPrefix != ".foo" {
 		t.Errorf("reserved_prefix should be normalized (no trailing slash), got %q", m.ReservedPrefix)
+	}
+}
+
+func TestLoadAdapterManifest_ReservedPrefixRejectedShapes(t *testing.T) {
+	// SEC: reserved_prefix is workspace-relative forward-slash only.
+	// Reject absolute paths, Windows volume prefixes, backslashes, and
+	// any ".." segment — these are not safe regardless of host OS.
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		v    string
+	}{
+		{"absolute-posix", "/abs/path"},
+		{"windows-volume-uppercase", "C:/foo"},
+		{"windows-volume-lowercase", "d:foo"},
+		{"backslash-only", `foo\bar`},
+		{"backslash-as-separator", `.\foo`},
+		{"dotdot-segment", "../etc"},
+		{"dotdot-nested", "foo/../bar"},
+		{"leading-dotdot", "../../escape"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := "name: foo\ncontract_version: aienvs/v1\ncommand: [aienvs-adapter-foo]\nreserved_prefix: " + strconv.Quote(tc.v) + "\n"
+			_, err := LoadAdapterManifestBytes([]byte(src))
+			if !errors.Is(err, ErrAdapterManifestInvalidReservedPrefix) {
+				t.Fatalf("v=%q: want ErrAdapterManifestInvalidReservedPrefix, got %v", tc.v, err)
+			}
+		})
+	}
+}
+
+func TestValidateReservedPrefix_AcceptsCleanRelativePaths(t *testing.T) {
+	// Empty (no claim) and well-formed relative paths must round-trip
+	// cleanly. Trailing slashes are stripped; leading "./" is normalized
+	// away by path.Clean.
+	t.Parallel()
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{".claude", ".claude"},
+		{".claude/", ".claude"},
+		{".claude/skills", ".claude/skills"},
+		{"./.claude", ".claude"},
+		{".", "."}, // workspace root claim — allowed at the manifest layer
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ValidateReservedPrefix(tc.in)
+			if err != nil {
+				t.Fatalf("ValidateReservedPrefix(%q): unexpected error %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Errorf("ValidateReservedPrefix(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 

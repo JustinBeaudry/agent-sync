@@ -1,16 +1,26 @@
 package adapter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/aienvs/aienvs/internal/adapter/contract"
 )
+
+// reWindowsVolumePrefix matches a leading drive letter ("C:", "d:", ...).
+// Such a prefix is absolute on Windows when interpreted by OS path rules
+// even though path.IsAbs (which uses POSIX rules) reports it as relative,
+// so we reject it on every OS to keep declared-outputs gating safe
+// regardless of host platform. Same shape used in
+// manifest.ValidateReservedPrefix.
+var reWindowsVolumePrefix = regexp.MustCompile(`\A[A-Za-z]:`)
 
 // Initialize sends the initialize request, validates the cookie echo
 // and protocol version, and captures the adapter's declared_outputs +
@@ -198,24 +208,105 @@ func (s *AdapterSession) Emit(ctx context.Context, target string, ir json.RawMes
 // whose kind appears in the supported set. Best-effort: a malformed IR
 // returns false (no false positives — better to under-report than to
 // flag a legitimate adapter for what is really a runtime bug).
+//
+// The IR is scanned with a streaming decoder so a large IR doesn't
+// force a full unmarshal into memory. We walk the top-level object
+// looking for a "nodes" array, then decode one element at a time into
+// a small struct that only captures the "kind" field — short-circuiting
+// on the first supported match.
 func irContainsSupportedKind(ir json.RawMessage, supported map[contract.OpKind]bool) bool {
 	if len(supported) == 0 {
 		return false
 	}
-	var doc struct {
-		Nodes []struct {
-			Kind string `json:"kind"`
-		} `json:"nodes"`
-	}
-	if err := json.Unmarshal(ir, &doc); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(ir))
+
+	// Expect the document to open with "{".
+	tok, err := dec.Token()
+	if err != nil {
 		return false
 	}
-	for _, n := range doc.Nodes {
-		if supported[contract.OpKind(n.Kind)] {
-			return true
+	if d, ok := tok.(json.Delim); !ok || d != '{' {
+		return false
+	}
+
+	// Walk top-level keys. For "nodes", drop into the array and scan
+	// elements one at a time. For everything else, skip the value.
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			return false
 		}
+		key, ok := keyTok.(string)
+		if !ok {
+			return false
+		}
+		if key != "nodes" {
+			if err := skipJSONValue(dec); err != nil {
+				return false
+			}
+			continue
+		}
+		// Expect "[".
+		tok, err := dec.Token()
+		if err != nil {
+			return false
+		}
+		if d, ok := tok.(json.Delim); !ok || d != '[' {
+			return false
+		}
+		for dec.More() {
+			var node struct {
+				Kind string `json:"kind"`
+			}
+			if err := dec.Decode(&node); err != nil {
+				return false
+			}
+			if supported[contract.OpKind(node.Kind)] {
+				return true
+			}
+		}
+		// Consume the closing "]". After "nodes" there's nothing else
+		// we need from the IR; done either way.
+		if _, err := dec.Token(); err != nil {
+			return false
+		}
+		return false
 	}
 	return false
+}
+
+// skipJSONValue consumes the next JSON value from dec (object, array,
+// or scalar) and discards it. Used to skip top-level fields that
+// irContainsSupportedKind does not care about without buffering them.
+func skipJSONValue(dec *json.Decoder) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	d, ok := tok.(json.Delim)
+	if !ok {
+		// Scalar — already consumed.
+		return nil
+	}
+	if d != '{' && d != '[' {
+		return fmt.Errorf("unexpected delimiter %q", d)
+	}
+	depth := 1
+	for depth > 0 {
+		t, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		if dd, ok := t.(json.Delim); ok {
+			switch dd {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+			}
+		}
+	}
+	return nil
 }
 
 // Shutdown sends the shutdown request and tears down the transport.
@@ -246,16 +337,25 @@ func (s *AdapterSession) Shutdown(ctx context.Context) error {
 		s.ids.Cancel(id)
 		// Don't return here; still tear down the transport so the
 		// process exits. Log the error via the closeErr.
+	} else {
+		// Protocol-level shutdown succeeded. Inform the transport so
+		// its Close path knows to treat any non-zero exit as expected.
+		// Without this signal, an adapter that returns from main with
+		// a non-zero status after responding to shutdown would surface
+		// as a SubprocessExitError, which would mis-classify a clean
+		// shutdown as a fault.
+		s.transport.MarkProtocolShutdownAcked()
 	}
 
 	closeErr := s.transport.Close(ctx)
 
 	// Any ids still pending here have been abandoned: the adapter
 	// returned an error or the transport was torn down before a
-	// response arrived. The IDCorrelator is about to be dropped along
-	// with this session, so the leak is bounded by session lifetime.
-	// IDCorrelator gained max-pending eviction in PR 2 (ADV-006) so a
-	// misbehaving adapter cannot grow this set without bound.
+	// response arrived. Failed requests are explicitly removed with
+	// Cancel(id), and any ids still pending at this point will be
+	// dropped with the IDCorrelator when this session is closed, so
+	// retention is bounded by session lifetime rather than by a
+	// max-pending eviction policy.
 
 	s.state = sessionStateClosed
 
@@ -338,8 +438,15 @@ func (s *AdapterSession) requestResponse(ctx context.Context, id contract.ID, me
 	}
 	_, _ = s.ids.Resolve(msg.ID)
 	if msg.Error != nil {
+		// Class is documented to always be populated. Adapters MAY omit
+		// the optional error_class data field; default to adapter-panic
+		// so callers never see an empty classifier.
+		class := msg.Error.Data.ErrorClass
+		if class == "" {
+			class = contract.ErrorClassAdapterPanic
+		}
 		return nil, &RuntimeError{
-			Class:        msg.Error.Data.ErrorClass,
+			Class:        class,
 			Err:          fmt.Errorf("adapter returned error %d: %s", msg.Error.Code, msg.Error.Message),
 			AdapterError: msg.Error,
 		}
@@ -354,8 +461,11 @@ func (s *AdapterSession) requestResponse(ctx context.Context, id contract.ID, me
 //
 // Returns false for empty paths (warnings exempt themselves at the
 // caller), absolute paths (declared_outputs are workspace-relative),
-// and paths whose cleaned form starts with ".." (escapes the
-// workspace).
+// paths whose cleaned form starts with ".." (escapes the workspace),
+// and paths containing a backslash or Windows volume prefix — those
+// shapes are not absolute under path.IsAbs (which uses the forward-
+// slash POSIX rules) but are absolute under OS path rules on Windows
+// and would let an op escape the workspace once interpreted there.
 func (s *AdapterSession) pathInDeclaredOutputs(opPath string) bool {
 	if opPath == "" {
 		return false
@@ -364,6 +474,17 @@ func (s *AdapterSession) pathInDeclaredOutputs(opPath string) bool {
 		return false
 	}
 	if path.IsAbs(opPath) {
+		return false
+	}
+	// Windows-safety: path.IsAbs ignores both backslash separators and
+	// drive-letter volume prefixes, so a path like "C:\\foo" or "..\\..\\etc"
+	// would slip past the relative-path gate above. Reject both shapes
+	// outright on every OS — they are never valid for a workspace-relative
+	// path on the wire, regardless of host platform.
+	if strings.ContainsRune(opPath, '\\') {
+		return false
+	}
+	if reWindowsVolumePrefix.MatchString(opPath) {
 		return false
 	}
 	clean := path.Clean(opPath)
@@ -377,6 +498,13 @@ func (s *AdapterSession) pathInDeclaredOutputs(opPath string) bool {
 		declClean := path.Clean(decl.Path)
 		if path.IsAbs(declClean) {
 			continue
+		}
+		// path.Clean turns "" or "./" into ".". A declared output of "."
+		// is the workspace root: every workspace-relative path is contained
+		// within it. Without this case the prefix check below would fail
+		// for any normalized path that doesn't literally start with "./".
+		if declClean == "." {
+			return true
 		}
 		if clean == declClean || strings.HasPrefix(clean, declClean+"/") {
 			return true

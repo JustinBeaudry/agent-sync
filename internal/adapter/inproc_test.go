@@ -221,6 +221,62 @@ func TestInproc_CloseDoesNotDeadlockWithUndrainedFrame(t *testing.T) {
 	}
 }
 
+// TestInproc_CloseHonorsContextDeadline regresses copilot review feedback:
+// if a bundled adapter ignores stdin EOF and refuses to exit (e.g. an
+// adapter that's broken or stuck), Close must not block past the
+// caller's ctx deadline. Without honoring ctx, Close hangs forever
+// waiting for runDone/readerDone — leaving callers vulnerable to
+// hangs from misbehaving bundled adapters.
+func TestInproc_CloseHonorsContextDeadline(t *testing.T) {
+	t.Parallel()
+
+	// Adapter that ignores stdin EOF entirely. It only exits when its
+	// own ctx fires — which Close cannot trigger without leaking the
+	// adapter's ctx, so this simulates a bundled adapter that doesn't
+	// honor pipe close. The outer ctx (from NewInprocTransport) keeps
+	// the goroutine bounded so the test itself doesn't leak.
+	stuck := &adapter.BundledAdapter{
+		Manifest: adapter.AdapterManifest{
+			Name:            "stuck",
+			ContractVersion: adapter.ContractVersionV1,
+			Command:         []string{"stuck"},
+		},
+		Run: func(ctx context.Context, _ io.Reader, _ io.Writer) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+
+	// Outer ctx with a longer lifetime — bounds the adapter goroutine
+	// so it eventually exits and we don't leak. Doesn't drive Close.
+	outerCtx, outerCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(outerCancel)
+
+	tr, err := adapter.NewInprocTransport(outerCtx, stuck)
+	if err != nil {
+		t.Fatalf("NewInprocTransport: %v", err)
+	}
+
+	closeCtx, closeCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	t.Cleanup(closeCancel)
+
+	start := time.Now()
+	err = tr.Close(closeCtx)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected Close to return ctx error when adapter ignores pipe close")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected Close error to wrap context.DeadlineExceeded, got %v", err)
+	}
+	// Should return shortly after the deadline; allow generous slack
+	// for scheduler noise but ensure we're nowhere near a true hang.
+	if elapsed > 2*time.Second {
+		t.Errorf("Close took %v; expected to honor ~200ms ctx deadline", elapsed)
+	}
+}
+
 // TestInproc_ConcurrentCloseSafe regresses REL-005: a second concurrent
 // Close call must not race the first one; both must observe the same
 // settled closeErr value.

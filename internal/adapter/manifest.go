@@ -21,6 +21,8 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+
+	"github.com/aienvs/aienvs/internal/manifest"
 )
 
 // MaxAdapterManifestBytes caps the on-disk size of an adapter.yaml.
@@ -90,6 +92,14 @@ var (
 	// ErrAdapterManifestInvalidName is returned when name fails the
 	// adapter-id grammar.
 	ErrAdapterManifestInvalidName = errors.New("adapter: adapter.yaml name does not match required pattern")
+
+	// ErrAdapterManifestInvalidReservedPrefix is returned when
+	// reserved_prefix is set but is not a clean, workspace-relative,
+	// forward-slash path. Rejected shapes: absolute paths (POSIX or
+	// Windows), Windows volume prefixes ("C:..."), backslashes (always
+	// reserved on POSIX, ambiguous on Windows), or any segment equal
+	// to ".." (workspace escape).
+	ErrAdapterManifestInvalidReservedPrefix = errors.New("adapter: reserved_prefix must be a clean workspace-relative forward-slash path")
 )
 
 // adapterNamePattern enforces the same id grammar as IR nodes:
@@ -144,11 +154,24 @@ func LoadAdapterManifestBytes(src []byte) (*AdapterManifest, error) {
 // PATH discovery finds an aienvs-adapter-<name> binary without a
 // sibling adapter.yaml. Name must already be validated by the caller —
 // adapter-id grammar is enforced via path matching upstream.
-func SyntheticAdapterManifest(name string) *AdapterManifest {
+//
+// binaryPath is the path the runtime should exec when spawning this
+// adapter. Discovery passes the absolute path it resolved during
+// directory scan (filepath.Join(dir, e.Name())) so spawn-time exec
+// uses the exact binary discovery validated rather than re-resolving
+// "aienvs-adapter-<name>" through $PATH (TOCTOU: the second lookup
+// could pick up a different binary). When binaryPath is empty the
+// manifest falls back to the bare PATH-relative name; callers without
+// a resolved location only get the kubectl-plugin convention.
+func SyntheticAdapterManifest(name, binaryPath string) *AdapterManifest {
+	cmd := binaryPath
+	if cmd == "" {
+		cmd = "aienvs-adapter-" + name
+	}
 	return &AdapterManifest{
 		Name:            name,
 		ContractVersion: ContractVersionV1,
-		Command:         []string{"aienvs-adapter-" + name},
+		Command:         []string{cmd},
 	}
 }
 
@@ -171,6 +194,38 @@ func validateAdapterManifest(m *AdapterManifest) error {
 			return fmt.Errorf("%w: command[%d] is empty", ErrAdapterManifestEmptyCommand, i)
 		}
 	}
-	m.ReservedPrefix = strings.TrimRight(m.ReservedPrefix, "/")
+	cleaned, err := ValidateReservedPrefix(m.ReservedPrefix)
+	if err != nil {
+		return err
+	}
+	m.ReservedPrefix = cleaned
 	return nil
+}
+
+// ValidateReservedPrefix is the canonical validator for reserved_prefix
+// values on both adapter.yaml and the workspace manifest's
+// adapters[].reserved_prefix. It is a thin wrapper that maps the
+// shared manifest.ValidateReservedPrefix sentinel onto the
+// adapter-package sentinel so callers in this package can branch on
+// errors.Is(err, ErrAdapterManifestInvalidReservedPrefix).
+func ValidateReservedPrefix(s string) (string, error) {
+	cleaned, err := manifest.ValidateReservedPrefix(s)
+	if err != nil {
+		// Re-wrap with the adapter-package sentinel; preserve the
+		// underlying detail string for diagnostics.
+		return "", fmt.Errorf("%w: %s", ErrAdapterManifestInvalidReservedPrefix, errDetailAfterColon(err))
+	}
+	return cleaned, nil
+}
+
+// errDetailAfterColon strips the leading "manifest: ..." sentinel prefix
+// from a wrapped error so the adapter-side message reads naturally
+// after re-wrapping. Falls back to err.Error() when the format doesn't
+// match the expected shape.
+func errDetailAfterColon(err error) string {
+	msg := err.Error()
+	if i := strings.Index(msg, ": "); i >= 0 {
+		return msg[i+2:]
+	}
+	return msg
 }

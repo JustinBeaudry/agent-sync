@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/aienvs/aienvs/internal/adapter/contract"
 )
 
 // TestExtractCookieFromResult_TopLevelOnly confirms MAINT-005: the
@@ -47,6 +49,101 @@ func TestCookieMismatchErrorDoesNotLeakCookieValue(t *testing.T) {
 	msg := ErrAdapterCookieMismatch.Error()
 	if strings.Contains(msg, "echoed") || strings.Contains(msg, "want") {
 		t.Errorf("cookie sentinel must not name the values it compared: %q", msg)
+	}
+}
+
+// TestIRContainsSupportedKind_Streaming confirms the streaming
+// implementation finds the supported kind correctly across the
+// shapes we care about, returns false for malformed IR (no false
+// positives), and short-circuits without buffering the whole node
+// tree — exercised here with a 10k-node IR that contains no
+// supported kind.
+func TestIRContainsSupportedKind_Streaming(t *testing.T) {
+	t.Parallel()
+
+	supported := map[contract.OpKind]bool{
+		contract.OpKind("rule"): true,
+	}
+
+	tests := []struct {
+		name string
+		ir   string
+		want bool
+	}{
+		{"empty-object", `{}`, false},
+		{"nodes-empty", `{"nodes":[]}`, false},
+		{"single-supported", `{"nodes":[{"id":"x","kind":"rule"}]}`, true},
+		{"single-unsupported", `{"nodes":[{"id":"x","kind":"agent"}]}`, false},
+		{"mixed-finds-supported", `{"nodes":[{"kind":"agent"},{"kind":"rule"}]}`, true},
+		{"nodes-after-other-fields", `{"version":"v1","meta":{"a":1},"nodes":[{"kind":"rule"}]}`, true},
+		{"nodes-with-extra-fields", `{"nodes":[{"id":"x","kind":"rule","attrs":{"k":"v"},"deps":["y"]}]}`, true},
+		{"missing-nodes-field", `{"version":"v1","meta":{"a":1}}`, false},
+		{"malformed-truncated", `{"nodes":[{"kind":`, false},
+		{"malformed-not-object", `[]`, false},
+		{"malformed-not-json", `not-json`, false},
+		{"malformed-nodes-not-array", `{"nodes":{"kind":"rule"}}`, false},
+		{"node-without-kind", `{"nodes":[{"id":"x"}]}`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := irContainsSupportedKind(json.RawMessage(tt.ir), supported)
+			if got != tt.want {
+				t.Errorf("irContainsSupportedKind(%q) = %v, want %v", tt.ir, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIRContainsSupportedKind_LargeIR confirms the streaming decoder
+// handles a large IR without blowing up (and short-circuits when no
+// match exists, instead of buffering 10k nodes).
+func TestIRContainsSupportedKind_LargeIR(t *testing.T) {
+	t.Parallel()
+
+	supported := map[contract.OpKind]bool{
+		contract.OpKind("rule"): true,
+	}
+
+	// Build {"nodes":[{"id":"n0","kind":"agent"},...,{"id":"n9999","kind":"agent"}]}.
+	// None of the kinds match — function must return false without
+	// retaining the full node tree.
+	var b strings.Builder
+	b.WriteString(`{"nodes":[`)
+	for i := 0; i < 10_000; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		// Include a few extra fields per node so each element has some
+		// shape to skip past.
+		b.WriteString(`{"id":"n`)
+		// Cheap int-to-string without strconv to avoid the import dance.
+		// Just write digits.
+		num := []byte{}
+		n := i
+		if n == 0 {
+			num = []byte{'0'}
+		} else {
+			for n > 0 {
+				num = append([]byte{byte('0' + n%10)}, num...)
+				n /= 10
+			}
+		}
+		b.Write(num)
+		b.WriteString(`","kind":"agent","attrs":{"k":"v"}}`)
+	}
+	b.WriteString(`]}`)
+
+	got := irContainsSupportedKind(json.RawMessage(b.String()), supported)
+	if got != false {
+		t.Errorf("large IR with no supported kind: got true, want false")
+	}
+
+	// Also confirm a large IR where a supported kind sits late in the
+	// stream is still found.
+	mixed := strings.Replace(b.String(), `"id":"n9999","kind":"agent"`, `"id":"n9999","kind":"rule"`, 1)
+	if got := irContainsSupportedKind(json.RawMessage(mixed), supported); got != true {
+		t.Errorf("large IR with late supported kind: got false, want true")
 	}
 }
 
