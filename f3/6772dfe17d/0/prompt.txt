@@ -1,0 +1,237 @@
+<task>
+Implement Units 1–5 of `docs/plans/2026-04-26-002-feat-unit-8-pr3-conformance-spec-plan.md` for the aienvs Go CLI repo. This is PR 3 of Unit 8 — conformance harness foundation + the public adapter SDK.
+
+Read the plan file completely before starting. Below is a per-unit summary; the plan is the source of truth.
+
+**Unit 1 — Conformance package: types, corpus loader, embed.FS**
+Goal: Establish `internal/adapter/conformance/` with the case data model, the embedded corpus, and a loader. No driver yet — that's Unit 3.
+
+**Unit 2 — Initial corpus fixtures: happy paths + adversarial**
+Goal: Populate `corpus/*.json` with one happy-path fixture per IR kind in `internal/ir.AllKinds()` (six kinds: agents-md, rule, skill, command, plugin-reference, mcp-server-entry) plus the adversarial cases (protocol-order violation, cookie mismatch, version mismatch, undeclared output, capability-lied, abnormal exit, large frame).
+
+**Unit 3 — Conformance harness driver**
+Goal: Implement `Run(ctx, binary, opts) (Report, error)` that takes a binary path, spawns it via the existing `internal/adapter` runtime, runs each corpus case through the lifecycle, and reports results. Use the existing runtime — do not reimplement spawn/lifecycle.
+
+**Unit 4 — Adapterkit: public types + Server + dispatcher**
+Goal: First inhabitant of `pkg/`. Define public Go types mirroring the wire format (do NOT import `internal/adapter/contract` — that's forbidden across the internal/ boundary), plus a `Server` type that handles the protocol boilerplate (framing, JSON-RPC envelope, magic-cookie echo, capability negotiation) so adapter authors only write business logic.
+
+**Unit 5 — Adapterkit: capability builder + testing helpers + Example tests**
+Goal: Helper APIs for adapter authors. Capability builder fluent API for constructing `Capabilities{}`, exported testing helpers (scripted responder, init-result synthesizer), and `Example_*` functions in `example_test.go` that lock prose docs to compiling code.
+
+End state: All five units complete, all tests passing, all linters clean. Plan checkboxes for units 1–5 ticked. Adapterkit defines its own types matching the wire format; schema parity test in Unit 4 validates them against the JSON schemas in `internal/adapter/contract/schema/`.
+</task>
+
+<files>
+**Unit 1:**
+- Create: `internal/adapter/conformance/doc.go`
+- Create: `internal/adapter/conformance/corpus.go`
+- Create: `internal/adapter/conformance/corpus/.gitkeep`
+- Test: `internal/adapter/conformance/corpus_test.go`
+
+**Unit 2:**
+- Create: `internal/adapter/conformance/corpus/happy-rule.json`
+- Create: `internal/adapter/conformance/corpus/happy-skill.json`
+- Create: `internal/adapter/conformance/corpus/happy-agents-md.json`
+- Create: `internal/adapter/conformance/corpus/happy-command.json`
+- Create: `internal/adapter/conformance/corpus/happy-plugin-reference.json`
+- Create: `internal/adapter/conformance/corpus/happy-mcp-server-entry.json`
+- Create: `internal/adapter/conformance/corpus/error-protocol-order.json`
+- Create: `internal/adapter/conformance/corpus/error-cookie-mismatch.json`
+- Create: `internal/adapter/conformance/corpus/error-version-mismatch.json`
+- Create: `internal/adapter/conformance/corpus/error-undeclared-output.json`
+- Create: `internal/adapter/conformance/corpus/error-capability-lied.json`
+- Create: `internal/adapter/conformance/corpus/error-abnormal-exit.json`
+- Create: `internal/adapter/conformance/corpus/error-large-frame.json`
+- Modify: `internal/adapter/conformance/corpus_test.go` (add coverage assertion: every kind in `ir.AllKinds()` has at least one happy-path fixture)
+
+**Unit 3:**
+- Create: `internal/adapter/conformance/harness.go` (`Run(ctx, binary, opts) (Report, error)`)
+- Create: `internal/adapter/conformance/assertions.go` (ops diff helpers, error class match)
+- Test: `internal/adapter/conformance/harness_test.go`
+
+**Unit 4:**
+- Create: `pkg/adapterkit/doc.go`
+- Create: `pkg/adapterkit/types.go`
+- Create: `pkg/adapterkit/server.go`
+- Create: `pkg/adapterkit/dispatcher.go`
+- Test: `pkg/adapterkit/server_test.go`
+- Test: `pkg/adapterkit/types_test.go`
+- Test: `pkg/adapterkit/schema_parity_test.go`
+- Modify (small public addition): `internal/adapter/contract/schema.go` — add a public accessor `LoadSchema(name string) ([]byte, error)` so adapterkit's parity test can read schema bytes without importing the internal package directly. The function reads from the existing `SchemaFS`.
+
+**Unit 5:**
+- Create: `pkg/adapterkit/capabilities.go`
+- Create: `pkg/adapterkit/testing.go`
+- Create: `pkg/adapterkit/example_test.go` (`Example_*` functions for godoc)
+- Test: `pkg/adapterkit/capabilities_test.go`
+- Test: `pkg/adapterkit/testing_test.go`
+
+**Read for context (do not modify in this batch):**
+- `docs/plans/2026-04-26-002-feat-unit-8-pr3-conformance-spec-plan.md` (the full plan — read this first)
+- `internal/adapter/contract/schema.go` (embed.FS pattern — mirror for corpus)
+- `internal/adapter/contract/protocol.go` (wire types to mirror in adapterkit)
+- `internal/adapter/contract/jsonrpc.go` (JSON-RPC envelope, IDCorrelator)
+- `internal/adapter/contract/framing.go` (Content-Length framing)
+- `internal/adapter/runtime.go` (lifecycle orchestrator — harness will call this)
+- `internal/adapter/runtime_test.go` (`scriptedAdapter` — pattern for adapterkit's testing helpers)
+- `internal/adapter/subprocess.go` (subprocess transport)
+- `internal/adapter/subprocess_test.go` (`buildTestdataBinary` — content-hashed binary build pattern for harness tests)
+- `internal/adapter/manifest.go` (`AdapterManifest`, `ContractVersionV1`)
+- `internal/adapter/adapter.go` (Adapter, AdapterSession, NewSession)
+- `internal/adapter/errors.go` (RuntimeError + sentinels — what corpus error fixtures reference by name)
+- `internal/ir/types.go` (IR `Kind` constants, `AllKinds()` helper)
+- `internal/capmatrix/types.go` (`CapabilityStatus`)
+</files>
+
+<patterns>
+- Embed.FS: `internal/adapter/contract/schema.go` (`//go:embed schema/*.json` + `var SchemaFS embed.FS`). Mirror exactly for corpus at `internal/adapter/conformance/corpus.go`.
+- Loader pattern: `internal/manifest/load.go` (typed structured load + validation + sentinel errors with `errors.Is` branching).
+- Subprocess test fixture build: `internal/adapter/subprocess_test.go::buildTestdataBinary` + `TestMain` (content-hashed cache in `os.MkdirTemp`, cleaned up by TestMain).
+- Scripted-adapter pattern: `internal/adapter/runtime_test.go::scriptedAdapter` (lines 19–159) — exported version becomes `pkg/adapterkit/testing.go::ScriptedResponder`.
+- Schema parity validation: `internal/adapter/contract/schema_parity_test.go` — same approach for adapterkit's parity test.
+- Spec doc style: `docs/spec/manifest-v1.md` (frontmatter, section structure) — informs Unit 8 in the next batch, not this one.
+- Cobra factory: `internal/cli/cmd_trust.go` — informs Unit 7 in the next batch, not this one.
+- Streaming JSON: `internal/adapter/runtime.go::irContainsSupportedKind` — pattern for any IR-iteration in adapterkit.
+- Adapter test stub: `internal/adapter/testdata/echo/main.go` — current minimal echo, distinct from the new reference at `conformance/echo/` (next batch).
+</patterns>
+
+<approach>
+**Execution order**: Units 1 → 2 → 3, then 4 → 5 in parallel-conceptual but actually serial since both adapterkit units land in `pkg/adapterkit/` and 5 depends on 4. Recommended sequence: 1, 2, 3, 4, 5 (strictly serial for clean commits).
+
+**Unit 1 approach:**
+- Package doc explains the harness's role: spec freeze enforcement, conformance for third-party adapters.
+- `Case` struct: `Name string`, `Description string`, `IR json.RawMessage`, `Manifest CaseManifest` (declared_outputs + capabilities), `Expect Expected` (tagged union: `Ops []OpRecord`, `Error string` sentinel name, or `Skip string` reason).
+- `Expected` discriminator field: `kind: "ops" | "error" | "skip"`.
+- `LoadCorpus()` reads every `corpus/*.json` from embed.FS, parses into `[]Case`, sorts deterministically by Name. Returns `(cases, error)`.
+- `OpRecord` here mirrors `contract.OpRecord` (you may import `internal/adapter/contract` for this — conformance lives at `internal/adapter/conformance/`, not in `pkg/`, so internal imports are fine).
+- Validate at load: empty `Name` rejected, both `Ops` and `Error` set in same Expect rejected, kind discriminator matches the populated field.
+
+**Unit 2 approach:**
+- Each fixture is one self-contained JSON document with shape:
+  ```
+  {
+    "name": "happy-rule",
+    "description": "Adapter handles a single rule kind, emits one mkdir + one write_file under .echo/",
+    "ir": {"nodes": [{"id": "no-fri", "kind": "rule", ...}]},
+    "manifest": {
+      "declared_outputs": [{"path": ".echo/rules", "mode": "owned-subdir"}],
+      "capabilities": {"concept_kinds": {"rule": "supported"}}
+    },
+    "expect": {
+      "kind": "ops",
+      "ops": [
+        {"op": "mkdir", "path": ".echo/rules"},
+        {"op": "write_file", "path": ".echo/rules/no-fri.md"}
+      ]
+    }
+  }
+  ```
+- The `name` field MUST equal the filename without `.json`.
+- Adversarial fixtures: `expect.kind = "error"` with the expected sentinel name (one of: `ErrAdapterProtocolOrderViolation`, `ErrAdapterCookieMismatch`, `ErrAdapterProtocolMismatch`, `ErrAdapterUndeclaredOutput`, `ErrAdapterCapabilityLied`, `ErrAdapterTimeout`, plus a generic non-zero exit class for `error-abnormal-exit`).
+- Add a `corpus_completeness_test.go` (or extend `corpus_test.go`) — for every kind in `ir.AllKinds()`, assert at least one corpus case has that kind in its IR.
+
+**Unit 3 approach:**
+- `RunOptions` struct: `Cases []Case` (default: `LoadCorpus()`), `Timeouts adapter.SubprocessTimeouts` (default: runtime defaults), `Verbose bool`.
+- `Report` struct: `Cases []CaseResult`, `Summary{Total, Passed, Failed, Skipped int}`.
+- `CaseResult`: `Name string`, `Status string` (`pass`/`fail`/`skip`), `Reason string`, `ActualOps []OpRecord`.
+- For each case:
+  1. Build an `adapter.AdapterManifest` from `case.Manifest`: `Command: []string{binary}`, `ContractVersion: ContractVersionV1`, `Name: "conformance-target"`.
+  2. Construct `adapter.Adapter{Source: SourcePATH, Manifest: ...}`.
+  3. Spawn session via `adapter.NewSession(ctx, opts)`.
+  4. Drive `Initialize` → `Initialized` → `Emit(case.IR)` → `Shutdown`.
+  5. If `case.Expect.Kind == "ops"`: compare emitted ops against expected (order-insensitive set match unless `expect.strict_order: true`).
+  6. If `case.Expect.Kind == "error"`: check returned error matches the expected sentinel via `errors.Is` against the named sentinel from `internal/adapter/errors.go`.
+  7. If `case.Expect.Kind == "skip"`: mark skip with reason. Skips do not count as failures in the summary.
+- `assertions.go`: `MatchOps(expected, actual []OpRecord) (ok bool, missing, extra []OpRecord)`; `MatchError(expectedSentinel string, err error) bool` (sentinel name → reflect lookup or hand-coded switch).
+- Tests: run harness against `internal/adapter/testdata/echo/main.go` (built via `buildTestdataBinary`-equivalent) — most cases will skip (echo only handles `rule`), `happy-rule` should pass. Run against `internal/adapter/testdata/crashy/main.go` — every case fails with abnormal-exit. Test ctx cancellation, empty corpus, op-diff order semantics.
+
+**Unit 4 approach:**
+- **Mirror types** in `pkg/adapterkit/types.go` with identical JSON tags and field names to `internal/adapter/contract`. Different Go types — no aliases. Schema parity test catches drift.
+- Public types (mirror from contract): `InitializeParams`, `InitializeResult`, `Capabilities`, `DeclaredOutput`, `EmitParams`, `EmitResult`, `OpRecord`, `OpKind` (string type) + constants `OpKindWriteFile`/`OpKindWriteToolOwned`/`OpKindMkdir`/`OpKindDelete`/`OpKindWarning`, `OutputMode` + constants, `CapabilityLevel` + constants, `Error`, `ErrorClass` + constants, method-name constants (`MethodInitialize`, `MethodInitialized`, `MethodEmit`, `MethodShutdown`).
+- **Server** (final shape decided during execution; the reference echo in next batch is the forcing function):
+  ```
+  type Server struct { ... }
+  type InitializeFunc func(ctx context.Context, params InitializeParams) (InitializeResult, error)
+  type EmitFunc func(ctx context.Context, params EmitParams) (EmitResult, error)
+  type ShutdownFunc func(ctx context.Context) error
+  func NewServer(name, version string) *Server
+  func (s *Server) OnInitialize(fn InitializeFunc)
+  func (s *Server) OnEmit(fn EmitFunc)
+  func (s *Server) OnShutdown(fn ShutdownFunc)
+  func (s *Server) Run(ctx context.Context) error  // reads stdin, writes stdout
+  ```
+- The Server handles: magic-cookie env read (`AIENVS_ADAPTER_COOKIE`; exits 7 if missing), version validation (refuses if client speaks anything other than `aienvs/v1`), writes "started" to stderr (matches existing testdata echo convention), recovers handler panics and reports them as `adapter-panic` errors.
+- **Schema parity test** (`schema_parity_test.go`): for each public adapterkit type with a corresponding JSON schema, marshal a sample value to JSON and validate it against the schema. Use the new `contract.LoadSchema(name)` accessor (added as the small public addition to `internal/adapter/contract/schema.go`). Failure means adapterkit drifted from contract.
+- The `LoadSchema` addition to contract: a 5-line function that wraps `SchemaFS.ReadFile("schema/" + name + ".json")` with proper error wrapping. This is the only modification to `internal/adapter/contract/` in this batch.
+
+**Unit 5 approach:**
+- **CapabilitiesBuilder** fluent API:
+  ```
+  caps := adapterkit.NewCapabilities().
+    Supports("rule").
+    Partial("skill", "agent assets not yet handled").
+    Unsupported("mcp-server-entry").
+    WithWriteToolOwned(true).
+    Build()
+  ```
+- **Testing helpers** (exported, in `pkg/adapterkit/testing.go` — note: NOT `_test.go`, must be a regular file with exported APIs since third-party authors use them):
+  - `ScriptedResponder` — exported version of `internal/adapter/runtime_test.go::scriptedAdapter`. Lets adapter authors write unit tests against synthetic clients.
+  - `SynthesizeInitResult(name, version string, caps Capabilities, outputs []DeclaredOutput) []byte` — returns wire bytes of a valid `InitializeResult`.
+  - `RunInprocServer(t, server) (client *Client, cleanup func())` — wires Server to in-memory `io.Pipe` pair so tests drive it without real subprocess.
+  - `AssertProtocolShutdownAcked(t, server)` — verifies server called the equivalent of `MarkProtocolShutdownAcked` in its shutdown flow.
+- **Example_* functions** in `example_test.go`: one per public entry point (`Example_NewServer`, `Example_CapabilitiesBuilder`, `Example_RunInprocServer`). Per the spec-impl-drift learning, these lock prose docs to compiling code.
+</approach>
+
+<constraints>
+- Do NOT run git commit, git push, or create PRs — the orchestrating agent handles all git operations
+- Restrict all modifications to files within the repository root
+- Keep changes tightly scoped to the stated task — avoid unrelated refactors, renames, or cleanup
+- Resolve the task fully before stopping — do not stop at the first plausible answer
+- If you discover mid-execution that you need to modify files outside the repo root, complete what you can within the repo and report what you could not do via the result schema issues field
+- DO NOT modify `internal/adapter/contract/protocol.go`, `jsonrpc.go`, `framing.go` — these are the wire spec, frozen as of PR 1. The only allowed contract modification is adding `LoadSchema(name)` to `schema.go`.
+- DO NOT modify any file under `internal/adapter/testdata/` — test stubs are intentionally minimal; the new reference echo in the next batch lives at `conformance/echo/`.
+- DO NOT touch `internal/cli/`, `cmd/aienvs/`, `docs/spec/`, or `conformance/` directories — those are Units 6, 7, 8 in batch 2.
+- DO NOT add new external dependencies. Use only stdlib + what's already in go.mod.
+- The `pkg/adapterkit/` package MUST NOT import `internal/...` — Go forbids it across the boundary, and even if it didn't, the architectural decision (see plan Decision 1) is to keep them independent.
+- File paths in the plan are repo-relative; respect them exactly. Do not invent new locations.
+- Every I/O function takes `context.Context` as first param (per CLAUDE.md / AGENTS.md).
+- All errors handled, wrapped with `%w`. Sentinel errors with `errors.Is` branching.
+- No `init()`. No global mutable state. No `defer` in tests — use `t.Cleanup`.
+- Cross-platform: corpus JSON files use forward slashes; if any test compares paths, normalize via `filepath.ToSlash` per `docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md`.
+</constraints>
+
+<testing>
+Apply Test Scenario Completeness — each unit's plan section enumerates scenarios; supplement gaps if any category is missing or vague. Categories:
+- Happy path: core input/output pairs from each unit's goal
+- Edge cases: empty corpus, malformed JSON, missing required fields, both-Ops-and-Error in same Expect (Unit 1); each adversarial fixture maps to a real sentinel (Unit 2); op-diff with reordering / extras / missing (Unit 3); capabilities builder edge cases like Supports + Unsupported same kind (Unit 5)
+- Error/failure paths: harness against a binary that crashes immediately (Unit 3); Server with no `AIENVS_ADAPTER_COOKIE` env exits 7 (Unit 4); handler panic recovered and reported as adapter-panic (Unit 4)
+- Integration: harness end-to-end against testdata/echo + testdata/crashy (Unit 3); ScriptedResponder round-trip via RunInprocServer (Unit 5); Example tests compile and pass (Unit 5)
+
+Per the spec-impl-drift learning, do NOT use `t.Skip` to hide unimplemented behavior — either implement it or delete the test entirely. Skipped tests hide invariants.
+</testing>
+
+<verify>
+After implementing all five units, run ALL tests in a single command:
+
+```bash
+go vet ./... && go test -race -timeout 120s ./... && golangci-lint run ./...
+```
+
+Also run the cross-platform vet once:
+```bash
+GOOS=windows GOARCH=amd64 go vet ./...
+```
+
+If any test fails, fix the issues and re-run until all pass. Do not report status "completed" unless all four commands pass cleanly. This is your responsibility — the orchestrator will not re-run verification independently.
+
+Report the actual command output (or summary) in `verification_summary` so the orchestrator can verify by reading the report.
+</verify>
+
+<output_contract>
+Report your result via the --output-schema mechanism. Fill in every field:
+- status: "completed" ONLY if all five units are implemented AND all four verification commands pass cleanly, "partial" if some units done but others incomplete, "failed" if no meaningful progress
+- files_modified: array of all file paths you created or changed (repo-relative)
+- issues: array of strings describing any problems, gaps, or out-of-scope work discovered (e.g., "had to modify X outside the planned files because Y")
+- summary: one-paragraph description of what was done, organized by unit
+- verification_summary: actual command output or summary. Example: "go vet: clean. go test -race ./...: 47 tests passed across 13 packages, ~8s. golangci-lint run ./...: 0 issues. GOOS=windows go vet ./...: clean."
+</output_contract>

@@ -1,0 +1,58 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "f36772dfe17d",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr3-conformance-spec",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-04-26-002-feat-unit-8-pr3-conformance-spec-plan.md",
+    "internal/adapter/conformance/assertions.go",
+    "internal/adapter/conformance/corpus.go",
+    "internal/adapter/conformance/corpus/.gitkeep",
+    "internal/adapter/conformance/corpus/error-abnormal-exit.json",
+    "internal/adapter/conformance/corpus/error-capability-lied.json",
+    "internal/adapter/conformance/corpus/error-cookie-mismatch.json",
+    "internal/adapter/conformance/corpus/error-large-frame.json",
+    "internal/adapter/conformance/corpus/error-protocol-order.json",
+    "internal/adapter/conformance/corpus/error-undeclared-output.json",
+    "internal/adapter/conformance/corpus/error-version-mismatch.json",
+    "internal/adapter/conformance/corpus/happy-agents-md.json",
+    "internal/adapter/conformance/corpus/happy-command.json",
+    "internal/adapter/conformance/corpus/happy-mcp-server-entry.json",
+    "internal/adapter/conformance/corpus/happy-plugin-reference.json",
+    "internal/adapter/conformance/corpus/happy-rule.json",
+    "internal/adapter/conformance/corpus/happy-skill.json",
+    "internal/adapter/conformance/corpus_test.go",
+    "internal/adapter/conformance/doc.go",
+    "internal/adapter/conformance/harness.go",
+    "internal/adapter/conformance/harness_test.go",
+    "internal/adapter/contract/schema.go",
+    "pkg/adapterkit/capabilities.go",
+    "pkg/adapterkit/capabilities_test.go",
+    "pkg/adapterkit/dispatcher.go",
+    "pkg/adapterkit/doc.go",
+    "pkg/adapterkit/example_test.go",
+    "pkg/adapterkit/schema_parity_test.go",
+    "pkg/adapterkit/server.go",
+    "pkg/adapterkit/server_test.go",
+    "pkg/adapterkit/testing.go",
+    "pkg/adapterkit/testing_test.go",
+    "pkg/adapterkit/types.go",
+    "pkg/adapterkit/types_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f3/6772dfe17d/0/metadata.json",
+      "transcript": "/f3/6772dfe17d/0/full.jsonl",
+      "content_hash": "/f3/6772dfe17d/0/content_hash.txt",
+      "prompt": "/f3/6772dfe17d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 7550167,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 7333888,
+    "output_tokens": 72171,
+    "api_call_count": 64
+  }
+}
