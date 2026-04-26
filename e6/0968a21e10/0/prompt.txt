@@ -1500,3 +1500,7 @@ go!
 ---
 
 /compound-engineering:lfg
+
+---
+
+/compound-engineering:ce-work-beta defer to codex
