@@ -3,8 +3,9 @@
   "checkpoint_id": "8d486feaf39d",
   "strategy": "manual-commit",
   "branch": "feat/unit-9-claude-adapter",
-  "checkpoints_count": 1,
+  "checkpoints_count": 3,
   "files_touched": [
+    "docs/adapters/claude.md",
     "internal/adapter/runtime.go",
     "internal/adapter/runtime_internal_test.go"
   ],
@@ -14,13 +15,19 @@
       "transcript": "/8d/486feaf39d/0/full.jsonl",
       "content_hash": "/8d/486feaf39d/0/content_hash.txt",
       "prompt": "/8d/486feaf39d/0/prompt.txt"
+    },
+    {
+      "metadata": "/8d/486feaf39d/1/metadata.json",
+      "transcript": "/8d/486feaf39d/1/full.jsonl",
+      "content_hash": "/8d/486feaf39d/1/content_hash.txt",
+      "prompt": "/8d/486feaf39d/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 4481,
-    "cache_creation_tokens": 4509385,
-    "cache_read_tokens": 212659865,
-    "output_tokens": 559608,
-    "api_call_count": 620
+    "input_tokens": 4740,
+    "cache_creation_tokens": 5876778,
+    "cache_read_tokens": 271280062,
+    "output_tokens": 734675,
+    "api_call_count": 815
   }
 }
