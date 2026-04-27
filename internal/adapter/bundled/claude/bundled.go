@@ -40,9 +40,13 @@ func Bundled() *adapter.BundledAdapter {
 			Version:         adapterVersion,
 			ContractVersion: adapter.ContractVersionV1,
 			ReservedPrefix:  reservedPrefix,
-			// Bundled adapters are spawned in-process; the runtime
-			// uses the Run callback below, not Command.
-			Command: nil,
+			// Bundled adapters are spawned in-process via Run; the
+			// Command slice is required by the shared manifest
+			// validator (validateAdapterManifest in
+			// internal/adapter/discover.go) but never executed for
+			// SourceBundled — the runtime takes the Run path. The
+			// placeholder name is recorded for diagnostics only.
+			Command: []string{"aienvs-adapter-claude-bundled"},
 		},
 		Run: run,
 	}

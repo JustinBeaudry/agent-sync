@@ -31,8 +31,12 @@ func TestBundled_ManifestShape(t *testing.T) {
 	if got, want := b.Manifest.ReservedPrefix, reservedPrefix; got != want {
 		t.Errorf("Manifest.ReservedPrefix = %q, want %q", got, want)
 	}
-	if len(b.Manifest.Command) != 0 {
-		t.Errorf("Manifest.Command should be empty for bundled adapter; got %v", b.Manifest.Command)
+	// Bundled adapters carry a placeholder Command so the shared
+	// adapter-manifest validator (which requires non-empty Command)
+	// accepts them at discovery time. The Run callback is what the
+	// runtime actually invokes; Command is diagnostic only.
+	if len(b.Manifest.Command) == 0 {
+		t.Error("Manifest.Command must not be empty (validator rejects empty Command even for bundled adapters)")
 	}
 }
 
