@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {
+      "id": "claude",
+      "kind": "agents-md",
+      "version": 1,
+      "targets": ["claude"],
+      "body": "## Build commands\n\nUse make build."
+    }
+  ]
+}

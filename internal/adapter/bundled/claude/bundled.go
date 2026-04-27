@@ -103,9 +103,4 @@ func bundledGetenv(name string) string {
 	return ""
 }
 
-// handleEmit is wired in 9.3+. The 9.1 scaffold returns an empty op
-// list so initialize/initialized/emit/shutdown round-trips succeed
-// against the in-process testing client.
-func handleEmit(_ context.Context, _ adapterkit.EmitParams) (adapterkit.EmitResult, error) {
-	return adapterkit.EmitResult{OpsPerformed: []adapterkit.OpRecord{}}, nil
-}
+// handleEmit lives in emit.go.

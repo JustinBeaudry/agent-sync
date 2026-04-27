@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": "linter",
+      "kind": "plugin-reference",
+      "version": 1,
+      "body": "{\"source\":\"npm:eslint\"}"
+    }
+  ]
+}

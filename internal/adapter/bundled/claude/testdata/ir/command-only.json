@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": "deploy",
+      "kind": "command",
+      "version": 1,
+      "body": "Run the deploy script and report status."
+    }
+  ]
+}
