@@ -557,6 +557,7 @@ func TestErrorClass_StableNames(t *testing.T) {
 		got  ErrorClass
 		want string
 	}{
+		{ErrorClassAdapterProtocolOrder, "adapter-protocol-order"},
 		{ErrorClassAdapterPanic, "adapter-panic"},
 		{ErrorClassAdapterTimeout, "adapter-timeout"},
 		{ErrorClassAdapterProtocolMismatch, "adapter-protocol-mismatch"},

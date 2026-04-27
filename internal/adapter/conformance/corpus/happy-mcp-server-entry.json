@@ -1,0 +1,40 @@
+{
+  "name": "happy-mcp-server-entry",
+  "description": "Adapter declares mcp-server-entry support and emits mkdir + write_file for an MCP server node.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "postgres",
+        "kind": "mcp-server-entry",
+        "body": "postgres MCP server entry"
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "mcp-server-entry": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/postgres.md"
+      }
+    ]
+  }
+}

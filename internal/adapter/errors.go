@@ -16,7 +16,7 @@ import (
 //	ErrAdapterCookieMismatch      → ErrorClassAdapterExecDenied
 //	ErrAdapterProtocolMismatch    → ErrorClassAdapterProtocolMismatch
 //	ErrAdapterUndeclaredOutput    → ErrorClassAdapterUndeclaredOutput
-//	ErrAdapterProtocolOrderViolation → ErrorClassAdapterPanic (treated as adapter fault)
+//	ErrAdapterProtocolOrderViolation → ErrorClassAdapterProtocolOrder
 //	ErrAdapterCapabilityLied      → ErrorClassAdapterCapabilityLied
 //	(timeout)                     → ErrorClassAdapterTimeout
 //	(subprocess crash)            → ErrorClassAdapterPanic

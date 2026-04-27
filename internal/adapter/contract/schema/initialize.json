@@ -24,9 +24,10 @@
         "protocol_version": {"type": "string"},
         "capabilities": {"$ref": "#/$defs/capabilities"},
         "declared_outputs": {"type": "array", "items": {"$ref": "#/$defs/declared_output"}},
+        "cookie": {"type": "string"},
         "_meta": {}
       },
-      "required": ["server", "protocol_version", "capabilities", "declared_outputs"]
+      "required": ["server", "protocol_version", "capabilities", "declared_outputs", "cookie"]
     },
     "capabilities": {
       "type": "object",

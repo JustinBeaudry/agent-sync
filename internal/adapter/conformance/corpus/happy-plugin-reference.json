@@ -1,0 +1,40 @@
+{
+  "name": "happy-plugin-reference",
+  "description": "Adapter declares plugin-reference support and emits mkdir + write_file for a plugin reference node.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "github-plugin",
+        "kind": "plugin-reference",
+        "body": "GitHub plugin reference."
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "plugin-reference": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/github-plugin.md"
+      }
+    ]
+  }
+}

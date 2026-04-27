@@ -1,0 +1,29 @@
+{
+  "name": "error-cookie-mismatch",
+  "description": "Adapter echoes the wrong magic cookie during initialize.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "cookie-check",
+        "kind": "rule"
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      }
+    }
+  },
+  "expect": {
+    "kind": "error",
+    "error": "ErrAdapterCookieMismatch"
+  }
+}

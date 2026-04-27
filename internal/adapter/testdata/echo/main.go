@@ -7,10 +7,10 @@
 // The binary reads frames from stdin, classifies each via the
 // internal/adapter/contract package, and responds:
 //   - initialize     → echoes the cookie + minimal capabilities +
-//                      one declared output ".echo/"
+//     one declared output ".echo/"
 //   - initialized    → ignored (no response)
 //   - emit           → returns one mkdir + one write_file op record
-//                      under .echo/<id> for each IR node
+//     under .echo/<id> for each IR node
 //   - shutdown       → returns empty result, exits 0
 //
 // Reads AIENVS_ADAPTER_COOKIE; exits 7 if missing. Writes a single
@@ -25,9 +25,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 
 	"github.com/aienvs/aienvs/internal/adapter/contract"
 )
+
+var nodeIDPattern = regexp.MustCompile(`\A[a-z0-9][a-z0-9_-]{0,63}\z`)
 
 func main() {
 	cookie := os.Getenv("AIENVS_ADAPTER_COOKIE")
@@ -81,7 +84,11 @@ func handle(req contract.Message, cookie string) contract.Response {
 	case contract.MethodInitialize:
 		return contract.Response{ID: req.ID, Result: initResult(cookie)}
 	case contract.MethodEmit:
-		return contract.Response{ID: req.ID, Result: emitResult(req)}
+		result, errObj := emitResult(req)
+		if errObj != nil {
+			return contract.Response{ID: req.ID, Error: errObj}
+		}
+		return contract.Response{ID: req.ID, Result: result}
 	case contract.MethodShutdown:
 		b, _ := json.Marshal(contract.ShutdownResult{})
 		return contract.Response{ID: req.ID, Result: b}
@@ -93,13 +100,7 @@ func handle(req contract.Message, cookie string) contract.Response {
 }
 
 func initResult(cookie string) json.RawMessage {
-	wire := struct {
-		Server          string                    `json:"server"`
-		ProtocolVersion string                    `json:"protocol_version"`
-		Capabilities    contract.Capabilities     `json:"capabilities"`
-		DeclaredOutputs []contract.DeclaredOutput `json:"declared_outputs"`
-		Cookie          string                    `json:"cookie"`
-	}{
+	wire := contract.InitializeResult{
 		Server:          "echo/0.1",
 		ProtocolVersion: "aienvs/v1",
 		Capabilities: contract.Capabilities{
@@ -117,7 +118,7 @@ func initResult(cookie string) json.RawMessage {
 	return b
 }
 
-func emitResult(req contract.Message) json.RawMessage {
+func emitResult(req contract.Message) (json.RawMessage, *contract.Error) {
 	// Synthesize a small ops_performed list from the IR's nodes (if any).
 	var params struct {
 		Target string `json:"target"`
@@ -134,6 +135,9 @@ func emitResult(req contract.Message) json.RawMessage {
 		{Op: contract.OpKindMkdir, Path: ".echo"},
 	}
 	for _, n := range params.IR.Nodes {
+		if !nodeIDPattern.MatchString(n.ID) {
+			return nil, &contract.Error{Code: contract.CodeInvalidParams, Message: fmt.Sprintf("invalid node id %q", n.ID)}
+		}
 		ops = append(ops, contract.OpRecord{
 			Op:   contract.OpKindWriteFile,
 			Path: ".echo/" + n.ID + ".md",
@@ -141,5 +145,5 @@ func emitResult(req contract.Message) json.RawMessage {
 	}
 	result := contract.EmitResult{OpsPerformed: ops}
 	b, _ := json.Marshal(result)
-	return b
+	return b, nil
 }

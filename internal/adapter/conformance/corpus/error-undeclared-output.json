@@ -1,0 +1,29 @@
+{
+  "name": "error-undeclared-output",
+  "description": "Adapter emits an op outside its declared_outputs set.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "escape-output",
+        "kind": "rule"
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      }
+    }
+  },
+  "expect": {
+    "kind": "error",
+    "error": "ErrAdapterUndeclaredOutput"
+  }
+}

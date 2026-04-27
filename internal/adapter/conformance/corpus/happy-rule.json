@@ -1,0 +1,40 @@
+{
+  "name": "happy-rule",
+  "description": "Adapter declares rule support and emits mkdir + write_file under .echo/ for a rule node.",
+  "ir": {
+    "nodes": [
+      {
+        "id": "no-fri",
+        "kind": "rule",
+        "body": "No pull requests on Friday."
+      }
+    ]
+  },
+  "manifest": {
+    "declared_outputs": [
+      {
+        "path": ".echo",
+        "mode": "owned-subdir"
+      }
+    ],
+    "capabilities": {
+      "concept_kinds": {
+        "rule": "supported"
+      },
+      "write_tool_owned": true
+    }
+  },
+  "expect": {
+    "kind": "ops",
+    "ops": [
+      {
+        "op": "mkdir",
+        "path": ".echo"
+      },
+      {
+        "op": "write_file",
+        "path": ".echo/no-fri.md"
+      }
+    ]
+  }
+}

@@ -36,6 +36,10 @@ Thumbs.db
 # Useful locally for debugging; not committed.
 .context/
 
+# Compound-engineering per-developer config (delegation consent, sandbox
+# mode, model preference). Local workstation state, not repo config.
+.compound-engineering/config.local.yaml
+
 # Env files — never commit
 .env
 .env.*
