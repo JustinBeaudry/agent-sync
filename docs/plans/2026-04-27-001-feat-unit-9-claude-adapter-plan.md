@@ -297,7 +297,7 @@ adjust the layout if implementation reveals a better one.
 
 ## Implementation Units
 
-- [ ] **Unit 9.1: Capability declaration + adapter scaffold**
+- [x] **Unit 9.1: Capability declaration + adapter scaffold**
 
 **Goal:** Stand up the package shape: `Bundled()` constructor, manifest
 metadata, in-code capability matrix, and the `capabilities.yaml`
@@ -370,7 +370,7 @@ declaration the adapter ships alongside. No emission logic yet.
 - `Bundled()` is the only export from the package needed by callers;
   internal helpers stay unexported.
 
-- [ ] **Unit 9.2: Managed-file header + per-subdir README helpers**
+- [x] **Unit 9.2: Managed-file header + per-subdir README helpers**
 
 **Goal:** Implement the small set of formatting helpers every
 emission needs: managed-file header for markdown, JSON sidecar marker,
@@ -416,7 +416,7 @@ section markers for tool-owned markdown, and the per-subdir README body.
 - `go vet ./internal/adapter/bundled/claude/...` clean.
 - Helpers cover every formatting site `emit.go` needs in 9.3+.
 
-- [ ] **Unit 9.3: Reserved-subdirectory emission (rule, command,
+- [x] **Unit 9.3: Reserved-subdirectory emission (rule, command,
   skill)**
 
 **Goal:** Implement IR-to-op mapping for the three kinds Claude reads
@@ -507,7 +507,7 @@ managed-file header. Skill emission additionally walks
 - Op `path` strings match the exact strings in the expected fixtures
   byte-for-byte.
 
-- [ ] **Unit 9.4: Tool-owned-file emission (mcp-server-entry,
+- [x] **Unit 9.4: Tool-owned-file emission (mcp-server-entry,
   agents-md companion)**
 
 **Goal:** Map the two IR kinds whose output lands inside files the
@@ -580,7 +580,7 @@ tool itself owns — `.mcp.json` (JSON pointer locator) and `CLAUDE.md`
   `json.Marshal`/`Unmarshal` (validated by an `adapterkit` types
   test, but checked here too via the marshalled wire output).
 
-- [ ] **Unit 9.5: Honest-unsupported handling
+- [x] **Unit 9.5: Honest-unsupported handling
   (`plugin-reference`, off-target nodes)**
 
 **Goal:** When the IR contains nodes the adapter cannot honestly
@@ -642,7 +642,7 @@ capability-matrix handling).
 - No `write_file`/`write_tool_owned` op accidentally emitted for a
   warned/skipped node.
 
-- [ ] **Unit 9.6: End-to-end inproc + claude-conformance corpus**
+- [x] **Unit 9.6: End-to-end inproc + claude-conformance corpus**
 
 **Goal:** Drive the adapter through the actual `pkg/adapterkit`
 client over io.Pipe and assert the recorded `OpsPerformed` matches a
@@ -704,7 +704,7 @@ subprocess.
 - The adapter survives a clean shutdown and reports no pending
   request leaks.
 
-- [ ] **Unit 9.7: `docs/adapters/claude.md`**
+- [x] **Unit 9.7: `docs/adapters/claude.md`**
 
 **Goal:** Authoritative human-readable reference: per-kind destination
 table, capability declarations, deprecation/bug notes, and the

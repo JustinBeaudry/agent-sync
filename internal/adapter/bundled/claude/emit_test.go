@@ -7,41 +7,69 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/aienvs/aienvs/pkg/adapterkit"
 )
 
-// emitFixture loads an IR document from testdata/ir and runs
-// handleEmit against it. Returns both the OpRecord summary and the
-// raw Op list so tests can assert on op-specific fields (warning
-// concept_id, write_tool_owned locator, content bytes) the OpRecord
-// summary does not carry.
+// emitFixture loads an IR document from testdata/ir and runs the
+// production handleEmit (including its sort + dedup invariants) so
+// the test path matches the wire path. Returns both the OpRecord
+// summary and the raw Op list so tests can assert on op-specific
+// fields (warning concept_id, write_tool_owned locator, content
+// bytes) the OpRecord summary does not carry.
 func emitFixture(t *testing.T, name string) (adapterkit.EmitResult, []adapterkit.Op) {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("testdata", "ir", name))
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", name, err)
 	}
+	// Drive the same code path the wire-side runtime drives so the
+	// fixture-vs-wire assertion is meaningful. handleEmit owns the
+	// sort + dedup behavior; emitting via dispatchNode directly would
+	// silently bypass both and mask future regressions.
+	emitted, err := captureOps(raw)
+	if err != nil {
+		t.Fatalf("captureOps %s: %v", name, err)
+	}
+	return adapterkit.EmitResult{OpsPerformed: emitted.records()}, emitted.ops
+}
+
+// captureOps replicates handleEmit's flow but returns the raw
+// emittedOps so tests can inspect op-specific fields. Keeps test
+// logic in one place rather than duplicating the sort + dedup
+// across every fixture-driven test.
+func captureOps(raw json.RawMessage) (*emittedOps, error) {
 	doc, err := decodeIRDocument(raw)
 	if err != nil {
-		t.Fatalf("decode fixture %s: %v", name, err)
+		return nil, err
+	}
+	if err := rejectDuplicateNodes(doc.Nodes); err != nil {
+		return nil, err
 	}
 	emitted := &emittedOps{}
-	readmeEmitted := map[string]bool{}
-	// Re-sort so the assertion is deterministic regardless of how
-	// the fixture authored the order.
+	state := &emitState{
+		readmeEmitted:   map[string]bool{},
+		sidecarEmitted:  false,
+		emittedFilePath: map[string]struct{}{},
+	}
+	sort.Slice(doc.Nodes, func(i, j int) bool {
+		if doc.Nodes[i].Kind != doc.Nodes[j].Kind {
+			return doc.Nodes[i].Kind < doc.Nodes[j].Kind
+		}
+		return doc.Nodes[i].ID < doc.Nodes[j].ID
+	})
 	for _, n := range doc.Nodes {
 		if !nodeTargetsClaude(n) {
 			continue
 		}
-		if err := dispatchNode(emitted, n, readmeEmitted); err != nil {
-			t.Fatalf("dispatchNode %s: %v", n.ID, err)
+		if err := dispatchNode(emitted, n, state); err != nil {
+			return nil, err
 		}
 	}
-	res := adapterkit.EmitResult{OpsPerformed: emitted.records()}
-	return res, emitted.ops
+	return emitted, nil
 }
 
 func TestEmitRule_HappyPath(t *testing.T) {
@@ -58,16 +86,20 @@ func TestEmitRule_HappyPath(t *testing.T) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
 	}
 
-	// Verify the rule body has the managed-file header prepended.
 	ruleOp := findWriteFile(t, ops, ".claude/rules/aienvs/no-fri.md")
 	if !strings.HasPrefix(string(ruleOp.Content), "<!-- Managed by aienvs") {
 		t.Errorf("rule content missing managed header; got %q", ruleOp.Content)
+	}
+	if !strings.Contains(string(ruleOp.Content), "do not edit") {
+		t.Errorf("rule content missing 'do not edit' clause; got %q", ruleOp.Content)
+	}
+	if !strings.Contains(string(ruleOp.Content), "Regenerate: aienvs sync") {
+		t.Errorf("rule content missing regenerate instruction; got %q", ruleOp.Content)
 	}
 	if !strings.Contains(string(ruleOp.Content), "No PRs on Friday.") {
 		t.Errorf("rule content missing body; got %q", ruleOp.Content)
 	}
 
-	// Verify README content is the per-subdir README.
 	readmeOp := findWriteFile(t, ops, ".claude/rules/aienvs/README.md")
 	if !strings.Contains(string(readmeOp.Content), "aienvs unmanage claude") {
 		t.Errorf("README content missing exit path; got %q", readmeOp.Content)
@@ -79,7 +111,6 @@ func TestEmitRule_PathsFrontmatterTriggersWarning(t *testing.T) {
 
 	res, ops := emitFixture(t, "rule-with-paths-frontmatter.json")
 
-	// Expected ops: mkdir + README + rule write_file + warning.
 	wantKinds := []adapterkit.OpKind{
 		adapterkit.OpKindMkdir,
 		adapterkit.OpKindWriteFile,
@@ -145,7 +176,6 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 		t.Errorf("skill SKILL.md missing managed header; got %q", skillOp.Content)
 	}
 
-	// Asset writes carry asset content, not a managed header.
 	tmplOp := findWriteFile(t, ops, ".claude/skills/aienvs-coder/templates/foo.txt")
 	if string(tmplOp.Content) != "template body" {
 		t.Errorf("template asset content=%q want %q", tmplOp.Content, "template body")
@@ -157,8 +187,6 @@ func TestEmitSkill_NoREADMEAtSkillsParent(t *testing.T) {
 
 	res, _ := emitFixture(t, "skill-with-assets.json")
 
-	// Skill emission must NOT write a README at .claude/skills/ —
-	// that directory can hold user skills, and we don't own it.
 	for _, op := range res.OpsPerformed {
 		if op.Path == ".claude/skills/README.md" {
 			t.Errorf("skill emission must not create %q", op.Path)
@@ -166,6 +194,75 @@ func TestEmitSkill_NoREADMEAtSkillsParent(t *testing.T) {
 		if op.Path == ".claude/skills/aienvs-coder/README.md" {
 			t.Errorf("per-skill README would clash with skill-discovery semantics; got %q", op.Path)
 		}
+	}
+}
+
+func TestEmitSkill_ZeroAssetsEmitsOnlySKILLMd(t *testing.T) {
+	t.Parallel()
+
+	emitted, err := captureOps(json.RawMessage(`{"nodes":[{"id":"empty","kind":"skill","body":"# Empty skill"}]}`))
+	if err != nil {
+		t.Fatalf("captureOps: %v", err)
+	}
+	got := emitted.records()
+	want := []adapterkit.OpRecord{
+		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/aienvs-empty"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/aienvs-empty/SKILL.md"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("zero-asset skill ops mismatch:\n got: %+v\nwant: %+v", got, want)
+	}
+}
+
+func TestEmitSkill_RejectsAssetRelPathTraversal(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		relPath string
+	}{
+		{"sibling skill", "../aienvs-victim/SKILL.md"},
+		{"workspace escape", "../../../etc/passwd"},
+		{"absolute path", "/etc/passwd"},
+		{"backslash", "subdir\\foo.txt"},
+		{"dot-dot only", ".."},
+		{"trailing dot-dot", "subdir/.."},
+		{"embedded dot-dot", "subdir/../escape.txt"},
+		{"dot-slash prefix", "./foo.txt"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ir := []byte(`{"nodes":[{"id":"victim","kind":"skill","body":"x","assets":[{"rel_path":` + jsonQuote(tc.relPath) + `,"content":"x"}]}]}`)
+			_, err := captureOps(ir)
+			if err == nil {
+				t.Fatalf("RelPath %q must be rejected; was accepted", tc.relPath)
+			}
+			var aerr *adapterkit.Error
+			if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+				t.Fatalf("RelPath %q got err=%v want CodeInvalidParams", tc.relPath, err)
+			}
+		})
+	}
+}
+
+func TestEmitSkill_RejectsEmptyAssetRelPath(t *testing.T) {
+	t.Parallel()
+
+	emitted := &emittedOps{}
+	err := emitSkill(emitted, irNode{
+		ID:   "x",
+		Kind: "skill",
+		Assets: []irAsset{
+			{RelPath: "", Content: json.RawMessage(`"x"`)},
+		},
+	})
+	if err == nil {
+		t.Fatal("empty rel_path must be rejected")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("empty rel_path got err=%v want CodeInvalidParams", err)
 	}
 }
 
@@ -192,33 +289,66 @@ func TestEmitMCPServerEntry_HappyPath(t *testing.T) {
 	if mcp.Locator != "/mcpServers/aienvs_lsp" {
 		t.Errorf("locator=%q want %q", mcp.Locator, "/mcpServers/aienvs_lsp")
 	}
-	// Body is JSON; verify it round-trips.
 	if !json.Valid(mcp.Content) {
 		t.Errorf(".mcp.json entry content is not valid JSON: %q", mcp.Content)
 	}
 }
 
-func TestEmitMCPServerEntry_RejectsInvalidJSON(t *testing.T) {
+func TestEmitMCPServerEntry_RejectsNonObjectBody(t *testing.T) {
 	t.Parallel()
 
-	emitted := &emittedOps{}
-	err := emitMCPServerEntry(emitted, irNode{
-		ID:   "broken",
-		Kind: "mcp-server-entry",
-		Body: json.RawMessage(`"this is not an mcp object — but is a json string"`),
-	})
-	// nodeBodyBytes will string-decode this and produce
-	// `this is not an mcp object — but is a json string` which is
-	// not valid JSON, so the validator should reject.
-	if err == nil {
-		t.Fatal("expected error for non-JSON mcp-server-entry body")
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"plain string", `"not an object"`},
+		{"number scalar", `42`},
+		{"boolean", `true`},
+		{"json array", `[1,2,3]`},
+		{"json null", `null`},
 	}
-	var aerr *adapterkit.Error
-	if !errorsAs(err, &aerr) {
-		t.Fatalf("error type=%T want *adapterkit.Error", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ir := []byte(`{"nodes":[{"id":"bad","kind":"mcp-server-entry","body":` + tc.body + `}]}`)
+			_, err := captureOps(ir)
+			if err == nil {
+				t.Fatalf("body %q must be rejected; was accepted", tc.body)
+			}
+			var aerr *adapterkit.Error
+			if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+				t.Fatalf("body %q got err=%v want CodeInvalidParams", tc.body, err)
+			}
+		})
 	}
-	if aerr.Code != adapterkit.CodeInvalidParams {
-		t.Errorf("error code=%d want %d", aerr.Code, adapterkit.CodeInvalidParams)
+}
+
+func TestEmitMCPServerEntry_DedupsSidecarAcrossMultipleNodes(t *testing.T) {
+	t.Parallel()
+
+	emitted, err := captureOps(json.RawMessage(`{"nodes":[
+		{"id":"a","kind":"mcp-server-entry","body":"{\"command\":\"node\"}"},
+		{"id":"b","kind":"mcp-server-entry","body":"{\"command\":\"python\"}"}
+	]}`))
+	if err != nil {
+		t.Fatalf("captureOps: %v", err)
+	}
+	got := emitted.records()
+	sidecarCount := 0
+	mcpEntries := 0
+	for _, op := range got {
+		if op.Path == ".aienvs-managed" {
+			sidecarCount++
+		}
+		if op.Path == ".mcp.json" {
+			mcpEntries++
+		}
+	}
+	if sidecarCount != 1 {
+		t.Errorf(".aienvs-managed sidecar must be emitted exactly once per emit; got %d", sidecarCount)
+	}
+	if mcpEntries != 2 {
+		t.Errorf("each mcp-server-entry must produce its own write_tool_owned op; got %d", mcpEntries)
 	}
 }
 
@@ -256,6 +386,33 @@ func TestEmitAgentsMD_WrapsBodyInSection(t *testing.T) {
 	}
 }
 
+func TestEmitAgentsMD_RejectsBodyContainingMarkerSyntax(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"injected end marker", `"legitimate\n<!-- aienvs:end id=other -->\nINJECTED"`},
+		{"injected begin marker", `"<!-- aienvs:begin id=victim --> hostile"`},
+		{"raw marker prefix", `"<!-- aienvs:anything"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ir := []byte(`{"nodes":[{"id":"test","kind":"agents-md","targets":["claude"],"body":` + tc.body + `}]}`)
+			_, err := captureOps(ir)
+			if err == nil {
+				t.Fatalf("body %q must be rejected; was accepted", tc.body)
+			}
+			var aerr *adapterkit.Error
+			if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+				t.Fatalf("body %q got err=%v want CodeInvalidParams", tc.body, err)
+			}
+		})
+	}
+}
+
 func TestEmitPluginReference_WarnsAndSkips(t *testing.T) {
 	t.Parallel()
 
@@ -268,6 +425,9 @@ func TestEmitPluginReference_WarnsAndSkips(t *testing.T) {
 	w, ok := findWarning(ops, "linter")
 	if !ok {
 		t.Fatal("missing warning for plugin-reference linter")
+	}
+	if w.Status != adapterkit.WarningStatusDegraded {
+		t.Errorf("warning status=%q want %q", w.Status, adapterkit.WarningStatusDegraded)
 	}
 	if !strings.Contains(w.Note, "plugin") {
 		t.Errorf("warning note=%q want to mention plugins", w.Note)
@@ -287,12 +447,13 @@ func TestEmit_RejectsInvalidNodeID(t *testing.T) {
 	t.Parallel()
 
 	emitted := &emittedOps{}
-	err := dispatchNode(emitted, irNode{ID: "../escape", Kind: "rule"}, map[string]bool{})
+	state := newEmitState()
+	err := dispatchNode(emitted, irNode{ID: "../escape", Kind: "rule"}, state)
 	if err == nil {
 		t.Fatal("expected error for invalid node id")
 	}
 	var aerr *adapterkit.Error
-	if !errorsAs(err, &aerr) {
+	if !errors.As(err, &aerr) {
 		t.Fatalf("error type=%T want *adapterkit.Error", err)
 	}
 	if aerr.Code != adapterkit.CodeInvalidParams {
@@ -300,21 +461,49 @@ func TestEmit_RejectsInvalidNodeID(t *testing.T) {
 	}
 }
 
+func TestEmit_RejectsUnknownKind(t *testing.T) {
+	t.Parallel()
+
+	emitted := &emittedOps{}
+	state := newEmitState()
+	err := dispatchNode(emitted, irNode{ID: "x", Kind: "made-up-kind"}, state)
+	if err == nil {
+		t.Fatal("expected error for unknown IR kind")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("got err=%v want CodeInvalidParams", err)
+	}
+	if !strings.Contains(aerr.Message, "unknown IR kind") {
+		t.Errorf("error message must name unknown IR kind; got %q", aerr.Message)
+	}
+}
+
+func TestEmit_RejectsDuplicateNodes(t *testing.T) {
+	t.Parallel()
+
+	_, err := captureOps(json.RawMessage(`{"nodes":[
+		{"id":"x","kind":"rule","body":"first"},
+		{"id":"x","kind":"rule","body":"second"}
+	]}`))
+	if err == nil {
+		t.Fatal("duplicate (kind, id) must be rejected")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("got err=%v want CodeInvalidParams", err)
+	}
+}
+
 func TestEmit_DeduplicatesREADMEPerSubdir(t *testing.T) {
 	t.Parallel()
 
-	// Two rule nodes share the .claude/rules/aienvs subdir; the
-	// README + mkdir pair must be emitted exactly once.
-	doc := irDocument{Nodes: []irNode{
-		{ID: "first", Kind: "rule", Body: json.RawMessage(`"first"`)},
-		{ID: "second", Kind: "rule", Body: json.RawMessage(`"second"`)},
-	}}
-	emitted := &emittedOps{}
-	readmeEmitted := map[string]bool{}
-	for _, n := range doc.Nodes {
-		if err := dispatchNode(emitted, n, readmeEmitted); err != nil {
-			t.Fatalf("dispatchNode: %v", err)
-		}
+	emitted, err := captureOps(json.RawMessage(`{"nodes":[
+		{"id":"first","kind":"rule","body":"first"},
+		{"id":"second","kind":"rule","body":"second"}
+	]}`))
+	if err != nil {
+		t.Fatalf("captureOps: %v", err)
 	}
 	got := emitted.records()
 	want := []adapterkit.OpRecord{
@@ -346,7 +535,6 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 		t.Fatal("mixed-everything fixture must produce ops")
 	}
 
-	// Spot-check that all expected paths are present at least once.
 	expectPaths := []string{
 		".claude/rules/aienvs/house-style.md",
 		".claude/commands/aienvs/deploy.md",
@@ -360,6 +548,48 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 			t.Errorf("expected op for path %q; got %+v", want, res.OpsPerformed)
 		}
 	}
+	// Plugin-reference must surface as a warning, not a write.
+	if !containsKind(res.OpsPerformed, adapterkit.OpKindWarning) {
+		t.Errorf("mixed-everything must include warning op for plugin-reference; got %+v", res.OpsPerformed)
+	}
+}
+
+func TestEmit_HandleEmit_RejectsMalformedIRJSON(t *testing.T) {
+	t.Parallel()
+
+	_, err := handleEmit(context.Background(), adapterkit.EmitParams{
+		Target: adapterName,
+		IR:     json.RawMessage(`{not json}`),
+	})
+	if err == nil {
+		t.Fatal("malformed IR JSON must be rejected")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("got err=%v want CodeInvalidParams", err)
+	}
+}
+
+func TestEmit_HandleEmit_HonorsContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := handleEmit(ctx, adapterkit.EmitParams{
+		Target: adapterName,
+		IR:     json.RawMessage(`{"nodes":[{"id":"x","kind":"rule","body":"x"}]}`),
+	})
+	if err == nil {
+		t.Fatal("cancelled context must abort emit")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) {
+		t.Fatalf("err=%T want *adapterkit.Error", err)
+	}
+	if !strings.Contains(aerr.Message, "cancelled") {
+		t.Errorf("error message must mention cancellation; got %q", aerr.Message)
+	}
 }
 
 func TestHasPathsFrontmatter(t *testing.T) {
@@ -371,7 +601,8 @@ func TestHasPathsFrontmatter(t *testing.T) {
 		want bool
 	}{
 		{"no frontmatter", "regular body", false},
-		{"opens with paths", "---\npaths:\n  - foo\n---\nbody", true},
+		{"opens with paths LF", "---\npaths:\n  - foo\n---\nbody", true},
+		{"opens with paths CRLF", "---\r\npaths:\r\n  - foo\r\n---\r\nbody", true},
 		{"opens with description", "---\ndescription: foo\npaths:\n  - bar\n---\n", false},
 		{"empty body", "", false},
 		{"empty frontmatter line then paths", "---\n\npaths: foo\n---\n", true},
@@ -388,6 +619,13 @@ func TestHasPathsFrontmatter(t *testing.T) {
 }
 
 // --- test helpers ----------------------------------------------------
+
+func newEmitState() *emitState {
+	return &emitState{
+		readmeEmitted:   map[string]bool{},
+		emittedFilePath: map[string]struct{}{},
+	}
+}
 
 func opKinds(records []adapterkit.OpRecord) []adapterkit.OpKind {
 	out := make([]adapterkit.OpKind, 0, len(records))
@@ -435,9 +673,22 @@ func containsPath(records []adapterkit.OpRecord, path string) bool {
 	return false
 }
 
-// errorsAs is a tiny shim around errors.As that returns bool. Lets
-// the assertion read like the standard library check without
-// importing errors at every test call site.
-func errorsAs(err error, target **adapterkit.Error) bool {
-	return errors.As(err, target)
+func containsKind(records []adapterkit.OpRecord, kind adapterkit.OpKind) bool {
+	for _, r := range records {
+		if r.Op == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// jsonQuote returns the JSON-string form of s. Used in inline IR
+// fixtures so test cases can pass arbitrary strings without manual
+// escape juggling.
+func jsonQuote(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
 }

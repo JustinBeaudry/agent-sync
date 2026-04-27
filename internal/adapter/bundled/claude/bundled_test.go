@@ -29,7 +29,7 @@ func TestBundledAdapter_FullLifecycle(t *testing.T) {
 		Client:           "test",
 		ProtocolVersions: []string{adapterkit.ContractVersionV1},
 		Cookie:           "00000000000000000000000000000000",
-		WorkspaceRoot:    "/tmp/aienvs-claude-test",
+		WorkspaceRoot:    t.TempDir(),
 		ReservedPrefix:   reservedPrefix,
 		IRVersion:        "v1",
 	})
@@ -73,12 +73,13 @@ func TestBundledAdapter_FullLifecycle(t *testing.T) {
 	adapterkit.AssertProtocolShutdownAcked(t, server)
 }
 
-// TestBundledAdapter_EmitWithUnknownTargetSucceeds documents v1
-// behavior: the adapter does not validate the target name in its
-// emit handler. The runtime uses the target only for routing. A
-// future tightening (per-target validation) would need a v1.x
-// extension.
-func TestBundledAdapter_EmitWithUnknownTargetSucceeds(t *testing.T) {
+// TestBundledAdapter_EmitWithForeignTargetStillProcessesIR documents
+// v1 behavior: the adapter does not validate the EmitParams.Target
+// field. Routing is the runtime's responsibility; the adapter
+// processes the IR it receives. A node's own targets:[...] field
+// (not EmitParams.Target) is what filters per-adapter. Per-target
+// validation in the adapter is a Unit 8b candidate.
+func TestBundledAdapter_EmitWithForeignTargetStillProcessesIR(t *testing.T) {
 	t.Parallel()
 
 	server := newServerForTest()
@@ -97,18 +98,56 @@ func TestBundledAdapter_EmitWithUnknownTargetSucceeds(t *testing.T) {
 	if err := client.Initialized(ctx); err != nil {
 		t.Fatalf("Initialized: %v", err)
 	}
+	// rule-only.json has no per-node targets filter (means "all
+	// adapters"), so the rule is processed regardless of the foreign
+	// EmitParams.Target value. This test pins the v1 contract.
 	emit, err := client.Emit(ctx, adapterkit.EmitParams{
-		Target: "cursor", // not the claude adapter, but emit succeeds
+		Target: "cursor",
 		IR:     readFixture(t, "rule-only.json"),
 	})
 	if err != nil {
 		t.Fatalf("Emit with foreign target should succeed; got %v", err)
 	}
 	if len(emit.OpsPerformed) == 0 {
-		t.Error("emit must still process IR even when target name is foreign")
+		t.Error("emit must still process IR even when EmitParams.Target names a different adapter")
 	}
 	if err := client.Shutdown(ctx); err != nil {
 		t.Fatalf("Shutdown: %v", err)
+	}
+}
+
+// TestBundledAdapter_ReInitAfterShutdownIsRejected verifies the
+// stateful Server contract: once Shutdown has run, a second
+// Initialize must not succeed on the same Server instance.
+func TestBundledAdapter_ReInitAfterShutdownIsRejected(t *testing.T) {
+	t.Parallel()
+
+	server := newServerForTest()
+	client, cleanup := adapterkit.RunInprocServer(t, server)
+	defer cleanup()
+
+	ctx := context.Background()
+	if _, err := client.Initialize(ctx, adapterkit.InitializeParams{
+		Client:           "test",
+		ProtocolVersions: []string{adapterkit.ContractVersionV1},
+		Cookie:           "00000000000000000000000000000000",
+		IRVersion:        "v1",
+	}); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if err := client.Initialized(ctx); err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+	if err := client.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	if _, err := client.Initialize(ctx, adapterkit.InitializeParams{
+		Client:           "test",
+		ProtocolVersions: []string{adapterkit.ContractVersionV1},
+		Cookie:           "00000000000000000000000000000000",
+		IRVersion:        "v1",
+	}); err == nil {
+		t.Error("re-Initialize after Shutdown must fail; Server is single-use")
 	}
 }
 

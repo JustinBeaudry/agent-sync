@@ -70,7 +70,10 @@ func (e *emittedOps) records() []adapterkit.OpRecord {
 // produces an error, the whole call returns that error and partially
 // emitted ops are discarded. Per-node skip-with-warning is a Unit 8b
 // extension.
-func handleEmit(_ context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+//
+// Context is checked between nodes so a runtime cancel during a
+// large IR is honored without waiting for the full iteration.
+func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
 	doc, err := decodeIRDocument(params.IR)
 	if err != nil {
 		return adapterkit.EmitResult{}, &adapterkit.Error{
@@ -79,12 +82,26 @@ func handleEmit(_ context.Context, params adapterkit.EmitParams) (adapterkit.Emi
 		}
 	}
 
+	// Detect duplicate (kind, id) pairs in the wire payload before
+	// emitting. The IR decoder enforces uniqueness on its own output
+	// but the wire shape can carry duplicates from a buggy or
+	// adversarial producer; emitting the same path twice would let
+	// the sync engine silently last-write-wins.
+	if err := rejectDuplicateNodes(doc.Nodes); err != nil {
+		return adapterkit.EmitResult{}, err
+	}
+
 	emitted := &emittedOps{}
 
-	// Track which reserved-subdirectory READMEs have been emitted in
-	// this call so we don't write them more than once when an IR
-	// contains multiple nodes targeting the same subdir.
-	readmeEmitted := map[string]bool{}
+	// readmeEmitted dedups per-subdir mkdir+README pairs.
+	// sidecarEmitted dedups the .aienvs-managed sidecar (only ever
+	// written next to .mcp.json; one per emit regardless of how many
+	// mcp-server-entry nodes are present).
+	state := emitState{
+		readmeEmitted:   map[string]bool{},
+		sidecarEmitted:  false,
+		emittedFilePath: map[string]struct{}{},
+	}
 
 	// Iterate in a deterministic order (sorted by kind, then id) so
 	// op output is stable across runs and easy to compare against
@@ -99,11 +116,17 @@ func handleEmit(_ context.Context, params adapterkit.EmitParams) (adapterkit.Emi
 	})
 
 	for _, node := range doc.Nodes {
+		if err := ctx.Err(); err != nil {
+			return adapterkit.EmitResult{}, &adapterkit.Error{
+				Code:    adapterkit.CodeInternalError,
+				Message: fmt.Sprintf("claude: emit cancelled: %s", err.Error()),
+			}
+		}
 		if !nodeTargetsClaude(node) {
 			// Node is targeted at a different adapter — silent skip.
 			continue
 		}
-		if err := dispatchNode(emitted, node, readmeEmitted); err != nil {
+		if err := dispatchNode(emitted, node, &state); err != nil {
 			return adapterkit.EmitResult{}, err
 		}
 	}
@@ -111,10 +134,17 @@ func handleEmit(_ context.Context, params adapterkit.EmitParams) (adapterkit.Emi
 	return adapterkit.EmitResult{OpsPerformed: emitted.records()}, nil
 }
 
-// dispatchNode routes one IR node to its kind-specific emitter. The
-// 9.3 wiring covers rule/command/skill; 9.4 wires mcp-server-entry +
-// agents-md; 9.5 wires plugin-reference.
-func dispatchNode(emitted *emittedOps, node irNode, readmeEmitted map[string]bool) error {
+// emitState carries per-emit dedup tables. Threading one struct
+// instead of multiple maps keeps dispatchNode's signature stable as
+// new dedup keys appear.
+type emitState struct {
+	readmeEmitted   map[string]bool
+	sidecarEmitted  bool
+	emittedFilePath map[string]struct{}
+}
+
+// dispatchNode routes one IR node to its kind-specific emitter.
+func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	if !ir.IsValidID(node.ID) {
 		return &adapterkit.Error{
 			Code:    adapterkit.CodeInvalidParams,
@@ -123,13 +153,13 @@ func dispatchNode(emitted *emittedOps, node irNode, readmeEmitted map[string]boo
 	}
 	switch ir.Kind(node.Kind) {
 	case ir.KindRule:
-		return emitRule(emitted, node, readmeEmitted)
+		return emitRule(emitted, node, state.readmeEmitted)
 	case ir.KindCommand:
-		return emitCommand(emitted, node, readmeEmitted)
+		return emitCommand(emitted, node, state.readmeEmitted)
 	case ir.KindSkill:
 		return emitSkill(emitted, node)
 	case ir.KindMCPServerEntry:
-		return emitMCPServerEntry(emitted, node)
+		return emitMCPServerEntry(emitted, node, state)
 	case ir.KindAgentsMD:
 		return emitAgentsMD(emitted, node)
 	case ir.KindPluginReference:
@@ -170,4 +200,64 @@ func nodeTargetsClaude(node irNode) bool {
 		}
 	}
 	return false
+}
+
+// rejectDuplicateNodes returns InvalidParams when the wire payload
+// contains two or more nodes with the same (kind, id) pair. The
+// fail-closed default avoids the silent last-write-wins behavior the
+// sync engine would otherwise hit at write time.
+func rejectDuplicateNodes(nodes []irNode) error {
+	seen := make(map[string]struct{}, len(nodes))
+	for _, n := range nodes {
+		key := n.Kind + "/" + n.ID
+		if _, dup := seen[key]; dup {
+			return &adapterkit.Error{
+				Code:    adapterkit.CodeInvalidParams,
+				Message: fmt.Sprintf("claude: duplicate node (kind=%q id=%q) in IR payload", n.Kind, n.ID),
+			}
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+// decodeBodyOrPassthrough turns a node or asset Body field into raw
+// bytes. The wire shape allows two body encodings:
+//   - JSON string (markdown bodies): `"# heading\n..."`
+//   - Raw JSON value (json/toml kinds): `{"command":"node",...}`
+//
+// String-decode is tried first; if that fails the raw JSON value is
+// validated and passed through unchanged.
+func decodeBodyOrPassthrough(raw json.RawMessage) ([]byte, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return []byte(s), nil
+	}
+	var any any
+	if err := json.Unmarshal(raw, &any); err != nil {
+		return nil, fmt.Errorf("body must be a JSON string or valid JSON value: %w", err)
+	}
+	return raw, nil
+}
+
+// wrapBodyErr converts a node-body decode error into the structured
+// JSON-RPC error the caller returns.
+func wrapBodyErr(node irNode, err error) error {
+	return &adapterkit.Error{
+		Code:    adapterkit.CodeInvalidParams,
+		Message: fmt.Sprintf("claude: node %q (%s) body: %s", node.ID, node.Kind, err.Error()),
+	}
+}
+
+// wrapOpErr converts an op-construction error (typically the
+// payload-too-large guard inside NewOpWriteFile) into the structured
+// JSON-RPC error the caller returns.
+func wrapOpErr(node irNode, err error) error {
+	return &adapterkit.Error{
+		Code:    adapterkit.CodeInvalidParams,
+		Message: fmt.Sprintf("claude: node %q (%s) op: %s", node.ID, node.Kind, err.Error()),
+	}
 }

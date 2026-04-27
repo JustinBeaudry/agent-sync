@@ -3,7 +3,6 @@ package claude
 import (
 	_ "embed"
 	"fmt"
-	"sort"
 
 	"github.com/goccy/go-yaml"
 
@@ -108,16 +107,4 @@ func parseCapabilitiesYAML(src []byte) (declarationFile, error) {
 // for now the call sites are test-only and one-off.
 func loadDeclaration() (declarationFile, error) {
 	return parseCapabilitiesYAML(capabilitiesYAML)
-}
-
-// sortedConceptKinds returns the IR kinds known to the adapter in
-// stable order. Used in tests + diagnostics so iteration order is
-// deterministic.
-func sortedConceptKinds() []ir.Kind {
-	kinds := make([]ir.Kind, 0, len(conceptKinds))
-	for k := range conceptKinds {
-		kinds = append(kinds, k)
-	}
-	sort.Slice(kinds, func(i, j int) bool { return string(kinds[i]) < string(kinds[j]) })
-	return kinds
 }

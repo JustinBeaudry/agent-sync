@@ -1,7 +1,7 @@
 package claude
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
 
 	"github.com/aienvs/aienvs/pkg/adapterkit"
@@ -15,43 +15,50 @@ const (
 	sectionIDPrefix    = "aienvs:"
 )
 
+// markerOpenBytes is the literal HTML-comment opener every aienvs
+// section marker uses. Body content for an agents-md node is rejected
+// when it contains this byte sequence: a hostile body could otherwise
+// inject a fake end-marker followed by a fake begin-marker, splitting
+// the managed section in CLAUDE.md and confusing the merge step.
+var markerOpenBytes = []byte("<!-- aienvs:")
+
 // emitMCPServerEntry emits one write_tool_owned op into .mcp.json
 // at /mcpServers/aienvs_<id>, plus a sidecar .aienvs-managed marker
-// that advertises ownership next to the strict-JSON file (it has no
-// comment syntax to inline a managed-file header).
+// (deduplicated per emit) that advertises ownership next to the
+// strict-JSON file.
 //
-// The body is required to parse as JSON; a malformed body is an
-// adapter-level error because emitting it would corrupt the merged
-// .mcp.json file at sync time. The runtime cannot distinguish
-// "intentional non-JSON" from "decoder bug", so we fail closed.
-func emitMCPServerEntry(emitted *emittedOps, node irNode) error {
-	body, err := nodeBodyBytes(node)
+// The body is required to parse as a JSON object. A scalar, array,
+// or boolean body would corrupt the merged .mcp.json: Claude Code
+// expects /mcpServers/<key> to map to an object with command/args
+// fields, and storing a non-object value silently breaks every MCP
+// load for the workspace.
+func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) error {
+	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
 	}
-	if !json.Valid(body) {
+	if !isJSONObject(body) {
 		return &adapterkit.Error{
 			Code:    adapterkit.CodeInvalidParams,
-			Message: fmt.Sprintf("claude: mcp-server-entry %q body is not valid JSON; refusing to corrupt .mcp.json", node.ID),
+			Message: fmt.Sprintf("claude: mcp-server-entry %q body must be a JSON object (got non-object)", node.ID),
 		}
 	}
 
-	op := adapterkit.OpWriteToolOwned{
+	emitted.add(adapterkit.OpWriteToolOwned{
 		Path:    mcpJSONPath,
 		Kind:    adapterkit.ToolOwnedKindJSONPointer,
 		Locator: mcpJSONPointerBase + node.ID,
 		Content: body,
-	}
-	if _, err := json.Marshal(op); err != nil {
-		return wrapOpErr(node, err)
-	}
-	emitted.add(op)
+	})
 
-	sidecar, err := adapterkit.NewOpWriteFile(claudeMDSidecar, 0o644, jsonSidecarMarker())
-	if err != nil {
-		return wrapOpErr(node, err)
+	if !state.sidecarEmitted {
+		state.sidecarEmitted = true
+		sidecar, err := adapterkit.NewOpWriteFile(claudeMDSidecar, 0o644, jsonSidecarMarker())
+		if err != nil {
+			return wrapOpErr(node, err)
+		}
+		emitted.add(sidecar)
 	}
-	emitted.add(sidecar)
 	return nil
 }
 
@@ -62,26 +69,34 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode) error {
 // outside the managed section is preserved by the merge step
 // (Unit 12a).
 //
+// The body is rejected when it contains the aienvs marker opener.
+// Without this guard a body containing `<!-- aienvs:end id=other -->`
+// could break out of its own section or forge another section
+// entirely, leaving the merged CLAUDE.md with conflicting markers
+// the merge step has no way to resolve safely.
+//
 // No managed-file header is added inside the section: the begin/end
 // markers serve as the equivalent ownership advertisement, and a
 // header inside a user-owned markdown file would be visually noisy.
 func emitAgentsMD(emitted *emittedOps, node irNode) error {
-	body, err := nodeBodyBytes(node)
+	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
 	}
+	if bytes.Contains(body, markerOpenBytes) {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: agents-md %q body contains aienvs marker syntax (%q); refusing to corrupt CLAUDE.md", node.ID, string(markerOpenBytes)),
+		}
+	}
 	wrapped := wrapManagedSection(node.ID, body)
 
-	op := adapterkit.OpWriteToolOwned{
+	emitted.add(adapterkit.OpWriteToolOwned{
 		Path:    claudeMDPath,
 		Kind:    adapterkit.ToolOwnedKindMarkdownSection,
 		Locator: sectionIDPrefix + node.ID,
 		Content: wrapped,
-	}
-	if _, err := json.Marshal(op); err != nil {
-		return wrapOpErr(node, err)
-	}
-	emitted.add(op)
+	})
 	return nil
 }
 
@@ -102,4 +117,22 @@ func emitPluginReferenceWarning(emitted *emittedOps, node irNode) error {
 		Note:      "Claude Code does not load project-level plugin-reference registries; install plugins via Claude Code's own plugin command",
 	})
 	return nil
+}
+
+// isJSONObject reports whether body is a JSON object (`{...}`),
+// not a scalar, array, or null. Assumes the caller already verified
+// the bytes are valid JSON via decodeBodyOrPassthrough; the check
+// here is purely structural — first non-whitespace byte must be `{`.
+func isJSONObject(body []byte) bool {
+	for _, b := range body {
+		switch b {
+		case ' ', '\t', '\n', '\r':
+			continue
+		case '{':
+			return true
+		default:
+			return false
+		}
+	}
+	return false
 }

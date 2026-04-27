@@ -201,7 +201,7 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 		Client:           "test",
 		ProtocolVersions: []string{adapterkit.ContractVersionV1},
 		Cookie:           "00000000000000000000000000000000",
-		WorkspaceRoot:    "/tmp/aienvs-claude-test",
+		WorkspaceRoot:    t.TempDir(),
 		ReservedPrefix:   reservedPrefix,
 		IRVersion:        "v1",
 	})
@@ -229,21 +229,6 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 	}
 	if err := client.Shutdown(ctx); err != nil {
 		t.Fatalf("Shutdown: %v", err)
-	}
-}
-
-func TestSortedConceptKinds_Stable(t *testing.T) {
-	t.Parallel()
-
-	a := sortedConceptKinds()
-	b := sortedConceptKinds()
-	if len(a) != len(b) {
-		t.Fatalf("sortedConceptKinds returned different lengths: %d vs %d", len(a), len(b))
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			t.Fatalf("sortedConceptKinds not stable at index %d: %q vs %q", i, a[i], b[i])
-		}
 	}
 }
 

@@ -2,9 +2,10 @@ package claude
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
+	"path"
 	"sort"
+	"strings"
 
 	"github.com/aienvs/aienvs/pkg/adapterkit"
 )
@@ -24,23 +25,21 @@ const (
 //     (Claude Code activation behavior is inconsistent with that
 //     frontmatter as of 2026-04).
 //
-// Body bytes are decoded from the wire JSON via nodeBodyBytes; an
-// IR's body field is delivered as a JSON string (for markdown kinds)
-// or as raw JSON (for json/toml kinds).
+// Rule of Three: emitRule and emitCommand are structurally identical;
+// only the subdir constant varies. Collapse to a shared
+// emitReservedSubdirNode helper when the third reserved-subdirectory
+// kind appears (Unit 10 cursor adds a second; Unit 11 codex would be
+// the third — re-evaluate then).
 func emitRule(emitted *emittedOps, node irNode, readmeEmitted map[string]bool) error {
-	body, err := nodeBodyBytes(node)
+	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
 	}
 
 	ensureSubdir(emitted, rulesSubdir, readmeEmitted)
 
-	path := rulesSubdir + "/" + node.ID + ".md"
-	wf, err := adapterkit.NewOpWriteFile(path, 0o644, prependHeader(body))
+	wf, err := adapterkit.NewOpWriteFile(rulesSubdir+"/"+node.ID+".md", 0o644, prependHeader(body))
 	if err != nil {
-		return wrapOpErr(node, err)
-	}
-	if _, err := json.Marshal(wf); err != nil {
 		return wrapOpErr(node, err)
 	}
 	emitted.add(wf)
@@ -55,28 +54,18 @@ func emitRule(emitted *emittedOps, node irNode, readmeEmitted map[string]bool) e
 	return nil
 }
 
-// emitCommand maps one command node to:
-//   - mkdir(.claude/commands/aienvs)
-//   - write_file(.claude/commands/aienvs/README.md)
-//   - write_file(.claude/commands/aienvs/<id>.md)
-//
-// Identical shape to emitRule; the only difference is the subdir.
-// They are kept as separate functions for now; if a third reserved-
-// subdirectory kind appears the Rule of Three says collapse.
+// emitCommand mirrors emitRule under .claude/commands/aienvs. See
+// emitRule's Rule-of-Three note before collapsing.
 func emitCommand(emitted *emittedOps, node irNode, readmeEmitted map[string]bool) error {
-	body, err := nodeBodyBytes(node)
+	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
 	}
 
 	ensureSubdir(emitted, commandsSubdir, readmeEmitted)
 
-	path := commandsSubdir + "/" + node.ID + ".md"
-	wf, err := adapterkit.NewOpWriteFile(path, 0o644, prependHeader(body))
+	wf, err := adapterkit.NewOpWriteFile(commandsSubdir+"/"+node.ID+".md", 0o644, prependHeader(body))
 	if err != nil {
-		return wrapOpErr(node, err)
-	}
-	if _, err := json.Marshal(wf); err != nil {
 		return wrapOpErr(node, err)
 	}
 	emitted.add(wf)
@@ -88,21 +77,17 @@ func emitCommand(emitted *emittedOps, node irNode, readmeEmitted map[string]bool
 //   - write_file(.claude/skills/aienvs-<id>/SKILL.md)
 //   - write_file(.claude/skills/aienvs-<id>/<asset.RelPath>) for each asset
 //
-// The skill folder gets no README.md: the per-skill folder is its own
-// scope and a README inside it would clash with skill-discovery
-// semantics. The README rule applies to the parent reserved
-// directory only — and the parent for skills is .claude/skills,
-// which we do NOT own (it can hold user skills). So no README at all
-// for skills.
+// Asset RelPaths are validated to stay inside the skill's own folder.
+// Without this check a malicious or buggy IR could escape into a
+// sibling skill folder via `../aienvs-victim/SKILL.md` — the runtime's
+// declared-outputs gate accepts any cleaned path inside .claude/skills,
+// so per-skill containment must be enforced here.
 //
-// Asset paths are emitted relative to the skill folder, so an asset
-// with RelPath "templates/foo.txt" becomes a write at
-// .claude/skills/aienvs-<id>/templates/foo.txt. We do not emit
-// per-asset-parent mkdirs; the sync engine creates intermediate
-// directories as part of write_file execution. (Echo reference
-// adapter emits at most one mkdir per emit; we mirror that.)
+// The skill folder gets no README.md: a per-skill README would clash
+// with skill-discovery semantics, and the parent .claude/skills can
+// hold user skills that we don't own.
 func emitSkill(emitted *emittedOps, node irNode) error {
-	body, err := nodeBodyBytes(node)
+	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
 	}
@@ -110,49 +95,74 @@ func emitSkill(emitted *emittedOps, node irNode) error {
 	skillDir := skillsParent + "/" + skillPrefix + node.ID
 	emitted.add(adapterkit.OpMkdir{Path: skillDir, Mode: 0o755})
 
-	skillPath := skillDir + "/SKILL.md"
-	wf, err := adapterkit.NewOpWriteFile(skillPath, 0o644, prependHeader(body))
+	wf, err := adapterkit.NewOpWriteFile(skillDir+"/SKILL.md", 0o644, prependHeader(body))
 	if err != nil {
-		return wrapOpErr(node, err)
-	}
-	if _, err := json.Marshal(wf); err != nil {
 		return wrapOpErr(node, err)
 	}
 	emitted.add(wf)
 
-	// Sort assets by RelPath for deterministic output ordering.
 	assets := append([]irAsset(nil), node.Assets...)
 	sort.Slice(assets, func(i, j int) bool { return assets[i].RelPath < assets[j].RelPath })
 
 	for _, a := range assets {
-		if a.RelPath == "" {
-			return &adapterkit.Error{
-				Code:    adapterkit.CodeInvalidParams,
-				Message: fmt.Sprintf("claude: skill %q has asset with empty rel_path", node.ID),
-			}
+		if err := validateAssetRelPath(node.ID, a.RelPath); err != nil {
+			return err
 		}
-		assetBody, err := assetBodyBytes(a)
+		assetBody, err := decodeBodyOrPassthrough(a.Content)
 		if err != nil {
 			return &adapterkit.Error{
 				Code:    adapterkit.CodeInvalidParams,
 				Message: fmt.Sprintf("claude: skill %q asset %q body: %s", node.ID, a.RelPath, err.Error()),
 			}
 		}
-		assetPath := skillDir + "/" + a.RelPath
-		op, err := adapterkit.NewOpWriteFile(assetPath, 0o644, assetBody)
+		op, err := adapterkit.NewOpWriteFile(skillDir+"/"+a.RelPath, 0o644, assetBody)
 		if err != nil {
 			return &adapterkit.Error{
 				Code:    adapterkit.CodeInvalidParams,
 				Message: fmt.Sprintf("claude: skill %q asset %q: %s", node.ID, a.RelPath, err.Error()),
 			}
 		}
-		if _, err := json.Marshal(op); err != nil {
-			return &adapterkit.Error{
-				Code:    adapterkit.CodeInvalidParams,
-				Message: fmt.Sprintf("claude: skill %q asset %q marshal: %s", node.ID, a.RelPath, err.Error()),
-			}
-		}
 		emitted.add(op)
+	}
+	return nil
+}
+
+// validateAssetRelPath rejects RelPath shapes that would let a skill
+// asset escape its own folder. Defense in depth: the runtime's
+// declared-outputs gate catches workspace escapes but does not
+// enforce per-skill containment, so the adapter is the only line of
+// defense for this class of issue.
+func validateAssetRelPath(skillID, relPath string) error {
+	if relPath == "" {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: skill %q has asset with empty rel_path", skillID),
+		}
+	}
+	// Reject absolute paths (POSIX or Windows-volume) and backslash —
+	// wire-protocol paths are forward-slash only.
+	if strings.HasPrefix(relPath, "/") || strings.ContainsRune(relPath, '\\') {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: skill %q asset %q must be a forward-slash workspace-relative path", skillID, relPath),
+		}
+	}
+	// path.Clean normalizes "./", duplicate "//", and "..". If the
+	// cleaned form differs from the input, or starts with "..", or
+	// contains a "/.." segment, the path tries to escape the skill
+	// folder. Reject.
+	cleaned := path.Clean(relPath)
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") || strings.Contains(cleaned, "/../") {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: skill %q asset %q escapes skill folder via ..", skillID, relPath),
+		}
+	}
+	if cleaned != relPath {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: skill %q asset %q is not in canonical form (cleaned: %q)", skillID, relPath, cleaned),
+		}
 	}
 	return nil
 }
@@ -165,8 +175,7 @@ func ensureSubdir(emitted *emittedOps, subdir string, seen map[string]bool) {
 	}
 	seen[subdir] = true
 	emitted.add(adapterkit.OpMkdir{Path: subdir, Mode: 0o755})
-	readmePath := subdir + "/README.md"
-	wf, err := adapterkit.NewOpWriteFile(readmePath, 0o644, readmeForSubdir(subdir))
+	wf, err := adapterkit.NewOpWriteFile(subdir+"/README.md", 0o644, readmeForSubdir(subdir))
 	if err != nil {
 		// readmeForSubdir returns a small fixed body; the only way
 		// NewOpWriteFile can fail is the payload-too-large guard,
@@ -190,12 +199,14 @@ func prependHeader(body []byte) []byte {
 // effort: a body with frontmatter that places `paths:` after other
 // fields is missed. v1 ships the conservative check; full
 // frontmatter exposure is a v1.x change to the IR.
+//
+// Accepts both `---\n` and `---\r\n` separators so Windows-authored
+// rule files don't silently slip past the warning.
 func hasPathsFrontmatter(body []byte) bool {
-	const sep = "---\n"
-	if !bytes.HasPrefix(body, []byte(sep)) {
+	rest, ok := stripFrontmatterOpener(body)
+	if !ok {
 		return false
 	}
-	rest := body[len(sep):]
 	// Look at the first non-blank line of the YAML block; reject if
 	// the first key is anything other than `paths`.
 	for {
@@ -213,54 +224,15 @@ func hasPathsFrontmatter(body []byte) bool {
 	}
 }
 
-// nodeBodyBytes decodes the IR's node.Body field into raw bytes the
-// adapter can use as op content. The wire shape allows two body
-// encodings:
-//   - JSON string (markdown bodies): `"# heading\n..."`
-//   - Raw JSON value (json/toml kinds): `{"command":"node",...}`
-//
-// For markdown kinds (rule/command/skill/agents-md) the body is
-// always a JSON string. We try string-decode first; on failure we
-// pass the raw bytes through.
-func nodeBodyBytes(node irNode) ([]byte, error) {
-	return decodeBodyOrPassthrough(node.Body)
-}
-
-// assetBodyBytes follows the same convention as nodeBodyBytes for
-// skill assets. Assets are arbitrary file content; treat as raw
-// bytes after string-decoding when applicable.
-func assetBodyBytes(asset irAsset) ([]byte, error) {
-	return decodeBodyOrPassthrough(asset.Content)
-}
-
-func decodeBodyOrPassthrough(raw json.RawMessage) ([]byte, error) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil, nil
+// stripFrontmatterOpener returns the body bytes after a leading
+// `---\n` or `---\r\n` separator. Returns ok=false when no opener is
+// present.
+func stripFrontmatterOpener(body []byte) ([]byte, bool) {
+	if bytes.HasPrefix(body, []byte("---\n")) {
+		return body[len("---\n"):], true
 	}
-	// Try string-decode first (markdown kinds).
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return []byte(s), nil
+	if bytes.HasPrefix(body, []byte("---\r\n")) {
+		return body[len("---\r\n"):], true
 	}
-	// Fall back to raw bytes; validate it parses as JSON so we don't
-	// silently pass garbage through.
-	var any any
-	if err := json.Unmarshal(raw, &any); err != nil {
-		return nil, fmt.Errorf("body must be a JSON string or valid JSON value: %w", err)
-	}
-	return raw, nil
-}
-
-func wrapBodyErr(node irNode, err error) error {
-	return &adapterkit.Error{
-		Code:    adapterkit.CodeInvalidParams,
-		Message: fmt.Sprintf("claude: node %q (%s) body: %s", node.ID, node.Kind, err.Error()),
-	}
-}
-
-func wrapOpErr(node irNode, err error) error {
-	return &adapterkit.Error{
-		Code:    adapterkit.CodeInvalidParams,
-		Message: fmt.Sprintf("claude: node %q (%s) op: %s", node.ID, node.Kind, err.Error()),
-	}
+	return nil, false
 }
