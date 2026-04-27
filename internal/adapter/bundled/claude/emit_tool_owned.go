@@ -2,6 +2,7 @@ package claude
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 
 	"github.com/aienvs/aienvs/pkg/adapterkit"
@@ -32,10 +33,24 @@ var markerOpenBytes = []byte("<!-- aienvs:")
 // expects /mcpServers/<key> to map to an object with command/args
 // fields, and storing a non-object value silently breaks every MCP
 // load for the workspace.
+//
+// Validation is two-stage:
+//  1. json.Valid — proves the bytes parse, catching string-encoded
+//     bodies like "{" that look object-shaped at the first byte but
+//     are actually unterminated JSON.
+//  2. isJSONObject — proves the top-level structure is `{...}` and
+//     not a number/array/bool/null that json.Valid alone would
+//     accept.
 func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
+	}
+	if !json.Valid(body) {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: mcp-server-entry %q body is not valid JSON; refusing to corrupt .mcp.json", node.ID),
+		}
 	}
 	if !isJSONObject(body) {
 		return &adapterkit.Error{

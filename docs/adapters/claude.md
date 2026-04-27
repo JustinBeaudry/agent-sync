@@ -59,10 +59,13 @@ be updated together.
 - **Skills** — `.claude/skills/<name>/SKILL.md` is the required
   shape per
   [Equipping agents for the real world with Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills).
-  `<name>` in the folder must equal the skill name registered inside
-  `SKILL.md`'s frontmatter; we satisfy that by writing
-  `name: aienvs-<id>` inside the SKILL when the IR carries the
-  `aienvs-<id>` folder.
+  `<name>` in the folder must equal the `name:` value declared in
+  `SKILL.md`'s frontmatter. The adapter preserves the IR body
+  verbatim apart from the managed header, so the IR content **must**
+  include whatever Claude-required frontmatter is needed — including
+  a `name:` value that matches the emitted `aienvs-<id>` folder
+  name. The adapter does not inject or rewrite frontmatter; that is
+  the canonical-repo author's responsibility.
 - **`.mcp.json`** — Workspace-root project-local MCP config per
   [Claude Code MCP docs](https://docs.claude.com/en/docs/claude-code/mcp).
   Not `.claude/mcp.json`.

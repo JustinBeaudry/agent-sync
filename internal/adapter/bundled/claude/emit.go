@@ -1,10 +1,11 @@
 package claude
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/aienvs/aienvs/internal/ir"
 	"github.com/aienvs/aienvs/pkg/adapterkit"
@@ -108,11 +109,11 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.E
 	// fixtures. The IR decoder upstream already sorts the same way,
 	// but we re-sort defensively in case a malformed decoder ships
 	// nodes in arbitrary order.
-	sort.Slice(doc.Nodes, func(i, j int) bool {
-		if doc.Nodes[i].Kind != doc.Nodes[j].Kind {
-			return doc.Nodes[i].Kind < doc.Nodes[j].Kind
+	slices.SortFunc(doc.Nodes, func(a, b irNode) int {
+		if c := cmp.Compare(a.Kind, b.Kind); c != 0 {
+			return c
 		}
-		return doc.Nodes[i].ID < doc.Nodes[j].ID
+		return cmp.Compare(a.ID, b.ID)
 	})
 
 	for _, node := range doc.Nodes {
@@ -137,10 +138,33 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.E
 // emitState carries per-emit dedup tables. Threading one struct
 // instead of multiple maps keeps dispatchNode's signature stable as
 // new dedup keys appear.
+//
+// emittedFilePath records every workspace-relative path that's been
+// emitted as a write_file in this call. When two ops would target
+// the same path (duplicate skill assets, asset RelPath colliding
+// with the reserved README.md inside a per-skill folder, etc.) the
+// dispatcher fails closed instead of letting the sync engine
+// last-write-wins.
 type emitState struct {
 	readmeEmitted   map[string]bool
 	sidecarEmitted  bool
 	emittedFilePath map[string]struct{}
+}
+
+// recordWritePath registers a write_file path in the per-emit dedup
+// table. Returns an InvalidParams error when the path was already
+// emitted earlier in this call. Callers should check before
+// constructing the OpWriteFile so the error message can include
+// node-level context.
+func (s *emitState) recordWritePath(path string) error {
+	if _, exists := s.emittedFilePath[path]; exists {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: duplicate write_file path %q in single emit", path),
+		}
+	}
+	s.emittedFilePath[path] = struct{}{}
+	return nil
 }
 
 // dispatchNode routes one IR node to its kind-specific emitter.
@@ -153,11 +177,11 @@ func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	}
 	switch ir.Kind(node.Kind) {
 	case ir.KindRule:
-		return emitRule(emitted, node, state.readmeEmitted)
+		return emitRule(emitted, node, state)
 	case ir.KindCommand:
-		return emitCommand(emitted, node, state.readmeEmitted)
+		return emitCommand(emitted, node, state)
 	case ir.KindSkill:
-		return emitSkill(emitted, node)
+		return emitSkill(emitted, node, state)
 	case ir.KindMCPServerEntry:
 		return emitMCPServerEntry(emitted, node, state)
 	case ir.KindAgentsMD:

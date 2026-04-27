@@ -87,9 +87,67 @@ func TestIRContainsSupportedKind_Streaming(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := irContainsSupportedKind(json.RawMessage(tt.ir), supported)
+			got := irContainsSupportedKindForTarget(json.RawMessage(tt.ir), supported, "any")
 			if got != tt.want {
-				t.Errorf("irContainsSupportedKind(%q) = %v, want %v", tt.ir, got, tt.want)
+				t.Errorf("irContainsSupportedKindForTarget(%q) = %v, want %v", tt.ir, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIRContainsSupportedKindForTarget_PerNodeTargetsFilter confirms
+// the capability-lied check honors a node's per-node `targets` field.
+// Nodes targeted at other adapters must not trigger the capability-
+// lied diagnostic for this adapter.
+func TestIRContainsSupportedKindForTarget_PerNodeTargetsFilter(t *testing.T) {
+	t.Parallel()
+
+	supported := map[contract.OpKind]bool{
+		contract.OpKind("rule"): true,
+	}
+
+	cases := []struct {
+		name   string
+		ir     string
+		target string
+		want   bool
+	}{
+		{
+			name:   "empty-targets-applies-to-all",
+			ir:     `{"nodes":[{"id":"x","kind":"rule"}]}`,
+			target: "claude",
+			want:   true,
+		},
+		{
+			name:   "targets-includes-this-adapter",
+			ir:     `{"nodes":[{"id":"x","kind":"rule","targets":["claude","cursor"]}]}`,
+			target: "claude",
+			want:   true,
+		},
+		{
+			name:   "targets-excludes-this-adapter",
+			ir:     `{"nodes":[{"id":"x","kind":"rule","targets":["cursor"]}]}`,
+			target: "claude",
+			want:   false,
+		},
+		{
+			name:   "mixed-some-target-this",
+			ir:     `{"nodes":[{"id":"a","kind":"rule","targets":["cursor"]},{"id":"b","kind":"rule","targets":["claude"]}]}`,
+			target: "claude",
+			want:   true,
+		},
+		{
+			name:   "all-target-other-adapters",
+			ir:     `{"nodes":[{"id":"a","kind":"rule","targets":["cursor"]},{"id":"b","kind":"rule","targets":["codex"]}]}`,
+			target: "claude",
+			want:   false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := irContainsSupportedKindForTarget(json.RawMessage(tc.ir), supported, tc.target)
+			if got != tc.want {
+				t.Errorf("got %v want %v for ir=%q target=%q", got, tc.want, tc.ir, tc.target)
 			}
 		})
 	}
@@ -134,7 +192,7 @@ func TestIRContainsSupportedKind_LargeIR(t *testing.T) {
 	}
 	b.WriteString(`]}`)
 
-	got := irContainsSupportedKind(json.RawMessage(b.String()), supported)
+	got := irContainsSupportedKindForTarget(json.RawMessage(b.String()), supported, "any")
 	if got != false {
 		t.Errorf("large IR with no supported kind: got true, want false")
 	}
@@ -142,7 +200,7 @@ func TestIRContainsSupportedKind_LargeIR(t *testing.T) {
 	// Also confirm a large IR where a supported kind sits late in the
 	// stream is still found.
 	mixed := strings.Replace(b.String(), `"id":"n9999","kind":"agent"`, `"id":"n9999","kind":"rule"`, 1)
-	if got := irContainsSupportedKind(json.RawMessage(mixed), supported); got != true {
+	if got := irContainsSupportedKindForTarget(json.RawMessage(mixed), supported, "any"); got != true {
 		t.Errorf("large IR with late supported kind: got false, want true")
 	}
 }

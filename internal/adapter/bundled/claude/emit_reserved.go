@@ -2,9 +2,10 @@ package claude
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/aienvs/aienvs/pkg/adapterkit"
@@ -15,6 +16,7 @@ const (
 	commandsSubdir = ".claude/commands/aienvs"
 	skillsParent   = ".claude/skills"
 	skillPrefix    = "aienvs-"
+	skillEntryFile = "SKILL.md"
 )
 
 // emitRule maps one rule node to:
@@ -30,15 +32,21 @@ const (
 // emitReservedSubdirNode helper when the third reserved-subdirectory
 // kind appears (Unit 10 cursor adds a second; Unit 11 codex would be
 // the third — re-evaluate then).
-func emitRule(emitted *emittedOps, node irNode, readmeEmitted map[string]bool) error {
+func emitRule(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
 	}
 
-	ensureSubdir(emitted, rulesSubdir, readmeEmitted)
+	if err := ensureSubdir(emitted, rulesSubdir, state); err != nil {
+		return err
+	}
 
-	wf, err := adapterkit.NewOpWriteFile(rulesSubdir+"/"+node.ID+".md", 0o644, prependHeader(body))
+	rulePath := rulesSubdir + "/" + node.ID + ".md"
+	if err := state.recordWritePath(rulePath); err != nil {
+		return err
+	}
+	wf, err := adapterkit.NewOpWriteFile(rulePath, 0o644, prependHeader(body))
 	if err != nil {
 		return wrapOpErr(node, err)
 	}
@@ -56,15 +64,21 @@ func emitRule(emitted *emittedOps, node irNode, readmeEmitted map[string]bool) e
 
 // emitCommand mirrors emitRule under .claude/commands/aienvs. See
 // emitRule's Rule-of-Three note before collapsing.
-func emitCommand(emitted *emittedOps, node irNode, readmeEmitted map[string]bool) error {
+func emitCommand(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
 	}
 
-	ensureSubdir(emitted, commandsSubdir, readmeEmitted)
+	if err := ensureSubdir(emitted, commandsSubdir, state); err != nil {
+		return err
+	}
 
-	wf, err := adapterkit.NewOpWriteFile(commandsSubdir+"/"+node.ID+".md", 0o644, prependHeader(body))
+	cmdPath := commandsSubdir + "/" + node.ID + ".md"
+	if err := state.recordWritePath(cmdPath); err != nil {
+		return err
+	}
+	wf, err := adapterkit.NewOpWriteFile(cmdPath, 0o644, prependHeader(body))
 	if err != nil {
 		return wrapOpErr(node, err)
 	}
@@ -83,10 +97,16 @@ func emitCommand(emitted *emittedOps, node irNode, readmeEmitted map[string]bool
 // declared-outputs gate accepts any cleaned path inside .claude/skills,
 // so per-skill containment must be enforced here.
 //
+// Asset RelPaths are also rejected when they collide with the
+// reserved SKILL.md filename or with another asset's path: such
+// collisions would silently last-write-wins at the sync layer,
+// reintroducing the same overwrite class rejectDuplicateNodes guards
+// against at the node level.
+//
 // The skill folder gets no README.md: a per-skill README would clash
 // with skill-discovery semantics, and the parent .claude/skills can
 // hold user skills that we don't own.
-func emitSkill(emitted *emittedOps, node irNode) error {
+func emitSkill(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
@@ -95,18 +115,29 @@ func emitSkill(emitted *emittedOps, node irNode) error {
 	skillDir := skillsParent + "/" + skillPrefix + node.ID
 	emitted.add(adapterkit.OpMkdir{Path: skillDir, Mode: 0o755})
 
-	wf, err := adapterkit.NewOpWriteFile(skillDir+"/SKILL.md", 0o644, prependHeader(body))
+	skillPath := skillDir + "/" + skillEntryFile
+	if err := state.recordWritePath(skillPath); err != nil {
+		return err
+	}
+	wf, err := adapterkit.NewOpWriteFile(skillPath, 0o644, prependHeader(body))
 	if err != nil {
 		return wrapOpErr(node, err)
 	}
 	emitted.add(wf)
 
-	assets := append([]irAsset(nil), node.Assets...)
-	sort.Slice(assets, func(i, j int) bool { return assets[i].RelPath < assets[j].RelPath })
+	assets := slices.Clone(node.Assets)
+	slices.SortFunc(assets, func(a, b irAsset) int { return cmp.Compare(a.RelPath, b.RelPath) })
 
 	for _, a := range assets {
 		if err := validateAssetRelPath(node.ID, a.RelPath); err != nil {
 			return err
+		}
+		assetPath := skillDir + "/" + a.RelPath
+		if err := state.recordWritePath(assetPath); err != nil {
+			return &adapterkit.Error{
+				Code:    adapterkit.CodeInvalidParams,
+				Message: fmt.Sprintf("claude: skill %q asset %q collides with another emitted path", node.ID, a.RelPath),
+			}
 		}
 		assetBody, err := decodeBodyOrPassthrough(a.Content)
 		if err != nil {
@@ -115,7 +146,7 @@ func emitSkill(emitted *emittedOps, node irNode) error {
 				Message: fmt.Sprintf("claude: skill %q asset %q body: %s", node.ID, a.RelPath, err.Error()),
 			}
 		}
-		op, err := adapterkit.NewOpWriteFile(skillDir+"/"+a.RelPath, 0o644, assetBody)
+		op, err := adapterkit.NewOpWriteFile(assetPath, 0o644, assetBody)
 		if err != nil {
 			return &adapterkit.Error{
 				Code:    adapterkit.CodeInvalidParams,
@@ -128,10 +159,11 @@ func emitSkill(emitted *emittedOps, node irNode) error {
 }
 
 // validateAssetRelPath rejects RelPath shapes that would let a skill
-// asset escape its own folder. Defense in depth: the runtime's
-// declared-outputs gate catches workspace escapes but does not
-// enforce per-skill containment, so the adapter is the only line of
-// defense for this class of issue.
+// asset escape its own folder, target a directory rather than a file,
+// or collide with the reserved SKILL.md entrypoint. Defense in depth:
+// the runtime's declared-outputs gate catches workspace escapes but
+// does not enforce per-skill containment, so the adapter is the only
+// line of defense for this class of issue.
 func validateAssetRelPath(skillID, relPath string) error {
 	if relPath == "" {
 		return &adapterkit.Error{
@@ -164,18 +196,45 @@ func validateAssetRelPath(skillID, relPath string) error {
 			Message: fmt.Sprintf("claude: skill %q asset %q is not in canonical form (cleaned: %q)", skillID, relPath, cleaned),
 		}
 	}
+	// Reject directory-only paths. path.Clean(".") == "." which would
+	// produce an op path like ".claude/skills/aienvs-x/." pointing at
+	// the skill directory itself, not a file. Reject before the sync
+	// engine has to handle it.
+	if cleaned == "." {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: skill %q asset rel_path must name a file, not the skill directory itself (got %q)", skillID, relPath),
+		}
+	}
+	// Reject the reserved SKILL.md entrypoint path. SKILL.md is owned
+	// by the skill body emission above; an asset sharing that name
+	// would silently overwrite the skill body itself.
+	if cleaned == skillEntryFile {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("claude: skill %q asset rel_path %q collides with the reserved SKILL.md entrypoint", skillID, relPath),
+		}
+	}
 	return nil
 }
 
 // ensureSubdir adds the per-emit mkdir + README pair for a reserved
 // subdirectory once per emit call. Subsequent calls are no-ops.
-func ensureSubdir(emitted *emittedOps, subdir string, seen map[string]bool) {
-	if seen[subdir] {
-		return
+//
+// Returns InvalidParams if a node ID has already taken the README
+// path inside this subdir (e.g., a rule node literally named "README"
+// — its emitted path would be .../aienvs/README.md).
+func ensureSubdir(emitted *emittedOps, subdir string, state *emitState) error {
+	if state.readmeEmitted[subdir] {
+		return nil
 	}
-	seen[subdir] = true
+	state.readmeEmitted[subdir] = true
 	emitted.add(adapterkit.OpMkdir{Path: subdir, Mode: 0o755})
-	wf, err := adapterkit.NewOpWriteFile(subdir+"/README.md", 0o644, readmeForSubdir(subdir))
+	readmePath := subdir + "/README.md"
+	if err := state.recordWritePath(readmePath); err != nil {
+		return err
+	}
+	wf, err := adapterkit.NewOpWriteFile(readmePath, 0o644, readmeForSubdir(subdir))
 	if err != nil {
 		// readmeForSubdir returns a small fixed body; the only way
 		// NewOpWriteFile can fail is the payload-too-large guard,
@@ -183,6 +242,7 @@ func ensureSubdir(emitted *emittedOps, subdir string, seen map[string]bool) {
 		panic(fmt.Sprintf("claude: building README for %s: %v", subdir, err))
 	}
 	emitted.add(wf)
+	return nil
 }
 
 // prependHeader inserts the managed-file header before the body.

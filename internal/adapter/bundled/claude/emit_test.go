@@ -256,7 +256,7 @@ func TestEmitSkill_RejectsEmptyAssetRelPath(t *testing.T) {
 		Assets: []irAsset{
 			{RelPath: "", Content: json.RawMessage(`"x"`)},
 		},
-	})
+	}, newEmitState())
 	if err == nil {
 		t.Fatal("empty rel_path must be rejected")
 	}
@@ -294,6 +294,48 @@ func TestEmitMCPServerEntry_HappyPath(t *testing.T) {
 	}
 }
 
+func TestEmitSkill_RejectsDotRelPath(t *testing.T) {
+	t.Parallel()
+
+	_, err := captureOps(json.RawMessage(`{"nodes":[{"id":"x","kind":"skill","body":"x","assets":[{"rel_path":".","content":"x"}]}]}`))
+	if err == nil {
+		t.Fatal("rel_path \".\" must be rejected")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("got err=%v want CodeInvalidParams", err)
+	}
+}
+
+func TestEmitSkill_RejectsAssetCollidingWithSKILLMd(t *testing.T) {
+	t.Parallel()
+
+	_, err := captureOps(json.RawMessage(`{"nodes":[{"id":"x","kind":"skill","body":"x","assets":[{"rel_path":"SKILL.md","content":"x"}]}]}`))
+	if err == nil {
+		t.Fatal("rel_path SKILL.md must be rejected; collides with skill entrypoint")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("got err=%v want CodeInvalidParams", err)
+	}
+}
+
+func TestEmitSkill_RejectsDuplicateAssetRelPaths(t *testing.T) {
+	t.Parallel()
+
+	_, err := captureOps(json.RawMessage(`{"nodes":[{"id":"x","kind":"skill","body":"x","assets":[
+		{"rel_path":"foo.txt","content":"a"},
+		{"rel_path":"foo.txt","content":"b"}
+	]}]}`))
+	if err == nil {
+		t.Fatal("duplicate asset rel_path must be rejected")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("got err=%v want CodeInvalidParams", err)
+	}
+}
+
 func TestEmitMCPServerEntry_RejectsNonObjectBody(t *testing.T) {
 	t.Parallel()
 
@@ -306,6 +348,8 @@ func TestEmitMCPServerEntry_RejectsNonObjectBody(t *testing.T) {
 		{"boolean", `true`},
 		{"json array", `[1,2,3]`},
 		{"json null", `null`},
+		{"open-brace string fragment", `"{"`},
+		{"unterminated object string", `"{\"command\": "`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
