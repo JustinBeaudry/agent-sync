@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {
+      "id": "for-cursor",
+      "kind": "rule",
+      "version": 1,
+      "targets": ["cursor"],
+      "body": "Cursor-only rule."
+    }
+  ]
+}

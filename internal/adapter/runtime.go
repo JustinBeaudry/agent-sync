@@ -189,12 +189,18 @@ func (s *AdapterSession) Emit(ctx context.Context, target string, ir json.RawMes
 
 	// Capability-lied detection: if the adapter declared any kind as
 	// "supported" in initialize and the IR contained nodes of those
-	// kinds, then the adapter must have emitted at least one
-	// non-warning op. An adapter that says "yes, I handle X" and then
-	// silently does nothing is a worse failure mode than a "won't
-	// handle X" honest decline — silent nullification breaks the
-	// determinism guarantee.
-	if nonWarningOps == 0 && irContainsSupportedKind(ir, s.gateChecks) {
+	// kinds *targeted at this adapter*, then the adapter must have
+	// emitted at least one non-warning op. An adapter that says "yes,
+	// I handle X" and then silently does nothing is a worse failure
+	// mode than a "won't handle X" honest decline — silent
+	// nullification breaks the determinism guarantee.
+	//
+	// The per-node `targets` filter matters: an IR node with
+	// `targets: [other-adapter]` is intentionally invisible to this
+	// adapter, so a zero-op response is correct (not a lie). Without
+	// this filter, mixed-target manifests fail at sync time even
+	// though every adapter behaves correctly.
+	if nonWarningOps == 0 && irContainsSupportedKindForTarget(ir, s.gateChecks, s.adapter.Manifest.Name) {
 		return nil, &RuntimeError{
 			Class: contract.ErrorClassAdapterCapabilityLied,
 			Err:   ErrAdapterCapabilityLied,
@@ -204,17 +210,23 @@ func (s *AdapterSession) Emit(ctx context.Context, target string, ir json.RawMes
 	return &result, nil
 }
 
-// irContainsSupportedKind reports whether the IR has at least one node
-// whose kind appears in the supported set. Best-effort: a malformed IR
-// returns false (no false positives — better to under-report than to
-// flag a legitimate adapter for what is really a runtime bug).
+// irContainsSupportedKindForTarget reports whether the IR has at
+// least one node whose kind appears in the supported set AND whose
+// per-node `targets` filter applies to the given adapter. A node
+// with empty `targets` applies to every adapter (matches the IR v1
+// spec); a node listing specific targets only applies if `target`
+// appears in that list.
+//
+// Best-effort: a malformed IR returns false (no false positives —
+// better to under-report than to flag a legitimate adapter for what
+// is really a runtime bug).
 //
 // The IR is scanned with a streaming decoder so a large IR doesn't
 // force a full unmarshal into memory. We walk the top-level object
-// looking for a "nodes" array, then decode one element at a time into
-// a small struct that only captures the "kind" field — short-circuiting
-// on the first supported match.
-func irContainsSupportedKind(ir json.RawMessage, supported map[contract.OpKind]bool) bool {
+// looking for a "nodes" array, then decode one element at a time
+// into a small struct that captures only "kind" and "targets" —
+// short-circuiting on the first supported, in-target match.
+func irContainsSupportedKindForTarget(ir json.RawMessage, supported map[contract.OpKind]bool, target string) bool {
 	if len(supported) == 0 {
 		return false
 	}
@@ -256,12 +268,16 @@ func irContainsSupportedKind(ir json.RawMessage, supported map[contract.OpKind]b
 		}
 		for dec.More() {
 			var node struct {
-				Kind string `json:"kind"`
+				Kind    string   `json:"kind"`
+				Targets []string `json:"targets"`
 			}
 			if err := dec.Decode(&node); err != nil {
 				return false
 			}
-			if supported[contract.OpKind(node.Kind)] {
+			if !supported[contract.OpKind(node.Kind)] {
+				continue
+			}
+			if nodeAppliesToTarget(node.Targets, target) {
 				return true
 			}
 		}
@@ -271,6 +287,21 @@ func irContainsSupportedKind(ir json.RawMessage, supported map[contract.OpKind]b
 			return false
 		}
 		return false
+	}
+	return false
+}
+
+// nodeAppliesToTarget reports whether a node with the given Targets
+// list applies to the supplied adapter target. Empty Targets means
+// "all adapters" per the IR v1 spec.
+func nodeAppliesToTarget(targets []string, target string) bool {
+	if len(targets) == 0 {
+		return true
+	}
+	for _, t := range targets {
+		if t == target {
+			return true
+		}
 	}
 	return false
 }

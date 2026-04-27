@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": "scoped-rule",
+      "kind": "rule",
+      "version": 1,
+      "body": "---\npaths:\n  - 'src/**'\n---\n\nApply this rule under src/.\n"
+    }
+  ]
+}

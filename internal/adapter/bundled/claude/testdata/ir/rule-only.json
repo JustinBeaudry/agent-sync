@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": "no-fri",
+      "kind": "rule",
+      "version": 1,
+      "body": "No PRs on Friday."
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "nodes": [
+    {
+      "id": "house-style",
+      "kind": "rule",
+      "version": 1,
+      "body": "Use 2-space indents."
+    },
+    {
+      "id": "deploy",
+      "kind": "command",
+      "version": 1,
+      "body": "Run the deploy script."
+    },
+    {
+      "id": "coder",
+      "kind": "skill",
+      "version": 1,
+      "body": "# Coder\n\nWrite code."
+    },
+    {
+      "id": "lsp",
+      "kind": "mcp-server-entry",
+      "version": 1,
+      "body": "{\"command\":\"node\",\"args\":[\"server.js\"]}"
+    },
+    {
+      "id": "claude",
+      "kind": "agents-md",
+      "version": 1,
+      "targets": ["claude"],
+      "body": "## Build\n\nmake build."
+    },
+    {
+      "id": "linter",
+      "kind": "plugin-reference",
+      "version": 1,
+      "body": "{\"source\":\"npm:eslint\"}"
+    }
+  ]
+}
