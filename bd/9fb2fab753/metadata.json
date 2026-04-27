@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "bd9fb2fab753",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-9-claude-adapter",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/bundled/claude/bundled.go",
+    "internal/adapter/bundled/claude/bundled_test.go",
+    "internal/adapter/bundled/claude/capabilities_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/bd/9fb2fab753/0/metadata.json",
+      "transcript": "/bd/9fb2fab753/0/full.jsonl",
+      "content_hash": "/bd/9fb2fab753/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 10,
+    "cache_creation_tokens": 9310,
+    "cache_read_tokens": 2682116,
+    "output_tokens": 5521,
+    "api_call_count": 10
+  }
+}
