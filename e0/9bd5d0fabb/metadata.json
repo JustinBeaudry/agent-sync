@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "e09bd5d0fabb",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-9-claude-adapter",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/bundled/claude/bundled.go",
+    "internal/adapter/bundled/claude/emit.go",
+    "internal/adapter/bundled/claude/emit_reserved.go",
+    "internal/adapter/bundled/claude/emit_test.go",
+    "internal/adapter/bundled/claude/emit_tool_owned.go",
+    "internal/adapter/bundled/claude/testdata/ir/agents-md-companion.json",
+    "internal/adapter/bundled/claude/testdata/ir/command-only.json",
+    "internal/adapter/bundled/claude/testdata/ir/mcp-server-entry-only.json",
+    "internal/adapter/bundled/claude/testdata/ir/mixed-everything.json",
+    "internal/adapter/bundled/claude/testdata/ir/plugin-reference-warn.json",
+    "internal/adapter/bundled/claude/testdata/ir/rule-only.json",
+    "internal/adapter/bundled/claude/testdata/ir/rule-with-paths-frontmatter.json",
+    "internal/adapter/bundled/claude/testdata/ir/skill-with-assets.json",
+    "internal/adapter/bundled/claude/testdata/ir/targeted-other.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e0/9bd5d0fabb/0/metadata.json",
+      "transcript": "/e0/9bd5d0fabb/0/full.jsonl",
+      "content_hash": "/e0/9bd5d0fabb/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 21,
+    "cache_creation_tokens": 23157,
+    "cache_read_tokens": 5299494,
+    "output_tokens": 19687,
+    "api_call_count": 21
+  }
+}
