@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "0994b376ca6c",
+  "session_id": "d8a56bdb-dffa-4c0c-82d4-237591007c5d",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-27T04:37:06.952159Z",
+  "branch": "feat/unit-9-claude-adapter",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/bundled/claude/capabilities.yaml",
+    "internal/adapter/bundled/claude/capabilities.go",
+    "internal/adapter/bundled/claude/bundled.go",
+    "internal/adapter/bundled/claude/capabilities_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "0d02e785de87",
+  "checkpoint_transcript_start": 222,
+  "transcript_lines_at_start": 222,
+  "token_usage": {
+    "input_tokens": 8,
+    "cache_creation_tokens": 10444,
+    "cache_read_tokens": 1827441,
+    "output_tokens": 9434,
+    "api_call_count": 8
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-27T04:37:06.934186Z",
+    "agent_lines": 541,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 541,
+    "total_lines_changed": 541,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
