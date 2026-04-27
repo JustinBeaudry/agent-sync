@@ -3,8 +3,11 @@ package adapterkit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"testing"
+	"time"
 )
 
 func TestScriptedResponder_RoundTripViaRunInprocServer(t *testing.T) {
@@ -65,9 +68,12 @@ func TestScriptedResponder_RoundTripViaRunInprocServer(t *testing.T) {
 func TestSynthesizeInitResult_ProducesValidJSON(t *testing.T) {
 	t.Parallel()
 
-	data := SynthesizeInitResult("echo", "0.1", NewCapabilities().Supports("rule").Build(), []DeclaredOutput{
+	data, err := SynthesizeInitResult("echo", "0.1", NewCapabilities().Supports("rule").Build(), []DeclaredOutput{
 		{Path: ".echo", Mode: OutputModeOwnedSubdir},
 	})
+	if err != nil {
+		t.Fatalf("SynthesizeInitResult: %v", err)
+	}
 
 	var result InitializeResult
 	if err := json.Unmarshal(data, &result); err != nil {
@@ -75,6 +81,49 @@ func TestSynthesizeInitResult_ProducesValidJSON(t *testing.T) {
 	}
 	if result.ProtocolVersion != ContractVersionV1 {
 		t.Fatalf("protocol_version=%q", result.ProtocolVersion)
+	}
+}
+
+func TestClient_Call_HonorsContextDeadline(t *testing.T) {
+	t.Parallel()
+
+	// Wire a Client to pipes whose server side never responds. The
+	// write side can drain into adToRtW; the read side blocks on
+	// rtToAdR forever because nothing ever writes a frame back.
+	rtToAdR, rtToAdW := io.Pipe()
+	adToRtR, _ := io.Pipe()
+	t.Cleanup(func() {
+		_ = rtToAdW.Close()
+		_ = rtToAdR.Close()
+		_ = adToRtR.Close()
+	})
+
+	// Drain anything the client writes so writeFrame doesn't block on
+	// a full pipe.
+	go func() {
+		_, _ = io.Copy(io.Discard, rtToAdR)
+	}()
+
+	client := &Client{
+		r: newFrameReader(adToRtR),
+		w: rtToAdW,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	t.Cleanup(cancel)
+
+	start := time.Now()
+	_, err := client.Emit(ctx, EmitParams{Target: "noop"})
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
+	}
+	// 150ms gives the goroutine room to schedule on a loaded CI box
+	// without making the test sloppy. The point is "returns promptly",
+	// not "returns at exactly 100ms".
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("Client.call did not honor ctx promptly: elapsed=%v", elapsed)
 	}
 }
 

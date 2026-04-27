@@ -201,6 +201,154 @@ func TestMatchOps_ReportsMissingAndExtra(t *testing.T) {
 	}
 }
 
+func TestRun_ErrorKindResultSerializesOpsAsEmptyArrays(t *testing.T) {
+	t.Parallel()
+
+	crashy := ensureCrashyBinary(t)
+	cases := []Case{
+		{
+			Name:        "abnormal-exit-json",
+			Description: "crashy exits before initialize; expect arrays not null",
+			IR:          []byte(`{"nodes":[{"id":"a","kind":"rule"}]}`),
+			Manifest: CaseManifest{
+				DeclaredOutputs: []contract.DeclaredOutput{{Path: ".echo", Mode: contract.OutputModeOwnedSubdir}},
+				Capabilities: contract.Capabilities{
+					ConceptKinds: map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+				},
+			},
+			Expect: Expected{Kind: ExpectedKindError, Error: "SubprocessExitError"},
+		},
+	}
+
+	report, err := Run(context.Background(), crashy, RunOptions{Cases: cases})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(report.Cases) != 1 {
+		t.Fatalf("len(report.Cases)=%d want 1", len(report.Cases))
+	}
+	result := report.Cases[0]
+	if result.Status != StatusPass {
+		t.Fatalf("result=%+v want pass", result)
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, `"expected_ops":[]`) {
+		t.Fatalf("expected expected_ops as empty array, json=%s", text)
+	}
+	if !strings.Contains(text, `"actual_ops":[]`) {
+		t.Fatalf("expected actual_ops as empty array, json=%s", text)
+	}
+	if strings.Contains(text, `"expected_ops":null`) || strings.Contains(text, `"actual_ops":null`) {
+		t.Fatalf("ops fields must not serialize as null, json=%s", text)
+	}
+}
+
+func TestCaseSupportedByAdapter_SkipsWhenAdapterMissingWriteToolOwned(t *testing.T) {
+	t.Parallel()
+
+	tc := Case{
+		Name: "needs-write-tool-owned",
+		Manifest: CaseManifest{
+			Capabilities: contract.Capabilities{
+				ConceptKinds:   map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+				WriteToolOwned: true,
+			},
+		},
+	}
+	initResult := &contract.InitializeResult{
+		Capabilities: contract.Capabilities{
+			ConceptKinds:   map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+			WriteToolOwned: false,
+		},
+	}
+
+	ok, reason := caseSupportedByAdapter(tc, initResult)
+	if ok {
+		t.Fatal("expected unsupported when adapter declares write_tool_owned=false")
+	}
+	if !strings.Contains(reason, "write_tool_owned") {
+		t.Fatalf("reason=%q want it to mention write_tool_owned", reason)
+	}
+}
+
+func TestCaseSupportedByAdapter_SkipsWhenAdapterMissingProgress(t *testing.T) {
+	t.Parallel()
+
+	tc := Case{
+		Name: "needs-progress",
+		Manifest: CaseManifest{
+			Capabilities: contract.Capabilities{Progress: true},
+		},
+	}
+	initResult := &contract.InitializeResult{
+		Capabilities: contract.Capabilities{Progress: false},
+	}
+
+	ok, reason := caseSupportedByAdapter(tc, initResult)
+	if ok {
+		t.Fatal("expected unsupported when adapter declares progress=false")
+	}
+	if !strings.Contains(reason, "progress") {
+		t.Fatalf("reason=%q want it to mention progress", reason)
+	}
+}
+
+func TestCaseSupportedByAdapter_SkipsOnUnknownCapabilityMeta(t *testing.T) {
+	t.Parallel()
+
+	tc := Case{
+		Name: "needs-extension",
+		Manifest: CaseManifest{
+			Capabilities: contract.Capabilities{
+				Meta: json.RawMessage(`{"x_future":true}`),
+			},
+		},
+	}
+	initResult := &contract.InitializeResult{
+		Capabilities: contract.Capabilities{Meta: nil},
+	}
+
+	ok, reason := caseSupportedByAdapter(tc, initResult)
+	if ok {
+		t.Fatal("expected unsupported when adapter does not echo capability extensions")
+	}
+	if !strings.Contains(reason, "capability extensions") {
+		t.Fatalf("reason=%q want it to mention capability extensions", reason)
+	}
+}
+
+func TestCaseSupportedByAdapter_AcceptsMatchingNonConceptCapabilities(t *testing.T) {
+	t.Parallel()
+
+	tc := Case{
+		Name: "happy",
+		Manifest: CaseManifest{
+			Capabilities: contract.Capabilities{
+				ConceptKinds:   map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+				WriteToolOwned: true,
+				Progress:       true,
+			},
+		},
+	}
+	initResult := &contract.InitializeResult{
+		Capabilities: contract.Capabilities{
+			ConceptKinds:   map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+			WriteToolOwned: true,
+			Progress:       true,
+		},
+	}
+
+	ok, reason := caseSupportedByAdapter(tc, initResult)
+	if !ok {
+		t.Fatalf("want supported, reason=%q", reason)
+	}
+}
+
 func TestRun_FailingOpsCaseIncludesExpectedActualMissingExtraAndReason(t *testing.T) {
 	t.Parallel()
 

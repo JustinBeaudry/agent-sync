@@ -1,8 +1,11 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -84,7 +87,13 @@ func Run(ctx context.Context, binary string, opts RunOptions) (Report, error) {
 
 func runCase(ctx context.Context, binary string, opts RunOptions, tc Case) (result CaseResult, err error) {
 	if tc.Expect.Kind == ExpectedKindSkip {
-		return CaseResult{Name: tc.Name, Status: StatusSkip, Reason: tc.Expect.Skip}, nil
+		return CaseResult{
+			Name:        tc.Name,
+			Status:      StatusSkip,
+			Reason:      tc.Expect.Skip,
+			ExpectedOps: []contract.OpRecord{},
+			ActualOps:   []contract.OpRecord{},
+		}, nil
 	}
 
 	a := &adapter.Adapter{
@@ -98,19 +107,20 @@ func runCase(ctx context.Context, binary string, opts RunOptions, tc Case) (resu
 	}
 
 	session, err := a.NewSession(ctx, adapter.SessionOptions{
-		WorkspaceRoot: "/tmp/aienvs-conformance",
+		WorkspaceRoot: filepath.Join(os.TempDir(), "aienvs-conformance"),
 		IRVersion:     "v1",
 		Timeouts:      opts.Timeouts,
 	})
 	if err != nil {
 		spawnFailure := CaseResult{
-			Name:   tc.Name,
-			Status: StatusFail,
-			Reason: fmt.Sprintf("session spawn failed: %v", err),
+			Name:        tc.Name,
+			Status:      StatusFail,
+			Reason:      fmt.Sprintf("session spawn failed: %v", err),
+			ExpectedOps: []contract.OpRecord{},
+			ActualOps:   []contract.OpRecord{},
 		}
 		if tc.Expect.Kind == ExpectedKindOps {
 			spawnFailure.ExpectedOps = append([]contract.OpRecord(nil), tc.Expect.Ops...)
-			spawnFailure.ActualOps = []contract.OpRecord{}
 		}
 		return spawnFailure, nil
 	}
@@ -134,7 +144,13 @@ func runCase(ctx context.Context, binary string, opts RunOptions, tc Case) (resu
 
 	if ok, reason := caseSupportedByAdapter(tc, initResult); !ok {
 		finalized = true
-		return CaseResult{Name: tc.Name, Status: StatusSkip, Reason: reason}, nil
+		return CaseResult{
+			Name:        tc.Name,
+			Status:      StatusSkip,
+			Reason:      reason,
+			ExpectedOps: []contract.OpRecord{},
+			ActualOps:   []contract.OpRecord{},
+		}, nil
 	}
 
 	if err := session.Initialized(ctx); err != nil {
@@ -153,16 +169,19 @@ func runCase(ctx context.Context, binary string, opts RunOptions, tc Case) (resu
 }
 
 func classifyCaseResult(tc Case, actualOps []contract.OpRecord, err error) CaseResult {
-	result := CaseResult{Name: tc.Name, Reason: ""}
+	result := CaseResult{
+		Name:        tc.Name,
+		Reason:      "",
+		ExpectedOps: []contract.OpRecord{},
+		ActualOps:   []contract.OpRecord{},
+	}
+	if actualOps != nil {
+		result.ActualOps = append([]contract.OpRecord(nil), actualOps...)
+	}
 
 	switch tc.Expect.Kind {
 	case ExpectedKindOps:
 		result.ExpectedOps = append([]contract.OpRecord(nil), tc.Expect.Ops...)
-		if actualOps == nil {
-			result.ActualOps = []contract.OpRecord{}
-		} else {
-			result.ActualOps = append([]contract.OpRecord(nil), actualOps...)
-		}
 		if err != nil {
 			result.Status = StatusFail
 			result.Reason = fmt.Sprintf("unexpected runtime error: %v", err)
@@ -179,9 +198,6 @@ func classifyCaseResult(tc Case, actualOps []contract.OpRecord, err error) CaseR
 		result.Reason = fmt.Sprintf("ops mismatch: missing=%v extra=%v", missing, extra)
 		return result
 	case ExpectedKindError:
-		if actualOps != nil {
-			result.ActualOps = append([]contract.OpRecord(nil), actualOps...)
-		}
 		if MatchError(tc.Expect.Error, err) {
 			result.Status = StatusPass
 			return result
@@ -221,6 +237,19 @@ func caseSupportedByAdapter(tc Case, initResult *contract.InitializeResult) (boo
 		if !ok || have != want {
 			return false, fmt.Sprintf("adapter declared %q as %q, fixture requires %q", kind, have, want)
 		}
+	}
+	if tc.Manifest.Capabilities.WriteToolOwned && !initResult.Capabilities.WriteToolOwned {
+		return false, "adapter does not declare write_tool_owned"
+	}
+	if tc.Manifest.Capabilities.Progress && !initResult.Capabilities.Progress {
+		return false, "adapter does not declare progress"
+	}
+	// Future-proofing: a case manifest may carry capability extensions in
+	// the _meta field. The harness can't introspect arbitrary extension
+	// keys, so any non-empty manifest meta forces a skip unless the
+	// adapter echoes the same capabilities meta back.
+	if len(tc.Manifest.Capabilities.Meta) > 0 && !bytes.Equal(tc.Manifest.Capabilities.Meta, initResult.Capabilities.Meta) {
+		return false, "adapter does not declare required capability extensions"
 	}
 	for _, want := range tc.Manifest.DeclaredOutputs {
 		if !declaredOutputPresent(initResult.DeclaredOutputs, want) {

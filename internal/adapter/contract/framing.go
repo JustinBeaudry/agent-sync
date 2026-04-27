@@ -11,6 +11,7 @@ package contract
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -94,15 +95,21 @@ var (
 //	\r\n
 //	<n bytes of payload>
 func WriteFrame(w io.Writer, payload []byte) error {
-	header := fmt.Sprintf(
+	// Build the entire frame (header + CRLFCRLF + body) into a single
+	// buffer and emit one Write call. This avoids per-frame syscall
+	// overhead on the hot path and makes the frame an atomic write —
+	// concurrent writers sharing the underlying io.Writer cannot
+	// interleave header and body bytes, which prevents corrupt frames
+	// when the runtime fans out to a shared stdout/stderr.
+	var buf bytes.Buffer
+	buf.Grow(64 + len(payload))
+	fmt.Fprintf(&buf,
 		"Content-Length: %d\r\nContent-Type: %s; charset=utf-8\r\n\r\n",
 		len(payload), MediaType,
 	)
-	if _, err := io.WriteString(w, header); err != nil {
-		return fmt.Errorf("contract: write frame header: %w", err)
-	}
-	if _, err := w.Write(payload); err != nil {
-		return fmt.Errorf("contract: write frame body: %w", err)
+	buf.Write(payload)
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		return fmt.Errorf("contract: write frame: %w", err)
 	}
 	return nil
 }
@@ -230,23 +237,62 @@ func (fr *FrameReader) Read(maxBytes int64) ([]byte, error) {
 //
 // Returns io.EOF when nothing has been read; io.ErrUnexpectedEOF when
 // the reader closed mid-line.
+//
+// Implementation uses bufio.Reader.ReadSlice rather than per-byte
+// ReadByte: ReadSlice scans the bufio buffer's slab in one shot, so
+// header parsing costs O(1) syscalls for typical (sub-buffer) header
+// lines. ReadSlice can return bufio.ErrBufferFull when '\n' is not
+// seen in the reader's buffer window; in that case we copy out the
+// partial chunk and resume scanning. The maxBytes cap stops a peer
+// that buffers without ever sending '\n'.
 func readBoundedLine(br *bufio.Reader, maxBytes int) (string, error) {
-	buf := make([]byte, 0, 128)
-	for i := 0; i <= maxBytes; i++ {
-		b, err := br.ReadByte()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				if len(buf) == 0 {
-					return "", io.EOF
-				}
-				return "", io.ErrUnexpectedEOF
+	var buf []byte
+	for {
+		chunk, err := br.ReadSlice('\n')
+
+		// On a successful read, chunk is the line including '\n'. The
+		// maxBytes ceiling is enforced on content bytes (excluding the
+		// terminator) — the original byte-by-byte loop allowed up to
+		// maxBytes+1 reads, so a line of maxBytes content + '\n' was
+		// valid.
+		if err == nil {
+			if len(buf)+len(chunk) > maxBytes+1 {
+				return "", fmt.Errorf("%w: %d bytes without terminator", ErrHeaderLineTooLong, maxBytes)
 			}
-			return "", fmt.Errorf("contract: read header line: %w", err)
-		}
-		buf = append(buf, b)
-		if b == '\n' {
+			if len(buf) == 0 {
+				return string(chunk), nil
+			}
+			buf = append(buf, chunk...)
 			return string(buf), nil
 		}
+
+		// On ErrBufferFull or EOF, chunk contains zero '\n'. If we've
+		// accumulated more than maxBytes bytes without a terminator,
+		// the line is too long.
+		accumulated := len(buf) + len(chunk)
+
+		if errors.Is(err, bufio.ErrBufferFull) {
+			if accumulated > maxBytes {
+				return "", fmt.Errorf("%w: %d bytes without terminator", ErrHeaderLineTooLong, maxBytes)
+			}
+			buf = append(buf, chunk...)
+			continue
+		}
+
+		// EOF before any data is the clean end-of-stream signal callers
+		// use to detect drain. EOF mid-line is a truncated header,
+		// unless we already exceeded the cap — in that case prefer the
+		// over-length error so the caller sees the actual cause.
+		if errors.Is(err, io.EOF) {
+			if accumulated == 0 {
+				return "", io.EOF
+			}
+			if accumulated > maxBytes {
+				return "", fmt.Errorf("%w: %d bytes without terminator", ErrHeaderLineTooLong, maxBytes)
+			}
+			return "", io.ErrUnexpectedEOF
+		}
+
+		return "", fmt.Errorf("contract: read header line: %w", err)
 	}
-	return "", fmt.Errorf("%w: %d bytes without terminator", ErrHeaderLineTooLong, maxBytes)
 }

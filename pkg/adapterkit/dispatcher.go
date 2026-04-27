@@ -131,7 +131,14 @@ func parseInboundMessage(raw []byte) (inboundMessage, error) {
 	if err := dec.Decode(&fields); err != nil {
 		return inboundMessage{}, fmt.Errorf("adapterkit: parse envelope: %w", err)
 	}
-	if dec.More() {
+	// One frame must carry exactly one JSON value. Issue a second Decode
+	// against the same stream and require io.EOF — anything else (a
+	// successful decode of a concatenated value, or a parse error on
+	// trailing garbage) is a smuggled or malformed frame. This matches
+	// contract.ParseMessage so adapterkit and the runtime agree on what
+	// is a valid envelope.
+	var trailing json.RawMessage
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return inboundMessage{}, errors.New("adapterkit: trailing bytes after envelope")
 	}
 
@@ -216,15 +223,20 @@ func writeResponse(w io.Writer, id json.RawMessage, result any, rpcErr *Error) e
 }
 
 func writeFrame(w io.Writer, payload []byte) error {
-	header := fmt.Sprintf(
+	// Build the entire frame (header + CRLFCRLF + body) into a single
+	// buffer and emit one Write call. This avoids per-frame syscall
+	// overhead on the hot path and makes the frame an atomic write —
+	// concurrent writers sharing the underlying io.Writer (a shared
+	// stdout, in practice) cannot interleave header and body bytes.
+	var buf bytes.Buffer
+	buf.Grow(64 + len(payload))
+	fmt.Fprintf(&buf,
 		"Content-Length: %d\r\nContent-Type: %s; charset=utf-8\r\n\r\n",
 		len(payload), mediaType,
 	)
-	if _, err := io.WriteString(w, header); err != nil {
-		return fmt.Errorf("adapterkit: write frame header: %w", err)
-	}
-	if _, err := w.Write(payload); err != nil {
-		return fmt.Errorf("adapterkit: write frame body: %w", err)
+	buf.Write(payload)
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		return fmt.Errorf("adapterkit: write frame: %w", err)
 	}
 	return nil
 }
@@ -306,22 +318,54 @@ func (fr *frameReader) Read(maxBytes int64) ([]byte, error) {
 }
 
 func readBoundedLine(br *bufio.Reader, maxBytes int) (string, error) {
-	buf := make([]byte, 0, 128)
-	for i := 0; i <= maxBytes; i++ {
-		b, err := br.ReadByte()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				if len(buf) == 0 {
-					return "", io.EOF
-				}
-				return "", fmt.Errorf("truncated header: %w", io.ErrUnexpectedEOF)
+	// ReadSlice scans the buffered reader's internal slab in one shot,
+	// avoiding the per-byte ReadByte overhead of the previous
+	// implementation. ReadSlice can return bufio.ErrBufferFull when '\n'
+	// is not seen within the reader's buffer; in that case we copy out
+	// the partial chunk and resume scanning. The maxBytes cap stops a
+	// peer that buffers without ever sending '\n'. Mirrors the same
+	// implementation in internal/adapter/contract/framing.go.
+	var buf []byte
+	for {
+		chunk, err := br.ReadSlice('\n')
+
+		if err == nil {
+			// Hot path: complete line in one ReadSlice call. Cap allows
+			// maxBytes content + 1 terminator byte to match the original
+			// byte-by-byte loop's iteration budget.
+			if len(buf)+len(chunk) > maxBytes+1 {
+				return "", errors.New("adapterkit: frame header line exceeds maximum length")
 			}
-			return "", err
-		}
-		buf = append(buf, b)
-		if b == '\n' {
+			if len(buf) == 0 {
+				return string(chunk), nil
+			}
+			buf = append(buf, chunk...)
 			return string(buf), nil
 		}
+
+		// On ErrBufferFull or EOF, chunk contains zero '\n'. If we've
+		// accumulated more than maxBytes bytes without a terminator,
+		// the line is too long.
+		accumulated := len(buf) + len(chunk)
+
+		if errors.Is(err, bufio.ErrBufferFull) {
+			if accumulated > maxBytes {
+				return "", errors.New("adapterkit: frame header line exceeds maximum length")
+			}
+			buf = append(buf, chunk...)
+			continue
+		}
+
+		if errors.Is(err, io.EOF) {
+			if accumulated == 0 {
+				return "", io.EOF
+			}
+			if accumulated > maxBytes {
+				return "", errors.New("adapterkit: frame header line exceeds maximum length")
+			}
+			return "", fmt.Errorf("truncated header: %w", io.ErrUnexpectedEOF)
+		}
+
+		return "", err
 	}
-	return "", errors.New("adapterkit: frame header line exceeds maximum length")
 }

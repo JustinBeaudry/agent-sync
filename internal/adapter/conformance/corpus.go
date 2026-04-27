@@ -1,11 +1,13 @@
 package conformance
 
 import (
+	"cmp"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"sort"
 	"strings"
 
@@ -93,8 +95,8 @@ func loadCorpus(fsys fs.FS) ([]Case, error) {
 		cases = append(cases, tc)
 	}
 
-	sort.Slice(cases, func(i, j int) bool {
-		return cases[i].Name < cases[j].Name
+	slices.SortFunc(cases, func(a, b Case) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return cases, nil
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 )
@@ -405,8 +406,11 @@ func ParseMessage(raw []byte) (Message, error) {
 	// after the closing brace indicate either concatenated frames
 	// (which the framing layer should have split) or smuggled content;
 	// either way, surface as ErrInvalidEnvelope rather than silently
-	// discard.
-	if dec.More() {
+	// discard. A second Decode call must return io.EOF — anything else
+	// (a successful decode of a concatenated value, or a parse error
+	// on trailing garbage) is rejected.
+	var trailing json.RawMessage
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return Message{}, fmt.Errorf("%w: trailing bytes after envelope", ErrInvalidEnvelope)
 	}
 

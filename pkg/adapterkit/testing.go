@@ -72,15 +72,23 @@ func (r *ScriptedResponder) AsServer(name, version string) *Server {
 	return server
 }
 
-func SynthesizeInitResult(name, version string, caps Capabilities, outputs []DeclaredOutput) []byte {
+// SynthesizeInitResult marshals an InitializeResult for tests that want a
+// canned response payload without standing up a full Server. Returns the
+// marshal error so callers see when caps.Meta or outputs[*].Meta contain
+// values that round-trip through json.RawMessage but fail json.Marshal
+// (e.g. invalid UTF-8 inside a json.RawMessage placeholder).
+func SynthesizeInitResult(name, version string, caps Capabilities, outputs []DeclaredOutput) ([]byte, error) {
 	result := InitializeResult{
 		Server:          name + "/" + version,
 		ProtocolVersion: ContractVersionV1,
 		Capabilities:    caps,
 		DeclaredOutputs: outputs,
 	}
-	data, _ := json.Marshal(result)
-	return data
+	data, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("adapterkit: synthesize init result: %w", err)
+	}
+	return data, nil
 }
 
 // Client drives a Server over the in-memory testing transport.
@@ -99,7 +107,11 @@ func (c *Client) Initialize(ctx context.Context, params InitializeParams) (Initi
 }
 
 func (c *Client) Initialized(ctx context.Context) error {
-	return c.notify(ctx, MethodInitialized, ShutdownParams{})
+	// The `initialized` notification has no params per the adapter
+	// contract. Passing nil here causes marshalRequestEnvelope to omit
+	// the params field entirely, matching what internal/adapter/runtime
+	// sends on the wire.
+	return c.notify(ctx, MethodInitialized, nil)
 }
 
 func (c *Client) Emit(ctx context.Context, params EmitParams) (EmitResult, error) {
@@ -115,15 +127,32 @@ func (c *Client) Shutdown(ctx context.Context) error {
 	return c.call(ctx, MethodShutdown, ShutdownParams{}, &result)
 }
 
-func (c *Client) notify(_ context.Context, method string, params any) error {
+func (c *Client) notify(ctx context.Context, method string, params any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	payload, err := marshalRequestEnvelope(nil, method, params)
 	if err != nil {
 		return err
 	}
+	// Notifications are fire-and-forget — there is no response to wait
+	// for. A pre-write ctx check is sufficient; once the bytes hand off
+	// to the pipe the call returns immediately.
 	return writeFrame(c.w, payload)
 }
 
-func (c *Client) call(_ context.Context, method string, params any, into any) error {
+// readResult is the value the read goroutine in call delivers back to
+// the caller: either a parsed frame or the error that terminated the
+// read.
+type readResult struct {
+	frame []byte
+	err   error
+}
+
+func (c *Client) call(ctx context.Context, method string, params any, into any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	id := c.nextID.Add(1)
 	rawID := json.RawMessage(fmt.Appendf(nil, "%d", id))
 	payload, err := marshalRequestEnvelope(rawID, method, params)
@@ -133,10 +162,35 @@ func (c *Client) call(_ context.Context, method string, params any, into any) er
 	if err := writeFrame(c.w, payload); err != nil {
 		return err
 	}
-	frame, err := c.r.Read(DefaultMaxFrameBytes)
-	if err != nil {
-		return err
+
+	// Spawn a goroutine to perform the blocking read so we can select
+	// on ctx.Done(). Same pattern used by InprocTransport.Close in
+	// internal/adapter/inproc.go: a buffered channel guarantees the
+	// goroutine can always send (even if the caller has abandoned the
+	// wait), so the goroutine never leaks past the next server frame.
+	//
+	// Note: cancelling here returns ctx.Err() but the abandoned read
+	// goroutine continues running in the background. The Client may be
+	// in an unusable state until the server eventually responds (the
+	// buffered send drains the result silently). Tests should treat a
+	// ctx-cancelled call as fatal to the Client.
+	resultCh := make(chan readResult, 1)
+	go func() {
+		frame, err := c.r.Read(DefaultMaxFrameBytes)
+		resultCh <- readResult{frame: frame, err: err}
+	}()
+
+	var frame []byte
+	select {
+	case res := <-resultCh:
+		if res.err != nil {
+			return res.err
+		}
+		frame = res.frame
+	case <-ctx.Done():
+		return ctx.Err()
 	}
+
 	resp, err := parseResponseEnvelope(frame)
 	if err != nil {
 		return err

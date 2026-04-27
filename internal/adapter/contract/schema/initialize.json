@@ -27,7 +27,7 @@
         "cookie": {"type": "string"},
         "_meta": {}
       },
-      "required": ["server", "protocol_version", "capabilities", "declared_outputs"]
+      "required": ["server", "protocol_version", "capabilities", "declared_outputs", "cookie"]
     },
     "capabilities": {
       "type": "object",
