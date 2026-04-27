@@ -20,11 +20,11 @@ var capabilitiesYAML []byte
 // stays a per-adapter declaration and not an arbitrary manifest
 // override.
 type declarationFile struct {
-	Name            string                              `yaml:"name"`
-	Version         string                              `yaml:"version"`
-	ContractVersion string                              `yaml:"contract_version"`
-	ReservedPrefix  string                              `yaml:"reserved_prefix"`
-	ConceptKinds    map[string]conceptKindDeclaration   `yaml:"concept_kinds"`
+	Name            string                            `yaml:"name"`
+	Version         string                            `yaml:"version"`
+	ContractVersion string                            `yaml:"contract_version"`
+	ReservedPrefix  string                            `yaml:"reserved_prefix"`
+	ConceptKinds    map[string]conceptKindDeclaration `yaml:"concept_kinds"`
 }
 
 type conceptKindDeclaration struct {

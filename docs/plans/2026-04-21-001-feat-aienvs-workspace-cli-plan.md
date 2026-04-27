@@ -705,7 +705,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Verification:** Unit 8's frozen corpus passes unchanged; extension tests tagged and gated by capability flags; no MVP consumer (Units 9/10/11/11.5/20) requires 8b to function.
 
-- [ ] **Unit 9: Primary adapter — claude**
+- [x] **Unit 9: Primary adapter — claude**
 
 **Goal:** Ship the bundled `claude` adapter that maps the v1 IR concept set to Claude Code's **actual** per-subsystem reserved subdirectories (rules, commands) and its **tool-owned** files (MCP config) using the per-entry ledger mode.
 

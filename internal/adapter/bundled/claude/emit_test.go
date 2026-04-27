@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -437,19 +438,6 @@ func containsPath(records []adapterkit.OpRecord, path string) bool {
 // errorsAs is a tiny shim around errors.As that returns bool. Lets
 // the assertion read like the standard library check without
 // importing errors at every test call site.
-func errorsAs(err error, target any) bool {
-	type asAware interface {
-		As(any) bool
-	}
-	_ = asAware(nil)
-	if err == nil {
-		return false
-	}
-	if e, ok := err.(*adapterkit.Error); ok {
-		if t, ok := target.(**adapterkit.Error); ok {
-			*t = e
-			return true
-		}
-	}
-	return false
+func errorsAs(err error, target **adapterkit.Error) bool {
+	return errors.As(err, target)
 }
