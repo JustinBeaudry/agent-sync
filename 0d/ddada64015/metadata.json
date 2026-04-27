@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "0dddada64015",
+  "strategy": "manual-commit",
+  "branch": "feat/unit-8-pr3-conformance-spec",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "internal/adapter/conformance/corpus.go",
+    "internal/adapter/conformance/harness.go",
+    "internal/adapter/conformance/harness_test.go",
+    "internal/adapter/contract/framing.go",
+    "internal/adapter/contract/jsonrpc.go",
+    "internal/adapter/contract/schema/initialize.json",
+    "pkg/adapterkit/dispatcher.go",
+    "pkg/adapterkit/dispatcher_test.go",
+    "pkg/adapterkit/testing.go",
+    "pkg/adapterkit/testing_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0d/ddada64015/0/metadata.json",
+      "transcript": "/0d/ddada64015/0/full.jsonl",
+      "content_hash": "/0d/ddada64015/0/content_hash.txt",
+      "prompt": "/0d/ddada64015/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4459,
+    "cache_creation_tokens": 3911706,
+    "cache_read_tokens": 205682422,
+    "output_tokens": 551278,
+    "api_call_count": 607
+  }
+}
