@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.5.5",
+  "checkpoint_id": "ede60ca01b2b",
+  "session_id": "d8a56bdb-dffa-4c0c-82d4-237591007c5d",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-27T04:46:41.850791Z",
+  "branch": "feat/unit-9-claude-adapter",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/adapters/claude.md",
+    "internal/adapter/bundled/claude/emit_test.go",
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "0d02e785de87",
+  "checkpoint_transcript_start": 358,
+  "transcript_lines_at_start": 358,
+  "token_usage": {
+    "input_tokens": 11,
+    "cache_creation_tokens": 10814,
+    "cache_read_tokens": 3055448,
+    "output_tokens": 5107,
+    "api_call_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-27T04:46:41.828671Z",
+    "agent_lines": 137,
+    "agent_removed": 16,
+    "human_added": 5,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 142,
+    "total_lines_changed": 163,
+    "agent_percentage": 93.86503067484662,
+    "metric_version": 2
+  }
+}
