@@ -596,7 +596,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Verification:** `docs/spec/ir-v1.md` matches decoder behavior; fuzz inputs don't panic.
 
-- [ ] **Unit 8: Adapter framework — LSP-framed JSON-RPC 2.0 over stdio, subprocess runner, in-process shim, conformance harness**
+- [x] **Unit 8: Adapter framework — LSP-framed JSON-RPC 2.0 over stdio, subprocess runner, in-process shim, conformance harness**
 
 **Goal:** Ship the `aienvs/v1` adapter protocol as LSP-style `Content-Length`-framed JSON-RPC 2.0 over stdin/stdout, with the full op surface (initialize/initialized lifecycle, capabilities, declared_outputs, cancel, shutdown, progress, per-op timeouts, structured errors, magic cookie, `_meta`), a subprocess runner, an in-process shim for bundled adapters, and a conformance test harness that third-party adapters can embed in their own CI. Freeze the wire protocol at the end of this unit.
 
