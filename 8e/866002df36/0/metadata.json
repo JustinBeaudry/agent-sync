@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "8e866002df36",
+  "session_id": "9d510688-0061-4983-885f-983207f8530f",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-08T23:49:09.413885Z",
+  "branch": "feat/unit-12a-tool-owned-merge",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-06-08-003-feat-unit-12a-tool-owned-merge-plan.md",
+    "docs/spec/tool-owned-merge-v1.md",
+    "internal/merge/apply.go",
+    "internal/merge/apply_test.go",
+    "internal/merge/errors.go",
+    "internal/merge/fuzz_test.go",
+    "internal/merge/json.go",
+    "internal/merge/json_test.go",
+    "internal/merge/locator.go",
+    "internal/merge/locator_test.go",
+    "internal/merge/markdown.go",
+    "internal/merge/markdown_test.go",
+    "internal/merge/toml.go",
+    "internal/merge/toml_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "52506812bd55",
+  "token_usage": {
+    "input_tokens": 153510,
+    "cache_creation_tokens": 4125775,
+    "cache_read_tokens": 177812644,
+    "output_tokens": 424383,
+    "api_call_count": 330
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-08T23:49:07.390304Z",
+    "agent_lines": 2318,
+    "human_added": 42,
+    "human_modified": 7,
+    "human_removed": 0,
+    "total_committed": 2367,
+    "agent_percentage": 97.92986903253063
+  }
+}
