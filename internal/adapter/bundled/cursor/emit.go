@@ -15,6 +15,15 @@ import (
 // EmitParams.IR. The adapter does not import internal/ir's Node
 // directly because that type carries decoder-internal fields the
 // wire payload doesn't include.
+//
+// The full wire shape (including Assets/Provenance) is retained even
+// though cursor never reads Assets — skill is unsupported here and
+// routed to a warning before assets would matter. Keeping the struct
+// identical to the wire contract (and to the claude adapter's irNode)
+// means an unknown future kind that does carry assets still decodes
+// cleanly, and the two adapters share one auditable wire shape rather
+// than drifting apart. These fields are intentional parity, not copy
+// residue.
 type irNode struct {
 	ID         string          `json:"id"`
 	Kind       string          `json:"kind"`

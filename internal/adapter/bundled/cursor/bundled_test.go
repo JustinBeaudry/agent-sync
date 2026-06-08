@@ -23,7 +23,7 @@ func TestBundledAdapter_FullLifecycle(t *testing.T) {
 
 	server := newServerForTest()
 	client, cleanup := adapterkit.RunInprocServer(t, server)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	ctx := context.Background()
 	initRes, err := client.Initialize(ctx, adapterkit.InitializeParams{
@@ -116,7 +116,7 @@ func TestBundledAdapter_EmitWithForeignTargetStillProcessesIR(t *testing.T) {
 
 	server := newServerForTest()
 	client, cleanup := adapterkit.RunInprocServer(t, server)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	ctx := context.Background()
 	if _, err := client.Initialize(ctx, adapterkit.InitializeParams{
@@ -156,7 +156,7 @@ func TestBundledAdapter_ReInitAfterShutdownIsRejected(t *testing.T) {
 
 	server := newServerForTest()
 	client, cleanup := adapterkit.RunInprocServer(t, server)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	ctx := context.Background()
 	if _, err := client.Initialize(ctx, adapterkit.InitializeParams{

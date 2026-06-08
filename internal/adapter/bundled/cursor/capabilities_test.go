@@ -213,7 +213,7 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 	server.OnEmit(handleEmit)
 
 	client, cleanup := adapterkit.RunInprocServer(t, server)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	ctx := context.Background()
 	res, err := client.Initialize(ctx, adapterkit.InitializeParams{

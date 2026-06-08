@@ -107,7 +107,7 @@ func TestEmitRule_HappyPath(t *testing.T) {
 func TestEmitRule_PathsFrontmatterEmitsNoWarning(t *testing.T) {
 	t.Parallel()
 
-	res, _ := emitFixture(t, "rule-with-paths-frontmatter.json")
+	res, ops := emitFixture(t, "rule-with-paths-frontmatter.json")
 
 	wantRecords := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/aienvs"},
@@ -121,6 +121,14 @@ func TestEmitRule_PathsFrontmatterEmitsNoWarning(t *testing.T) {
 		if r.Op == adapterkit.OpKindWarning {
 			t.Errorf("cursor must NOT emit a paths: warning; got %+v", res.OpsPerformed)
 		}
+	}
+
+	// Pin the cursor-specific invariant: the paths: frontmatter is
+	// passed through to the .mdc body unmodified (not stripped), so a
+	// regression that silently dropped frontmatter would fail here.
+	ruleOp := findWriteFile(t, ops, ".cursor/rules/aienvs/scoped-rule.mdc")
+	if !strings.Contains(string(ruleOp.Content), "paths:") {
+		t.Errorf("paths: frontmatter must be preserved in the emitted .mdc; got %q", ruleOp.Content)
 	}
 }
 
@@ -329,8 +337,6 @@ func TestEmit_TargetsFilterSkipsOtherAdapters(t *testing.T) {
 func TestEmit_OffTargetUnsupportedProducesNoWarning(t *testing.T) {
 	t.Parallel()
 
-	res, _ := emitFixture(t, "targeted-other.json")
-	_ = res
 	emitted, err := captureOps(json.RawMessage(`{"nodes":[{"id":"x","kind":"skill","targets":["claude"],"body":"x"}]}`))
 	if err != nil {
 		t.Fatalf("captureOps: %v", err)
@@ -484,6 +490,72 @@ func TestEmit_HandleEmit_HonorsContextCancellation(t *testing.T) {
 	}
 	if !strings.Contains(aerr.Message, "cancelled") {
 		t.Errorf("error message must mention cancellation; got %q", aerr.Message)
+	}
+}
+
+// TestEmit_HandleEmit_SkipsOffTargetNodes exercises the targets filter
+// through the real handleEmit boundary (not the captureOps helper): a
+// cursor-targeted rule emits, a claude-targeted rule is silently
+// skipped.
+func TestEmit_HandleEmit_SkipsOffTargetNodes(t *testing.T) {
+	t.Parallel()
+
+	ir := json.RawMessage(`{"nodes":[
+		{"id":"mine","kind":"rule","targets":["cursor"],"body":"cursor rule"},
+		{"id":"theirs","kind":"rule","targets":["claude"],"body":"claude rule"}
+	]}`)
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir})
+	if err != nil {
+		t.Fatalf("handleEmit: %v", err)
+	}
+	if !containsPath(res.OpsPerformed, ".cursor/rules/aienvs/mine.mdc") {
+		t.Errorf("cursor-targeted rule must emit; got %+v", res.OpsPerformed)
+	}
+	if containsPath(res.OpsPerformed, ".cursor/rules/aienvs/theirs.mdc") {
+		t.Errorf("claude-targeted rule must be skipped; got %+v", res.OpsPerformed)
+	}
+}
+
+// TestEmit_HandleEmit_RejectsDuplicateNodes exercises the duplicate
+// rejection through the real handleEmit boundary, not captureOps.
+func TestEmit_HandleEmit_RejectsDuplicateNodes(t *testing.T) {
+	t.Parallel()
+
+	ir := json.RawMessage(`{"nodes":[
+		{"id":"x","kind":"rule","body":"first"},
+		{"id":"x","kind":"rule","body":"second"}
+	]}`)
+	_, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir})
+	if err == nil {
+		t.Fatal("duplicate (kind, id) must be rejected through handleEmit")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("got err=%v want CodeInvalidParams", err)
+	}
+}
+
+// TestEmitRule_WrapsBodyDecodeError covers emitRule's wrapBodyErr
+// path: a node body that is neither a JSON string nor a valid JSON
+// value surfaces as a structured CodeInvalidParams error rather than
+// a raw decode panic. (Unreachable through a fully-parsed document,
+// but the wrapper is the contract for any in-process caller passing a
+// raw body.)
+func TestEmitRule_WrapsBodyDecodeError(t *testing.T) {
+	t.Parallel()
+
+	emitted := &emittedOps{}
+	state := newEmitState()
+	err := emitRule(emitted, irNode{ID: "x", Kind: "rule", Body: json.RawMessage("{bad")}, state)
+	if err == nil {
+		t.Fatal("malformed rule body must be rejected")
+	}
+	var aerr *adapterkit.Error
+	if !errors.As(err, &aerr) || aerr.Code != adapterkit.CodeInvalidParams {
+		t.Fatalf("got err=%v want CodeInvalidParams", err)
+	}
+	if !strings.Contains(aerr.Message, "body") {
+		t.Errorf("error must name the body decode failure; got %q", aerr.Message)
 	}
 }
 
