@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gofrs/flock"
 
@@ -18,13 +19,23 @@ import (
 
 const fileLocksDirRel = ".aienv/state/filelocks"
 
+// FileLockOpts tunes a single FileLockRegistry.Acquire call. It is a
+// distinct type from AcquireOpts (the TargetLock options) because the
+// file-lock registry has no break-lock concept — exposing TargetLock's
+// BreakLock here would be a silently-ignored dead field.
+type FileLockOpts struct {
+	// Timeout overrides DefaultTimeout when > 0.
+	Timeout time.Duration
+}
+
 // FileLockRegistry serializes the read-merge-write of shared tool-owned
 // files (workspace-root AGENTS.md, .mcp.json, etc.) across goroutines
 // and processes. It locks a dedicated hashed sidecar under
 // .aienv/state/filelocks/, never the target file itself, so the merge's
 // own temp+rename (Unit 12a) is not fighting the lock.
 type FileLockRegistry struct {
-	dir string // absolute filelocks dir
+	root *fsroot.Root
+	dir  string // absolute filelocks dir
 
 	mu   sync.Mutex
 	held map[string]*keyLock
@@ -39,17 +50,21 @@ type keyLock struct {
 	holder string // current in-process holder; guarded by registry.mu
 }
 
-// NewFileLockRegistry guards the state-dir prefix against symlinks,
-// ensures the filelocks dir exists, and resolves its absolute path.
+// NewFileLockRegistry guards the state-dir prefix AND the filelocks
+// subdir against symlinks, ensures the filelocks dir exists, and
+// resolves its absolute path.
 func NewFileLockRegistry(root *fsroot.Root) (*FileLockRegistry, error) {
-	if err := guardStatePrefix(root); err != nil {
+	// Guard .aienv, .aienv/state, AND .aienv/state/filelocks — the lock
+	// FDs open one level deeper than the target lock, so the filelocks
+	// segment must be in the guarded set too.
+	if err := guardStatePrefix(root, fileLocksDirRel); err != nil {
 		return nil, err
 	}
 	if err := root.Inner().MkdirAll(fileLocksDirRel, 0o755); err != nil {
 		return nil, fmt.Errorf("locks: mkdir %s: %w", fileLocksDirRel, err)
 	}
 	dir := filepath.Join(root.Path(), filepath.FromSlash(fileLocksDirRel))
-	return &FileLockRegistry{dir: dir, held: map[string]*keyLock{}}, nil
+	return &FileLockRegistry{root: root, dir: dir, held: map[string]*keyLock{}}, nil
 }
 
 // Acquire takes the lock for the file at absPath on behalf of holder
@@ -57,12 +72,19 @@ func NewFileLockRegistry(root *fsroot.Root) (*FileLockRegistry, error) {
 // in-process goroutines and cross-process acquirers on the same
 // canonical path. Returns a release func; on bounded-timeout returns
 // ErrFileLockTimeout naming the (verbatim) path and the holder.
-func (r *FileLockRegistry) Acquire(ctx context.Context, absPath, holder string, opts AcquireOpts) (release func() error, err error) {
+func (r *FileLockRegistry) Acquire(ctx context.Context, absPath, holder string, opts FileLockOpts) (release func() error, err error) {
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
 	hash := hashKey(canonicalize(absPath))
+
+	// Guard the hashed lock leaf against a pre-planted symlink before
+	// flock opens it with symlink-following (KTD 5).
+	leafRel := fileLocksDirRel + "/" + hash + ".lock"
+	if err := guardLeaf(r.root, leafRel); err != nil {
+		return nil, err
+	}
 	kl := r.keyLockFor(hash)
 
 	actx, cancel := context.WithTimeout(ctx, timeout)
@@ -73,16 +95,25 @@ func (r *FileLockRegistry) Acquire(ctx context.Context, absPath, holder string, 
 	select {
 	case kl.gate <- struct{}{}:
 	case <-actx.Done():
+		if ctx.Err() != nil {
+			return nil, ctx.Err() // parent cancellation propagates
+		}
 		return nil, r.timeoutErr(kl, absPath)
 	}
 
 	locked, ferr := kl.fl.TryLockContext(actx, retryDelay)
 	if ferr != nil && !errors.Is(ferr, context.DeadlineExceeded) {
 		<-kl.gate
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("locks: file lock %s: %w", absPath, ferr)
 	}
 	if !locked {
 		<-kl.gate
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, r.timeoutErr(kl, absPath)
 	}
 

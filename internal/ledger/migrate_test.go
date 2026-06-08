@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +75,25 @@ func TestMigrateTo_MissingUpgraderInChain(t *testing.T) {
 	_, err := migrateTo(raw, 3, chain)
 	if err == nil {
 		t.Fatal("expected error for missing upgrader in chain")
+	}
+}
+
+func TestMigrate_MalformedJSONIsCorrupted(t *testing.T) {
+	t.Parallel()
+	_, err := Migrate([]byte("{not json"), MigrateOpts{})
+	if !errors.Is(err, ErrLedgerCorrupted) {
+		t.Errorf("err=%v want ErrLedgerCorrupted", err)
+	}
+}
+
+func TestMigrateTo_UpgraderErrorPropagates(t *testing.T) {
+	t.Parallel()
+	chain := map[int]upgrader{
+		1: func(Ledger) (Ledger, error) { return Ledger{}, errors.New("boom") },
+	}
+	_, err := migrateTo([]byte(`{"schema_version":1,"target":"claude","entries":[]}`), 2, chain)
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Errorf("upgrader error must propagate with context; got %v", err)
 	}
 }
 

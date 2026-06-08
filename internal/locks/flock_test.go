@@ -59,7 +59,7 @@ func TestTargetLock_HappyPath(t *testing.T) {
 	if err := release(); err != nil {
 		t.Fatalf("release: %v", err)
 	}
-	if _, err := os.Stat(l.sidecarPath); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(root.Path(), l.sidecarRel)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("sidecar should be removed on release; stat err=%v", err)
 	}
 }
@@ -73,7 +73,7 @@ func TestTargetLock_ReconcilesOrphanSidecar(t *testing.T) {
 	// machine. No real flock is held (the crashed holder's flock was
 	// auto-released by the OS) — so Acquire succeeds on the success
 	// path and reconciles the orphan.
-	writeRawSidecar(t, l.sidecarPath, sidecar{
+	writeRawSidecar(t, filepath.Join(root.Path(), l.sidecarRel), sidecar{
 		PID:       deadPID(),
 		MachineID: l.machineID,
 		StartedAt: time.Now().Add(-10 * time.Minute).UTC(),
@@ -98,7 +98,7 @@ func TestTargetLock_ForeignMachineSidecarNoticed(t *testing.T) {
 	t.Parallel()
 	root := openRoot(t)
 	l, buf := newLockWithBuf(t, root, "claude")
-	writeRawSidecar(t, l.sidecarPath, sidecar{
+	writeRawSidecar(t, filepath.Join(root.Path(), l.sidecarRel), sidecar{
 		PID:       os.Getpid(), // alive locally, but...
 		MachineID: "ffffffffffffffffffffffffffffffff",
 		StartedAt: time.Now().UTC(), // ...fresh
@@ -184,15 +184,36 @@ func TestTargetLock_ForceBreak(t *testing.T) {
 	}
 	defer func() { _ = release() }()
 
+	// With advisory flock, a LIVE holder cannot be safely stolen:
+	// --break-lock clears a stale sidecar and retries the same handle,
+	// but a still-held flock stays held, so the breaker still gets
+	// ErrTargetLocked (no two-holder split). This is the safe behavior.
 	second, buf := newLockWithBuf(t, root, "claude")
-	rel2, err := second.Acquire(context.Background(), AcquireOpts{Timeout: 200 * time.Millisecond, BreakLock: true})
+	_, err = second.Acquire(context.Background(), AcquireOpts{Timeout: 200 * time.Millisecond, BreakLock: true})
+	if !errors.Is(err, ErrTargetLocked) {
+		t.Fatalf("force-break against a LIVE holder must not steal the lock; err=%v want ErrTargetLocked", err)
+	}
+	if !strings.Contains(buf.String(), "--break-lock") {
+		t.Errorf("expected --break-lock notice; got %q", buf.String())
+	}
+}
+
+// TestTargetLock_BreakLockReclaimsReleasedHolder verifies the legitimate
+// break case: the prior holder is gone (flock released, only a stale
+// sidecar remains) and --break-lock reclaims it.
+func TestTargetLock_BreakLockReclaimsReleasedHolder(t *testing.T) {
+	t.Parallel()
+	root := openRoot(t)
+	l, _ := newLockWithBuf(t, root, "claude")
+	// Stale sidecar present, no flock held (prior holder died).
+	writeRawSidecar(t, filepath.Join(root.Path(), l.sidecarRel), sidecar{
+		PID: deadPID(), MachineID: l.machineID, StartedAt: time.Now().Add(-time.Hour).UTC(),
+	})
+	rel, err := l.Acquire(context.Background(), AcquireOpts{BreakLock: true})
 	if err != nil {
-		t.Fatalf("force-break Acquire: %v", err)
+		t.Fatalf("break-lock should reclaim a released holder: %v", err)
 	}
-	defer func() { _ = rel2() }()
-	if !strings.Contains(buf.String(), "forcibly breaking") {
-		t.Errorf("expected force-break notice; got %q", buf.String())
-	}
+	_ = rel()
 }
 
 func TestTargetLock_InvalidTarget(t *testing.T) {
@@ -200,6 +221,67 @@ func TestTargetLock_InvalidTarget(t *testing.T) {
 	root := openRoot(t)
 	if _, err := NewTargetLock(root, "../escape"); err == nil {
 		t.Error("invalid target must be rejected")
+	}
+}
+
+func TestMachineID_ReusesExisting(t *testing.T) {
+	t.Parallel()
+	root := openRoot(t)
+	first, err := machineID(root)
+	if err != nil {
+		t.Fatalf("machineID first: %v", err)
+	}
+	second, err := machineID(root)
+	if err != nil {
+		t.Fatalf("machineID second: %v", err)
+	}
+	if first != second {
+		t.Errorf("machine-id must be stable across calls: %q != %q", first, second)
+	}
+	if len(first) != 32 {
+		t.Errorf("machine-id should be 128-bit hex (32 chars); got %q", first)
+	}
+}
+
+func TestMachineID_RecoversFromPoisonedEmptyFile(t *testing.T) {
+	t.Parallel()
+	root := openRoot(t)
+	// Simulate a crash-poisoned empty machine-id file.
+	dir := filepath.Join(root.Path(), ".aienv", "state")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "machine-id"), []byte(""), 0o644); err != nil {
+		t.Fatalf("write empty: %v", err)
+	}
+	id, err := machineID(root)
+	if err != nil {
+		t.Fatalf("machineID must recover from a poisoned empty file: %v", err)
+	}
+	if id == "" {
+		t.Error("recovered machine-id must be non-empty")
+	}
+}
+
+func TestTargetLock_LockedErrHolderUnknown(t *testing.T) {
+	t.Parallel()
+	root := openRoot(t)
+	first, _ := newLockWithBuf(t, root, "claude")
+	release, err := first.Acquire(context.Background(), AcquireOpts{})
+	if err != nil {
+		t.Fatalf("first Acquire: %v", err)
+	}
+	defer func() { _ = release() }()
+	// Remove the sidecar so the contender cannot identify the holder.
+	_ = os.Remove(filepath.Join(root.Path(), first.sidecarRel))
+
+	second, _ := newLockWithBuf(t, root, "claude")
+	_, err = second.Acquire(context.Background(), AcquireOpts{Timeout: 150 * time.Millisecond})
+	if !errors.Is(err, ErrTargetLocked) {
+		t.Fatalf("err=%v want ErrTargetLocked", err)
+	}
+	if !strings.Contains(err.Error(), "holder unknown") {
+		t.Errorf("missing-sidecar contention should report holder unknown; got %q", err.Error())
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -38,31 +39,41 @@ type sidecar struct {
 	StartedAt time.Time `json:"started_at"`
 }
 
-// AcquireOpts tunes a single Acquire call.
+// AcquireOpts tunes a single TargetLock.Acquire call.
 type AcquireOpts struct {
 	// Timeout overrides DefaultTimeout when > 0.
 	Timeout time.Duration
-	// BreakLock forces a contended lock to be broken (the --break-lock
-	// escape hatch). Without it, a busy lock returns ErrTargetLocked.
+	// BreakLock clears a stale sidecar and re-attempts acquisition (the
+	// --break-lock escape hatch). With advisory flock a live holder
+	// cannot be safely stolen — break only succeeds when the holder is
+	// actually gone (its flock already released). Without it, a busy
+	// lock returns ErrTargetLocked.
 	BreakLock bool
 }
 
 // TargetLock is the whole-sync lock for one target. Construct with
 // NewTargetLock, then Acquire/release around the sync.
+//
+// The flock itself must use a real absolute path (os.Root cannot hand a
+// raw FD to gofrs/flock), but every other touch of the lock file or its
+// sidecar is routed through the fsroot Root (os.Root, which refuses
+// symlink traversal) so a symlinked .aienv/state prefix or a symlinked
+// lock leaf cannot redirect a write outside the workspace.
 type TargetLock struct {
-	target      string
-	lockPath    string // absolute
-	sidecarPath string // absolute
-	machineID   string
-	now         func() time.Time // injectable clock for tests
-	notices     io.Writer        // stale/break notices; defaults to os.Stderr
-	fl          *flock.Flock
+	root       *fsroot.Root
+	target     string
+	lockRel    string // workspace-relative, for fsroot-routed ops + leaf guard
+	sidecarRel string // workspace-relative
+	lockPath   string // absolute, for gofrs/flock only
+	machineID  string
+	now        func() time.Time // injectable clock for tests
+	notices    io.Writer        // stale/break notices; defaults to os.Stderr
+	fl         *flock.Flock
 }
 
 // NewTargetLock validates the target, guards the state-dir prefix
 // against symlinks, ensures .aienv/state/ exists, resolves the stable
-// machine id, and resolves the absolute lock paths. It opens no lock
-// FD yet — that happens in Acquire.
+// machine id, and resolves the lock paths. It opens no lock FD yet.
 func NewTargetLock(root *fsroot.Root, target string) (*TargetLock, error) {
 	if !ir.IsValidID(target) {
 		return nil, fmt.Errorf("locks: invalid target %q", target)
@@ -77,16 +88,18 @@ func NewTargetLock(root *fsroot.Root, target string) (*TargetLock, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := filepath.Join(root.Path(), filepath.FromSlash(stateDirRel))
-	lockPath := filepath.Join(base, target+".lock")
+	lockRel := stateDirRel + "/" + target + ".lock"
+	abs := filepath.Join(root.Path(), filepath.FromSlash(lockRel))
 	return &TargetLock{
-		target:      target,
-		lockPath:    lockPath,
-		sidecarPath: lockPath + ".pid",
-		machineID:   mid,
-		now:         time.Now,
-		notices:     os.Stderr,
-		fl:          flock.New(lockPath),
+		root:       root,
+		target:     target,
+		lockRel:    lockRel,
+		sidecarRel: lockRel + ".pid",
+		lockPath:   abs,
+		machineID:  mid,
+		now:        time.Now,
+		notices:    os.Stderr,
+		fl:         flock.New(abs),
 	}, nil
 }
 
@@ -94,11 +107,23 @@ func NewTargetLock(root *fsroot.Root, target string) (*TargetLock, error) {
 // a crashed prior holder whose flock the OS already released) it
 // succeeds and reconciles any orphan sidecar. On a busy lock — which
 // means a live holder, since flock releases on death — it returns
-// ErrTargetLocked unless opts.BreakLock forces a break.
+// ErrTargetLocked unless opts.BreakLock clears a stale sidecar and the
+// holder turns out to be gone.
 func (l *TargetLock) Acquire(ctx context.Context, opts AcquireOpts) (release func() error, err error) {
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = DefaultTimeout
+	}
+
+	// Guard the lock leaf against a pre-planted symlink before flock
+	// opens it (gofrs/flock follows symlinks; os.Root-routed Lstat does
+	// not). The prefix was guarded at construction; re-check here so a
+	// swap in the construct→Acquire window is also caught.
+	if err := guardStatePrefix(l.root); err != nil {
+		return nil, err
+	}
+	if err := guardLeaf(l.root, l.lockRel); err != nil {
+		return nil, err
 	}
 
 	locked, err := l.tryLock(ctx, timeout)
@@ -106,22 +131,20 @@ func (l *TargetLock) Acquire(ctx context.Context, opts AcquireOpts) (release fun
 		return nil, err
 	}
 	if locked {
-		l.reconcileOrphanSidecar()
-		if werr := l.writeSidecar(); werr != nil {
-			_ = l.fl.Unlock()
-			return nil, werr
-		}
-		return l.makeRelease(), nil
+		return l.onAcquired()
 	}
 
-	// Contended: a live holder. Only an explicit break overrides.
+	// Contended: a live holder (flock releases on death). BreakLock
+	// clears a stale sidecar and retries the SAME flock handle — it
+	// never unlinks-and-recreates (that would make a new inode and let
+	// a still-live holder and the breaker both "hold" the lock). So a
+	// genuinely live holder is never stolen; only an already-released
+	// lock with a lingering sidecar is reclaimed.
 	if !opts.BreakLock {
 		return nil, l.lockedErr()
 	}
-	l.noticef("forcibly breaking lock on target %q (%s) per --break-lock", l.target, l.lockPath)
-	_ = os.Remove(l.lockPath)
-	_ = os.Remove(l.sidecarPath)
-	l.fl = flock.New(l.lockPath)
+	l.noticef("--break-lock: clearing stale sidecar and retrying target %q", l.target)
+	_ = l.removeSidecar()
 	locked2, err := l.tryLock(ctx, timeout)
 	if err != nil {
 		return nil, err
@@ -129,9 +152,16 @@ func (l *TargetLock) Acquire(ctx context.Context, opts AcquireOpts) (release fun
 	if !locked2 {
 		return nil, l.lockedErr()
 	}
-	if werr := l.writeSidecar(); werr != nil {
+	return l.onAcquired()
+}
+
+// onAcquired reconciles an orphan sidecar, writes our sidecar, and
+// returns the release closure. Called only when the flock is held.
+func (l *TargetLock) onAcquired() (func() error, error) {
+	l.reconcileOrphanSidecar()
+	if err := l.writeSidecar(); err != nil {
 		_ = l.fl.Unlock()
-		return nil, werr
+		return nil, err
 	}
 	return l.makeRelease(), nil
 }
@@ -141,11 +171,13 @@ func (l *TargetLock) tryLock(ctx context.Context, timeout time.Duration) (bool, 
 	defer cancel()
 	locked, err := l.fl.TryLockContext(actx, retryDelay)
 	if err != nil {
-		// A deadline-exceeded from our bounded context is "contended",
-		// not a hard error; surface other errors (e.g. parent ctx
-		// cancelled by the caller) up.
-		if errors.Is(err, context.DeadlineExceeded) {
+		// Distinguish our bounded-timeout (contended) from a parent
+		// context cancellation (caller shutdown), which must propagate.
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
 			return false, nil
+		}
+		if ctx.Err() != nil {
+			return false, ctx.Err()
 		}
 		return false, fmt.Errorf("locks: acquire target %q: %w", l.target, err)
 	}
@@ -153,17 +185,20 @@ func (l *TargetLock) tryLock(ctx context.Context, timeout time.Duration) (bool, 
 }
 
 func (l *TargetLock) makeRelease() func() error {
+	var once sync.Once
 	return func() error {
-		_ = os.Remove(l.sidecarPath)
-		return l.fl.Unlock()
+		var uerr error
+		once.Do(func() {
+			_ = l.removeSidecar()
+			uerr = l.fl.Unlock()
+		})
+		return uerr
 	}
 }
 
 // reconcileOrphanSidecar emits a stale-sidecar notice when a
-// pre-existing sidecar looks stale (foreign machine, dead PID on our
-// machine, or older than StaleFloor). The lock is already held, so the
-// sidecar is advisory; writeSidecar overwrites it next. Best-effort —
-// a missing/unreadable sidecar is the normal fresh case.
+// pre-existing sidecar looks stale. The lock is already held, so the
+// sidecar is advisory; writeSidecar overwrites it next.
 func (l *TargetLock) reconcileOrphanSidecar() {
 	sc, ok := l.readSidecar()
 	if !ok {
@@ -175,11 +210,8 @@ func (l *TargetLock) reconcileOrphanSidecar() {
 	}
 }
 
-// sidecarLooksStale classifies a pre-existing sidecar. A foreign
-// machine_id is treated as stale-for-notice only (we hold the lock, so
-// the foreign holder is gone); a same-machine sidecar is stale if its
-// PID is dead or its age exceeds StaleFloor (age cross-checks
-// started_at against the lock file mtime to blunt clock skew).
+// sidecarLooksStale classifies a pre-existing sidecar: a foreign
+// machine, a dead PID on our machine, or an age beyond StaleFloor.
 func (l *TargetLock) sidecarLooksStale(sc sidecar) bool {
 	if sc.MachineID != l.machineID {
 		return true
@@ -193,7 +225,7 @@ func (l *TargetLock) sidecarLooksStale(sc sidecar) bool {
 func (l *TargetLock) sidecarAge(sc sidecar) time.Duration {
 	now := l.now()
 	age := now.Sub(sc.StartedAt)
-	if fi, err := os.Stat(l.lockPath); err == nil {
+	if fi, err := l.root.Inner().Stat(l.lockRel); err == nil {
 		if mAge := now.Sub(fi.ModTime()); mAge > age {
 			age = mAge
 		}
@@ -202,7 +234,12 @@ func (l *TargetLock) sidecarAge(sc sidecar) time.Duration {
 }
 
 func (l *TargetLock) readSidecar() (sidecar, bool) {
-	b, err := os.ReadFile(l.sidecarPath)
+	f, err := l.root.Inner().Open(l.sidecarRel)
+	if err != nil {
+		return sidecar{}, false
+	}
+	defer func() { _ = f.Close() }()
+	b, err := io.ReadAll(f)
 	if err != nil {
 		return sidecar{}, false
 	}
@@ -219,8 +256,23 @@ func (l *TargetLock) writeSidecar() error {
 	if err != nil {
 		return fmt.Errorf("locks: marshal sidecar: %w", err)
 	}
-	if err := os.WriteFile(l.sidecarPath, b, 0o600); err != nil {
+	// Route through os.Root (refuses symlinks); O_TRUNC so a reclaimed
+	// orphan sidecar is overwritten cleanly.
+	f, err := l.root.Inner().OpenFile(l.sidecarRel, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("locks: open sidecar: %w", err)
+	}
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
 		return fmt.Errorf("locks: write sidecar: %w", err)
+	}
+	return f.Close()
+}
+
+func (l *TargetLock) removeSidecar() error {
+	err := l.root.Inner().Remove(l.sidecarRel)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
 	}
 	return nil
 }
@@ -242,24 +294,37 @@ func (l *TargetLock) noticef(format string, args ...any) {
 	_, _ = fmt.Fprintf(w, "aienvs: "+format+"\n", args...)
 }
 
-// guardStatePrefix refuses when .aienv or .aienv/state is a symlink /
-// reparse point. It Lstats each segment through the fsroot Root (which
-// detects reparse points) before any absolute lock path is opened, so
-// a symlinked prefix cannot redirect a lock file outside the workspace
-// (KTD 5). A not-yet-existing segment is fine (first sync creates real
-// dirs).
-func guardStatePrefix(root *fsroot.Root) error {
-	for _, seg := range []string{".aienv", stateDirRel} {
-		fi, err := root.Lstat(seg)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return fmt.Errorf("locks: stat %s: %w", seg, err)
+// guardStatePrefix refuses when any guarded state-dir component is a
+// symlink / reparse point. It Lstats each segment through the fsroot
+// Root (which detects reparse points) before any absolute lock path is
+// opened, so a symlinked prefix cannot redirect a lock file outside the
+// workspace (KTD 5). Extra segments (e.g. the filelocks subdir) are
+// checked when supplied. A not-yet-existing segment is fine.
+func guardStatePrefix(root *fsroot.Root, extra ...string) error {
+	segs := append([]string{".aienv", stateDirRel}, extra...)
+	for _, seg := range segs {
+		if err := guardLeaf(root, seg); err != nil {
+			return err
 		}
-		if fi.Mode()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("%w: %s", ErrUnsafeStatePrefix, seg)
+	}
+	return nil
+}
+
+// guardLeaf refuses when relPath exists and is a symlink. Used on the
+// lock-file leaves (which gofrs/flock opens with symlink-following) so
+// a pre-planted symlink there cannot redirect the FD outside the
+// workspace. A residual construct→open TOCTOU window remains (same-uid,
+// own-workspace threat model); the guard closes the pre-planted case.
+func guardLeaf(root *fsroot.Root, relPath string) error {
+	fi, err := root.Lstat(relPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
 		}
+		return fmt.Errorf("locks: stat %s: %w", relPath, err)
+	}
+	if fi.Mode()&fs.ModeSymlink != 0 {
+		return fmt.Errorf("%w: %s", ErrUnsafeStatePrefix, relPath)
 	}
 	return nil
 }

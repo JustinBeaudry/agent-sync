@@ -407,7 +407,7 @@ internal/locks/
   flock_windows.go  # //go:build windows — processAlive via OpenProcess
   machineid.go      # stable per-machine UUID at .aienv/state/machine-id
   filelock.go       # FileLockRegistry: canonicalize + Acquire(ctx, absPath, holder) -> release
-  errors.go         # ErrTargetLocked, ErrFileLockTimeout, ErrStaleLockBroken, ErrUnsafeStatePrefix
+  errors.go         # ErrTargetLocked, ErrFileLockTimeout, ErrUnsafeStatePrefix (no ErrStaleLockBroken -- see KTD 6)
   flock_test.go
   filelock_test.go
 ```
@@ -594,16 +594,26 @@ the workspace root path + reparse-point detection) and `gofrs/flock`.
   stale-sidecar notice when the old sidecar looked stale (different
   `machine_id`, or dead PID, or old age). Return a release that
   unlocks + removes the sidecar.
-- **Contended path (flock busy) — conservative break only:** read the
-  sidecar. Auto-break (emit `ErrStaleLockBroken` audit notice, remove
-  stale lock+sidecar, retry once) **only** when `machine_id == ours`
-  AND `!processAlive(pid)` AND the lock is stale by age, where age =
-  `max(now-started_at, now-lockfileMtime)` compared against
-  `max(2*DefaultTimeout, StaleFloor)` (fixed floor, **not** the
-  possibly-short acquire timeout). Otherwise `ErrTargetLocked` naming
-  pid/machine/age. `opts.BreakLock` forces a break regardless.
+- **Contended path (flock busy = live holder):** return `ErrTargetLocked`
+  naming pid/machine. **No automatic break** — with advisory flock a
+  busy lock means a live holder (a dead holder's flock is already
+  released, so it lands on the success path). `opts.BreakLock` clears a
+  stale **sidecar** and retries the *same* flock handle (never unlinks +
+  recreates, which would split into two inodes and let a live holder and
+  the breaker both "hold" the lock); a genuinely live holder is therefore
+  never stolen. (This supersedes an earlier draft that had a contended
+  auto-break emitting `ErrStaleLockBroken` — that sentinel was dropped;
+  see KTD 6's implementation note.)
+- The stale-classification heuristic (`machine_id == ours` AND
+  `!processAlive(pid)` AND age beyond `max(2*DefaultTimeout, StaleFloor)`,
+  age = `max(now-started_at, now-lockfileMtime)`) runs on the **success**
+  path to decide whether to emit the stale-sidecar notice.
 - `processAlive` is the build-tag-split primitive (KTD 7); the
   cross-machine branch (`machine_id != ours`) never calls it.
+- Every absolute-path lock leaf and the sidecar are symlink-guarded
+  (`guardLeaf` Lstats through the fsroot Root) and the sidecar is written
+  through `os.Root` so a symlinked `.aienv/state` prefix or lock leaf
+  cannot redirect a write outside the workspace.
 
 **Patterns to follow:** `internal/fsroot/samefs_{unix,windows}.go`
 (build-tag split); `internal/fsroot/containment.go` (reparse-point
@@ -731,10 +741,12 @@ sidecar, never the target file).
   This unit adds two leaf packages with no inbound edges in this PR —
   proven only by their own tests.
 - **Error propagation:** All sentinels (`ErrLedgerNotFound`,
-  `ErrLedgerCorrupted`, `ErrLedgerSchemaTooOld/TooNew`,
-  `ErrTargetLocked`, `ErrFileLockTimeout`, `ErrStaleLockBroken`) are
-  `errors.Is`-matchable so callers route on them. No panics across the
-  package boundary.
+  `ErrLedgerCorrupted`, `ErrLedgerSchemaTooOld/TooNew`, `ErrInvalidTarget`,
+  `ErrTargetLocked`, `ErrFileLockTimeout`, `ErrUnsafeStatePrefix`) are
+  `errors.Is`-matchable so callers route on them. (`ErrStaleLockBroken`
+  was dropped — stale handling became a stderr notice on the success
+  path, not a sentinel; see KTD 6.) No panics across the package
+  boundary.
 - **State lifecycle:** The ledger is the durable record consumed by
   the sync engine; this unit's correctness (atomic write, fail-safe
   load) is what later units' crash-safety rests on. Locks hold OS
