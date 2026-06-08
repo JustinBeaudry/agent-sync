@@ -1,0 +1,52 @@
+name: cursor
+version: "0.1"
+contract_version: aienvs/v1
+reserved_prefix: .cursor
+
+# concept_kinds is the authoritative per-IR-kind support declaration
+# for the cursor adapter. The in-code map in capabilities.go must
+# match this file kind-for-kind; capabilities_test.go enforces the
+# parity. Add a kind here, add it in code; remove a kind here, remove
+# it in code.
+concept_kinds:
+  agents-md:
+    status: supported
+    note: |
+      Section-merged into the workspace-root AGENTS.md as a managed
+      section between aienvs:begin / aienvs:end markers. Cursor reads
+      AGENTS.md at the project root. Unlike claude, this writes the
+      namesake file directly rather than a CLAUDE.md companion.
+  rule:
+    status: supported
+    note: |
+      Emitted at .cursor/rules/aienvs/<id>.mdc with the managed-file
+      header. v1 rules are frontmatter-less .mdc files (the IR strips
+      frontmatter at decode); they behave as manual / agent-requested
+      rules until IR frontmatter exposure lands. No paths: ward — that
+      is a Claude Code bug with no Cursor equivalent.
+  mcp-server-entry:
+    status: supported
+    note: |
+      Merged into .cursor/mcp.json under /mcpServers/aienvs_<id> via
+      the write_tool_owned op. A sidecar .cursor/.aienvs-managed
+      marker is written next to the strict-JSON file because JSON has
+      no comment syntax.
+  skill:
+    status: unsupported
+    note: |
+      Cursor has no folder-per-skill / SKILL.md convention; skills are
+      a Claude Code concept. Targeting skill at cursor surfaces a
+      degradation warning and emits no files. If a future Cursor
+      release adds a skills directory, flip to supported.
+  command:
+    status: unsupported
+    note: |
+      Cursor has no project-level custom slash-command concept
+      analogous to Claude Code's .claude/commands/. Targeting command
+      at cursor surfaces a degradation warning and emits no files.
+  plugin-reference:
+    status: unsupported
+    note: |
+      Cursor does not load project-level plugin-reference registries.
+      Targeting plugin-reference at cursor surfaces a degradation
+      warning and emits no files.

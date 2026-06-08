@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {
+      "id": "for-claude",
+      "kind": "rule",
+      "version": 1,
+      "targets": ["claude"],
+      "body": "Claude-only rule."
+    }
+  ]
+}
