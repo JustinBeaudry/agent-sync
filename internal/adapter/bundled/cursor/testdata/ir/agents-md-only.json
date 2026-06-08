@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {
+      "id": "team",
+      "kind": "agents-md",
+      "version": 1,
+      "targets": ["cursor"],
+      "body": "## Conventions\n\nUse conventional commits."
+    }
+  ]
+}
