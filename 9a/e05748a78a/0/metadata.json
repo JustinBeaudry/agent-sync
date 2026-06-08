@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "9ae05748a78a",
+  "session_id": "9d510688-0061-4983-885f-983207f8530f",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-08T15:25:34.226848Z",
+  "branch": "feat/unit-10-cursor-adapter",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/bundled/cursor/bundled_test.go",
+    "internal/adapter/bundled/cursor/capabilities_test.go",
+    "internal/adapter/bundled/cursor/emit.go",
+    "internal/adapter/bundled/cursor/emit_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "191c11699d49",
+  "token_usage": {
+    "input_tokens": 40379,
+    "cache_creation_tokens": 763984,
+    "cache_read_tokens": 25358734,
+    "output_tokens": 136003,
+    "api_call_count": 100
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-08T15:25:33.489952Z",
+    "agent_lines": 1384,
+    "human_added": 2112,
+    "human_modified": 7,
+    "human_removed": 0,
+    "total_committed": 3503,
+    "agent_percentage": 39.50899229232087
+  }
+}
