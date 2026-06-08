@@ -63,3 +63,23 @@ Reviews code changes using dynamically selected reviewer personas. Spawns parall
 - When feedback is needed on any code changes
 - C...
 
+### Prompt 8
+
+Base directory for this skill: /Users/justinbeaudry/.claude/plugins/cache/compound-engineering-plugin/compound-engineering/3.9.3/skills/ce-test-browser
+
+# Browser Test Skill
+
+Run end-to-end browser tests on pages affected by a PR or branch changes using the `agent-browser` CLI.
+
+## Use `agent-browser` Only For Browser Automation
+
+This workflow uses the `agent-browser` CLI exclusively. Do not use any alternative browser automation system, browser MCP integration, or built-in browser-control to...
+
+### Prompt 9
+
+Base directory for this skill: /Users/justinbeaudry/.claude/plugins/cache/compound-engineering-plugin/compound-engineering/3.9.3/skills/ce-commit-push-pr
+
+# Git Commit, Push, and PR
+
+**Asking the user:** When this skill says "ask the user", use the platform's blocking question tool: `AskUserQuestion` in Claude Code (call `ToolSearch` with `select:AskUserQuestion` first if its schema isn't loaded), `request_user_input` in Codex, `ask_user` in Gemini, `ask_user` in Pi (requires the `pi-ask-user...
+
