@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "59bff01d84cc",
+  "session_id": "9d510688-0061-4983-885f-983207f8530f",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-08T19:36:23.037204Z",
+  "branch": "feat/unit-12-ledger-locks",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-06-08-002-feat-unit-12-ledger-locks-plan.md",
+    "internal/ledger/migrate_test.go",
+    "internal/locks/filelock.go",
+    "internal/locks/filelock_test.go",
+    "internal/locks/flock.go",
+    "internal/locks/flock_test.go",
+    "internal/locks/machineid.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "a1c18cbc03b4",
+  "token_usage": {
+    "input_tokens": 70948,
+    "cache_creation_tokens": 2655481,
+    "cache_read_tokens": 104687113,
+    "output_tokens": 308953,
+    "api_call_count": 239
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-08T19:36:21.63353Z",
+    "agent_lines": 1692,
+    "human_added": 916,
+    "human_modified": 134,
+    "human_removed": 0,
+    "total_committed": 2742,
+    "agent_percentage": 61.70678336980306
+  }
+}
