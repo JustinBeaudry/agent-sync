@@ -126,9 +126,9 @@ func NewRootCommand(deps RootDeps) *cobra.Command {
 	pf.BoolVar(&flags.NonInteractive, "non-interactive", false, "never prompt; fail fast on a missing required value")
 	pf.Bool("yes", false, "alias for --non-interactive")
 
-	// Mount the existing, already-built subtrees. Additional subcommands
-	// (sync, status, validate, init, hooks, watch) mount here as their
-	// units land.
+	// Mount subcommands. Additional subcommands (status, validate, init,
+	// hooks, watch) mount here as their units land.
+	root.AddCommand(newSyncCommand(deps))
 	root.AddCommand(NewTrustCommand(TrustDeps{
 		In:  deps.in(),
 		Out: deps.out(),
