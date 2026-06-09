@@ -27,9 +27,12 @@ type Options struct {
 	// names (a subset of the manifest's targets).
 	TargetsFilter []string
 
-	// ExpectDeletions is the --expect-deletions guard. Negative means
-	// unspecified (always passes).
-	ExpectDeletions int
+	// ExpectDeletions is the --expect-deletions safety guard: when set, the
+	// sync aborts (before any mutation) unless exactly this many orphan
+	// files would be deleted. nil means unspecified (no guard). A pointer
+	// rather than an int because 0 ("expect no deletions") is a meaningful
+	// opt-in value distinct from "flag absent".
+	ExpectDeletions *int
 
 	// Now stamps generation timestamps and ledger/report times. Injectable
 	// for deterministic tests. Defaults to time.Now.

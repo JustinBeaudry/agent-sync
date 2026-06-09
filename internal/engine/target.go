@@ -76,11 +76,28 @@ func runAdapter(ctx context.Context, req Request, target string) (emitOutcome, e
 		return emitOutcome{}, fmt.Errorf("engine: emit %q: %w", target, err)
 	}
 
+	// The runtime's declared-outputs and capability-lied gates run against
+	// OpsPerformed (the {kind, path} summary), but the engine performs
+	// writes from Ops (the full envelopes). Require the two to agree
+	// 1:1 in order so a legacy adapter that returns a summary with no
+	// content (which would otherwise be read as "delete everything") and a
+	// buggy/malicious adapter whose Ops diverge from the gated summary are
+	// both rejected rather than silently trusted.
+	if len(emitResult.Ops) != len(emitResult.OpsPerformed) {
+		return emitOutcome{}, fmt.Errorf("%w: %q returned %d op envelopes but %d op summaries",
+			ErrEmitOpsMismatch, target, len(emitResult.Ops), len(emitResult.OpsPerformed))
+	}
+
 	out := emitOutcome{ownedPrefixes: ownedSubdirs(initResult.DeclaredOutputs)}
 	for i, raw := range emitResult.Ops {
 		op, derr := contract.DecodeOp(raw)
 		if derr != nil {
 			return emitOutcome{}, fmt.Errorf("engine: decode op[%d] for %q: %w", i, target, derr)
+		}
+		rec := emitResult.OpsPerformed[i]
+		if string(op.OpKind()) != string(rec.Op) || op.OpPath() != rec.Path {
+			return emitOutcome{}, fmt.Errorf("%w: %q op[%d] envelope {%s %q} != summary {%s %q}",
+				ErrEmitOpsMismatch, target, i, op.OpKind(), op.OpPath(), rec.Op, rec.Path)
 		}
 		if w, ok := op.(contract.OpWarning); ok {
 			out.warnings = append(out.warnings, fmt.Sprintf("%s: %s", w.ConceptID, w.Note))
@@ -138,15 +155,26 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	}
 
 	// Drift gate per owned subdir, unless adopting.
+	adoptedAny := false
 	for _, pre := range out.ownedPrefixes {
 		if scanErr := syncpkg.ScanDrift(root, pre, oldLedger); scanErr != nil {
 			if adopting(req.Options.AdoptPrefixes, pre) {
 				if _, aerr := syncpkg.AdoptEntries(root, pre, now); aerr != nil {
 					return statusResult{}, fmt.Errorf("engine: adopt %s: %w", pre, aerr)
 				}
+				adoptedAny = true
 				continue
 			}
 			return statusResult{}, fmt.Errorf("%w: %s: %w", ErrDrift, pre, scanErr)
+		}
+	}
+	// AdoptEntries wrote new entries to the on-disk ledger; reload so
+	// change-counting, status, and orphan detection see the adopted set
+	// (an adopted-then-undesired file must still be detected as an orphan).
+	if adoptedAny {
+		oldLedger, err = loadLedger(root, target)
+		if err != nil {
+			return statusResult{}, err
 		}
 	}
 
@@ -254,6 +282,30 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 				fileType[pre] = true
 			}
 		}
+	}
+
+	// Orphan set = previously-managed paths under an owned prefix no longer
+	// desired. Compute it and enforce the --expect-deletions guard BEFORE
+	// any mutation, so a mismatched count aborts with every prefix
+	// byte-intact rather than after files have already been swapped away.
+	// Tool-owned paths are excluded (ownerOf == "") so a shared file is
+	// never counted or deleted as an orphan.
+	var deletable []string
+	for _, e := range oldLedger.Entries {
+		if ownerOf(out.ownedPrefixes, e.Path) == "" {
+			continue
+		}
+		if _, wanted := newEntries[e.Path]; !wanted {
+			deletable = append(deletable, e.Path)
+		}
+	}
+	sort.Strings(deletable)
+	expectedDeletions := -1 // -1 = unspecified, always passes
+	if req.Options.ExpectDeletions != nil {
+		expectedDeletions = *req.Options.ExpectDeletions
+	}
+	if cerr := syncpkg.CheckExpectedDeletions(expectedDeletions, len(deletable)); cerr != nil {
+		return statusResult{}, cerr
 	}
 
 	// Single-file owned outputs: write atomically in place. StagedWrite is
@@ -373,19 +425,10 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 		return statusResult{}, fmt.Errorf("engine: write ledger %q: %w", target, werr)
 	}
 
-	// Orphan deletion: previous_ledger − current_desired, restricted to
-	// owned-subdir paths so a shared tool-owned file is never removed
-	// (its slices are upserted, not file-deleted, in v1).
-	orphans := syncpkg.Orphans(oldLedger, next)
-	var deletable []string
-	for _, p := range orphans {
-		if ownerOf(out.ownedPrefixes, p) != "" {
-			deletable = append(deletable, p)
-		}
-	}
-	if cerr := syncpkg.CheckExpectedDeletions(req.Options.ExpectDeletions, len(deletable)); cerr != nil {
-		return statusResult{}, cerr
-	}
+	// Orphan deletion uses the deletable set computed and guarded before
+	// mutation (above), restricted to owned-subdir paths so a shared
+	// tool-owned file is never removed. Runs only after the new ledger is
+	// durable, so a crash mid-delete is recoverable (AGENTS invariant #7).
 	deleted, derr := syncpkg.DeleteOrphans(root, deletable)
 	if derr != nil {
 		return statusResult{}, fmt.Errorf("engine: delete orphans %q: %w", target, derr)
