@@ -102,9 +102,14 @@ func mustGit(t *testing.T, dir string, args ...string) string {
 
 // requireGit skips the test if `git` is not on PATH. Most CI runners
 // have git; this is a belt-and-suspenders guard for development hosts.
+// When AGENT_SYNC_REQUIRE_GIT is set (CI), a missing git is a hard failure
+// instead of a skip, so git-backed tests can never silently vanish.
 func requireGit(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
+		if os.Getenv("AGENT_SYNC_REQUIRE_GIT") != "" {
+			t.Fatalf("git not available on PATH but AGENT_SYNC_REQUIRE_GIT is set: %v", err)
+		}
 		t.Skipf("git not available on PATH: %v", err)
 	}
 }

@@ -11,9 +11,15 @@ import (
 )
 
 // requireGit skips when git is unavailable (dev hosts; CI always has git).
+// When AGENT_SYNC_REQUIRE_GIT is set (CI), a missing git is a hard failure
+// instead of a skip, so the real-git end-to-end path can never silently
+// vanish from the suite.
 func requireGit(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
+		if os.Getenv("AGENT_SYNC_REQUIRE_GIT") != "" {
+			t.Fatalf("git not on PATH but AGENT_SYNC_REQUIRE_GIT is set: %v", err)
+		}
 		t.Skipf("git not on PATH: %v", err)
 	}
 }

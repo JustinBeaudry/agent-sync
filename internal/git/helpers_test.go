@@ -127,10 +127,15 @@ func write(t *testing.T, path, content string) {
 
 // requireGit skips the test if `git` is not available on PATH, so the
 // test binary still passes on hosts without git installed. Most CI
-// runners ship git; this is a belt-and-suspenders guard.
+// runners ship git; this is a belt-and-suspenders guard. When
+// AGENT_SYNC_REQUIRE_GIT is set (CI), a missing git is a hard failure
+// instead of a skip, so git-backed tests can never silently vanish.
 func requireGit(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
+		if os.Getenv("AGENT_SYNC_REQUIRE_GIT") != "" {
+			t.Fatalf("git not available on PATH but AGENT_SYNC_REQUIRE_GIT is set: %v", err)
+		}
 		t.Skipf("git not available on PATH: %v", err)
 	}
 }

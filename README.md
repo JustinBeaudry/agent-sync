@@ -32,18 +32,22 @@ into each tool's own conventions.
    translated by each adapter; per-target capability reports make
    lossy translations visible.
 
-## Supported tools (v1)
+## Supported tools
 
-| Tool | Tier |
-|------|------|
-| Claude Code | Primary |
-| Cursor | Primary |
-| Codex CLI | Primary |
-| Pi (`@mariozechner/pi-coding-agent`) | Primary |
-| Gemini CLI | Supported |
-| Windsurf | Experimental |
-| LM Studio | Experimental |
-| Roo Code | Experimental |
+Adapters translate the tool-agnostic IR into each tool's native files. Two
+adapters ship bundled today; the rest are planned and tracked against the v1
+roadmap. The `Planned (tier)` label records the intended support tier once the
+adapter lands.
+
+| Tool | Status |
+|------|--------|
+| Claude Code | ✅ Bundled |
+| Cursor | ✅ Bundled |
+| Codex CLI | Planned (primary) |
+| Pi (`@mariozechner/pi-coding-agent`) | Planned (primary) |
+| Gemini CLI | Planned (supported) |
+| Windsurf | Planned (experimental) |
+| LM Studio | Planned (experimental) |
 
 ## Requirements
 
@@ -83,4 +87,5 @@ sync pipeline.
 
 ## License
 
-TBD.
+Licensed under the [Apache License 2.0](LICENSE). See [`NOTICE`](NOTICE) for
+attribution requirements.

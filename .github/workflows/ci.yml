@@ -57,6 +57,11 @@ jobs:
         run: go vet ./...
 
       - name: Test (race)
+        # AGENT_SYNC_REQUIRE_GIT turns the git-availability skip in the
+        # real-git/real-filesystem end-to-end tests into a hard failure, so CI
+        # can never silently skip the integration-level coverage.
+        env:
+          AGENT_SYNC_REQUIRE_GIT: "1"
         run: go test -race -count=1 -timeout=10m ./...
 
       - name: Tidy drift check
@@ -87,3 +92,37 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+
+  coverage:
+    name: coverage gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          check-latest: true
+          cache: true
+
+      # Regression ratchet, not the aspirational target. Current total is
+      # ~77.2%; the project target is 80% (see CLAUDE.md). Raise THRESHOLD as
+      # coverage climbs; never lower it. Packages dragging the total down today:
+      # cmd/agent-sync (0%), internal/validate (0%), conformance/echo (~21%).
+      - name: Test with coverage
+        env:
+          AGENT_SYNC_REQUIRE_GIT: "1"
+        run: go test -count=1 -timeout=10m -coverprofile=coverage.out ./...
+
+      - name: Enforce coverage floor
+        shell: bash
+        run: |
+          THRESHOLD=77.0
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')
+          echo "total coverage: ${total}% (floor: ${THRESHOLD}%)"
+          awk -v t="$total" -v f="$THRESHOLD" 'BEGIN { exit (t+0 >= f+0) ? 0 : 1 }' || {
+            echo "::error::total coverage ${total}% is below the ${THRESHOLD}% floor"
+            exit 1
+          }
