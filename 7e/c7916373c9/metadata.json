@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "7ec7916373c9",
+  "strategy": "manual-commit",
+  "branch": "chore/production-hardening",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
+    ".goreleaser.yaml",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "docs/threat-model.md",
+    "internal/cli/cmd_sync_test.go",
+    "internal/git/helpers_test.go",
+    "internal/ir/helpers_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/7e/c7916373c9/0/metadata.json",
+      "transcript": "/7e/c7916373c9/0/full.jsonl",
+      "context": "/7e/c7916373c9/0/context.md",
+      "content_hash": "/7e/c7916373c9/0/content_hash.txt",
+      "prompt": "/7e/c7916373c9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 25057,
+    "cache_creation_tokens": 132705,
+    "cache_read_tokens": 4654885,
+    "output_tokens": 44189,
+    "api_call_count": 46
+  }
+}

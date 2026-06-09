@@ -1,0 +1,13 @@
+Whats the gap left to make this hardened and production ready?
+
+---
+
+Roo is being decommisioned, so lets not do that. Lets close the gaps too.
+
+---
+
+continue
+
+---
+
+sure, as one

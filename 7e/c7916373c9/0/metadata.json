@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "7ec7916373c9",
+  "session_id": "d1268886-7773-4f15-8479-915fc89ebabc",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T15:44:45.002592Z",
+  "branch": "chore/production-hardening",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
+    ".goreleaser.yaml",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "docs/threat-model.md",
+    "internal/cli/cmd_sync_test.go",
+    "internal/git/helpers_test.go",
+    "internal/ir/helpers_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f825e222fe72",
+  "token_usage": {
+    "input_tokens": 25057,
+    "cache_creation_tokens": 132705,
+    "cache_read_tokens": 4654885,
+    "output_tokens": 44189,
+    "api_call_count": 46
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T15:44:44.812789Z",
+    "agent_lines": 634,
+    "human_added": 5,
+    "human_modified": 12,
+    "human_removed": 0,
+    "total_committed": 651,
+    "agent_percentage": 97.38863287250385
+  }
+}
