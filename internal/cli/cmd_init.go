@@ -37,7 +37,10 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rc, _ := runtimeFrom(cmd.Context())
+			rc, err := mustRuntime(cmd)
+			if err != nil {
+				return err
+			}
 
 			cfg := wizard.InitConfig{
 				Dir:       dir,
