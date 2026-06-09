@@ -1,0 +1,114 @@
+package engine
+
+import (
+	"log/slog"
+	"time"
+
+	"github.com/aienvs/aienvs/internal/adapter"
+	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/aienvs/aienvs/internal/ir"
+	"github.com/aienvs/aienvs/internal/report"
+)
+
+// Options carries per-run policy. Zero values are sensible: atomic mode,
+// no adopt, all targets, real clock, expect-deletions unspecified.
+type Options struct {
+	// Mode is atomic (abort the run on first target failure) or
+	// best-effort (record the failure and continue). Empty → atomic.
+	Mode report.Mode
+
+	// AdoptPrefixes lists reserved-prefix paths whose pre-existing
+	// unmanaged content should be adopted on this sync instead of
+	// blocking on drift.
+	AdoptPrefixes []string
+
+	// TargetsFilter, when non-empty, restricts the sync to these target
+	// names (a subset of the manifest's targets).
+	TargetsFilter []string
+
+	// ExpectDeletions is the --expect-deletions guard. Negative means
+	// unspecified (always passes).
+	ExpectDeletions int
+
+	// Now stamps generation timestamps and ledger/report times. Injectable
+	// for deterministic tests. Defaults to time.Now.
+	Now func() time.Time
+
+	// Logger receives structured progress. Defaults to a discard logger.
+	Logger *slog.Logger
+}
+
+// Request is one sync/validate invocation. The caller is responsible for
+// discovering adapters and materializing+decoding the IR (see Materialize)
+// so the engine itself performs no network or git I/O — it is the pure
+// write-pipeline orchestrator.
+type Request struct {
+	// Root is the opened workspace root; all staging/swap/ledger writes
+	// go through it.
+	Root *fsroot.Root
+
+	// WorkspacePath is the absolute workspace path, for the report header.
+	WorkspacePath string
+
+	// Registry holds the discovered adapters.
+	Registry *adapter.Registry
+
+	// Targets is the ordered list of target names to sync (the manifest's
+	// targets, before TargetsFilter is applied).
+	Targets []string
+
+	// Nodes is the decoded IR; Skills supplies skill asset bundles by node ID.
+	Nodes  []ir.Node
+	Skills map[string]ir.Skill
+
+	// Commit is the resolved canonical SHA, stamped into staging metadata
+	// and the report.
+	Commit string
+
+	Options Options
+}
+
+// TargetChange is one target's dry-run result (the Plan path).
+type TargetChange struct {
+	Target      string
+	WouldCreate []string
+	WouldUpdate []string
+	WouldDelete []string
+	Warnings    []string
+	Error       string
+	OutOfBand   []string // paths whose on-disk hash diverges from the ledger
+}
+
+// PlanResult is the result of a dry-run (validate). DriftDetected is true
+// when any target has a non-empty change set or out-of-band modification.
+type PlanResult struct {
+	WorkspacePath string
+	Commit        string
+	Targets       []TargetChange
+	DriftDetected bool
+}
+
+func (o Options) now() time.Time {
+	if o.Now != nil {
+		return o.Now()
+	}
+	return time.Now()
+}
+
+func (o Options) mode() report.Mode {
+	if o.Mode == report.ModeBestEffort {
+		return report.ModeBestEffort
+	}
+	return report.ModeAtomic
+}
+
+func (o Options) logger() *slog.Logger {
+	if o.Logger != nil {
+		return o.Logger
+	}
+	return slog.New(slog.NewTextHandler(discard{}, &slog.HandlerOptions{Level: slog.LevelError}))
+}
+
+type discard struct{}
+
+func (discard) Write(p []byte) (int, error) { return len(p), nil }
