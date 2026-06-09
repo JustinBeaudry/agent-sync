@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "532a42ae6a4b",
+  "session_id": "d1268886-7773-4f15-8479-915fc89ebabc",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T17:05:35.634106Z",
+  "branch": "chore/production-hardening",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".github/workflows/ci.yml",
+    "internal/adapter/manifest_file_test.go",
+    "internal/cli/cmd_watch_test.go",
+    "pkg/adapterkit/exiterror_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c6e453ff3ae1",
+  "checkpoint_transcript_start": 568,
+  "transcript_lines_at_start": 568,
+  "token_usage": {
+    "input_tokens": 10443,
+    "cache_creation_tokens": 66494,
+    "cache_read_tokens": 4449594,
+    "output_tokens": 17705,
+    "api_call_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T17:05:35.042381Z",
+    "agent_lines": 0,
+    "human_added": 11,
+    "human_modified": 12,
+    "human_removed": 0,
+    "total_committed": 11,
+    "agent_percentage": 0
+  }
+}
