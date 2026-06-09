@@ -7,6 +7,7 @@ require (
 	github.com/go-git/go-git/v5 v5.17.2
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gofrs/flock v0.13.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/spf13/cobra v1.9.1
 	github.com/tidwall/gjson v1.14.2

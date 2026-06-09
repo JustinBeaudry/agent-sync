@@ -34,7 +34,10 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rc, _ := runtimeFrom(cmd.Context())
+			rc, err := mustRuntime(cmd)
+			if err != nil {
+				return err
+			}
 			now := deps.now()()
 
 			prep, err := prepareEngine(cmd.Context(), rc, now)
@@ -65,7 +68,12 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			// sync's lock, write the skip marker and exit 0 so `git pull` is
 			// never broken (plan U3 / AGENTS invariant #3 spirit).
 			if postMerge && anyBlocked(summary) {
-				_ = writeHookSkipped(root, now)
+				if werr := writeHookSkipped(root, now); werr != nil {
+					// Still exit 0 so `git pull` is never broken, but log it: the
+					// marker is the only breadcrumb explaining the skip, so a
+					// silent write failure makes diagnosis hard.
+					rc.Logger.Warn("sync: failed to write hook-skipped marker", "err", werr)
+				}
 				return nil
 			}
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -41,6 +42,9 @@ type prepared struct {
 // engine.Options (mode, adopt, expect-deletions) are layered on by the
 // caller via the returned Request.Options.
 func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prepared, error) {
+	if rc == nil {
+		return prepared{}, errors.New("cli: prepareEngine called with nil runtime context")
+	}
 	flags := rc.Flags
 	ws, err := workspace.Find(flags.Workspace, workspace.Options{Workspace: flags.Workspace})
 	if err != nil {
@@ -59,6 +63,12 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	if err != nil {
 		_ = root.Close()
 		return prepared{}, err
+	}
+	// Surface IR decode warnings (missing AGENTS.md, unreadable skill
+	// assets, etc.) rather than dropping them silently — they are real
+	// drift-guard / debugging signal.
+	for _, w := range mat.Warnings {
+		rc.Logger.Warn("ir decode warning", "code", w.Code, "message", w.Message, "path", w.Provenance.Path)
 	}
 
 	reg, err := adapter.DiscoverAdapters(ctx, adapter.DiscoverOptions{

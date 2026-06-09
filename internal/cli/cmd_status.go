@@ -42,7 +42,10 @@ func newStatusCommand() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rc, _ := runtimeFrom(cmd.Context())
+			rc, err := mustRuntime(cmd)
+			if err != nil {
+				return err
+			}
 			flags := rc.Flags
 
 			ws, err := workspace.Find(flags.Workspace, workspace.Options{Workspace: flags.Workspace})

@@ -77,6 +77,27 @@ func TestValidate_JSONContract(t *testing.T) {
 	}
 }
 
+func TestValidate_PerTargetErrorIsOperationalFailure(t *testing.T) {
+	requireGit(t)
+	canonical, sha := makeCanonicalRepo(t)
+	ws := t.TempDir()
+	// Manifest targets an adapter that does not exist → engine.Plan records
+	// a per-target error (nil command error). validate must exit 2
+	// (operational), not 0 or 1.
+	m := "version: 1\ncanonical:\n  local_path: " + canonical + "\n  commit: " + sha +
+		"\ntrusted_sha: " + sha + "\ntargets:\n  - nonexistent-adapter\n"
+	if err := os.WriteFile(filepath.Join(ws, ".aienv.yaml"), []byte(m), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := runCmd(t, ws, "validate")
+	if err == nil {
+		t.Fatal("expected non-zero exit for a per-target operational error")
+	}
+	if got := MapExit(err); got != 2 {
+		t.Fatalf("exit code = %d, want 2 (operational), not drift", got)
+	}
+}
+
 func TestStatus_ReportsSourceAndTargets(t *testing.T) {
 	requireGit(t)
 	canonical, sha := makeCanonicalRepo(t)

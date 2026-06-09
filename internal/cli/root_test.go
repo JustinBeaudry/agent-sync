@@ -38,7 +38,7 @@ func TestRootCommand_Version(t *testing.T) {
 
 func TestRootCommand_PersistentFlagsRegistered(t *testing.T) {
 	root := NewRootCommand(RootDeps{})
-	for _, name := range []string{"workspace", "output", "log-level", "offline", "floating", "non-interactive", "yes"} {
+	for _, name := range []string{"workspace", "output", "log-level", "offline", "non-interactive", "yes"} {
 		if root.PersistentFlags().Lookup(name) == nil {
 			t.Errorf("persistent flag --%s not registered", name)
 		}

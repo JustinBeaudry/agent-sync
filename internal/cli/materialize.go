@@ -24,6 +24,10 @@ type materialized struct {
 	Nodes  []ir.Node
 	Skills map[string]ir.Skill
 	Commit string // the resolved SHA, stamped into the report + staging
+	// Warnings are non-fatal decode signals (from ir.Decode and
+	// ir.SkillsByID) — e.g. a missing AGENTS.md or an unreadable skill
+	// asset. The caller surfaces them so they are not silently dropped.
+	Warnings []ir.Warning
 }
 
 // materializeOptions controls network posture for materialization.
@@ -108,10 +112,11 @@ func materializeURL(ctx context.Context, m *manifest.Manifest, opts materializeO
 }
 
 func decodeAt(repo *git.Repository, sha string) (materialized, error) {
-	nodes, _, err := ir.Decode(repo, sha, ir.DecodeOptions{})
+	nodes, decodeWarnings, err := ir.Decode(repo, sha, ir.DecodeOptions{})
 	if err != nil {
 		return materialized{}, fmt.Errorf("cli: decode IR at %s: %w", sha, err)
 	}
-	skills, _ := ir.SkillsByID(nodes, repo, sha)
-	return materialized{Nodes: nodes, Skills: skills, Commit: sha}, nil
+	skills, skillWarnings := ir.SkillsByID(nodes, repo, sha)
+	warnings := append(append([]ir.Warning(nil), decodeWarnings...), skillWarnings...)
+	return materialized{Nodes: nodes, Skills: skills, Commit: sha, Warnings: warnings}, nil
 }

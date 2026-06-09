@@ -1,6 +1,9 @@
 package cli
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestResolveAccess(t *testing.T) {
 	cases := []struct {
@@ -61,6 +64,27 @@ func TestResolveAccess(t *testing.T) {
 				t.Fatalf("resolveAccess(%+v)\n got = %+v\nwant = %+v", c.in, got, c.want)
 			}
 		})
+	}
+}
+
+func TestIsTerminal_DevNullIsNotATTY(t *testing.T) {
+	f, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skipf("cannot open %s: %v", os.DevNull, err)
+	}
+	defer func() { _ = f.Close() }()
+	if isTerminal(f) {
+		t.Fatal("/dev/null must not be treated as a TTY")
+	}
+}
+
+func TestIsTerminal_NilAndNonFileAreSafe(t *testing.T) {
+	var nilFile *os.File
+	if isTerminal(nilFile) {
+		t.Fatal("typed-nil *os.File should not be a TTY (and must not panic)")
+	}
+	if isTerminal("not a file") {
+		t.Fatal("non-file should not be a TTY")
 	}
 }
 

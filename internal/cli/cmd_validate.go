@@ -22,7 +22,10 @@ func newValidateCommand(deps RootDeps) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rc, _ := runtimeFrom(cmd.Context())
+			rc, err := mustRuntime(cmd)
+			if err != nil {
+				return err
+			}
 			now := deps.now()()
 
 			prep, err := prepareEngine(cmd.Context(), rc, now)
@@ -49,6 +52,17 @@ func newValidateCommand(deps RootDeps) *cobra.Command {
 				}
 			} else if rerr := validate.RenderText(cmd.OutOrStdout(), plan); rerr != nil {
 				return rerr
+			}
+
+			// A per-target operational error (no adapter, emit failure,
+			// unreadable ledger) is recorded in TargetChange.Error with a nil
+			// command error. That is an operational failure (exit 2), not clean
+			// drift (exit 1) — surface it so `validate` never reports success or
+			// mere "drift" when a target actually failed to plan.
+			for _, t := range plan.Targets {
+				if t.Error != "" {
+					return &exitError{code: exitUsage, err: fmt.Errorf("validate: target %s failed: %s", t.Target, t.Error)}
+				}
 			}
 
 			if code := validate.ExitCode(plan); code != validate.ExitNoDrift {

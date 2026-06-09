@@ -4,6 +4,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/mattn/go-isatty"
 )
 
 // OutputFormat is the resolved data-output shape for a command.
@@ -105,18 +107,18 @@ func ResolveAccess(in io.Reader, out io.Writer, nonInteractiveFlag bool, outputF
 	})
 }
 
-// isTerminal reports whether v is an *os.File backed by a character
-// device (a TTY). Non-file readers/writers (buffers, pipes) are not TTYs.
+// isTerminal reports whether v is an *os.File that is an actual terminal.
+// It uses a real isatty(3) check rather than a ModeCharDevice heuristic,
+// so non-terminal character devices like /dev/null are correctly NOT
+// treated as TTYs (which would otherwise let prompts run against input
+// that can't accept them — an invariant #3 violation). A typed-nil
+// *os.File is guarded so Fd()/the syscall never panics.
 func isTerminal(v any) bool {
 	f, ok := v.(*os.File)
-	if !ok {
+	if !ok || f == nil {
 		return false
 	}
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
+	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
 }
 
 func isTruthy(s string) bool {

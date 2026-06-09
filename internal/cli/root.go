@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -29,6 +30,18 @@ func runtimeFrom(ctx context.Context) (*runtimeContext, bool) {
 	return rc, ok
 }
 
+// mustRuntime returns the runtimeContext or an error. The root's
+// PersistentPreRunE always populates it before a subcommand's RunE runs,
+// so this only fails if a subcommand shadows the root's PersistentPreRunE
+// — a guard against that future footgun rather than a nil-deref panic.
+func mustRuntime(cmd *cobra.Command) (*runtimeContext, error) {
+	rc, ok := runtimeFrom(cmd.Context())
+	if !ok || rc == nil {
+		return nil, errors.New("cli: runtime context missing; root initialization did not run")
+	}
+	return rc, nil
+}
+
 // PersistentFlags holds the root-level flag values shared by every
 // subcommand. They are bound on the root and read via the resolved
 // Access context.
@@ -37,7 +50,6 @@ type PersistentFlags struct {
 	Output         string
 	LogLevel       string
 	Offline        bool
-	Floating       bool
 	NonInteractive bool
 }
 
@@ -122,7 +134,6 @@ func NewRootCommand(deps RootDeps) *cobra.Command {
 	pf.StringVar(&flags.Output, "output", "", "output format: text or json (default: text on a TTY, json when piped)")
 	pf.StringVar(&flags.LogLevel, "log-level", "info", "log level: debug, info, warn, error")
 	pf.BoolVar(&flags.Offline, "offline", false, "forbid all network operations")
-	pf.BoolVar(&flags.Floating, "floating", false, "do not pin the canonical source to a SHA")
 	pf.BoolVar(&flags.NonInteractive, "non-interactive", false, "never prompt; fail fast on a missing required value")
 	pf.Bool("yes", false, "alias for --non-interactive")
 
