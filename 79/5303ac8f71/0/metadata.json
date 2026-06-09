@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "795303ac8f71",
+  "session_id": "d1268886-7773-4f15-8479-915fc89ebabc",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T20:46:03.545746Z",
+  "branch": "chore/review-followups",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".goreleaser.yaml",
+    "internal/cli/cmd_sync_test.go",
+    "internal/git/helpers_test.go",
+    "internal/ir/helpers_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "1ad21d702495",
+  "token_usage": {
+    "input_tokens": 40005,
+    "cache_creation_tokens": 800295,
+    "cache_read_tokens": 47180669,
+    "output_tokens": 177436,
+    "api_call_count": 187
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T20:46:02.891113Z",
+    "agent_lines": 0,
+    "human_added": 41,
+    "human_modified": 89,
+    "human_removed": 0,
+    "total_committed": 41,
+    "agent_percentage": 0
+  }
+}
