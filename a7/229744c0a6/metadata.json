@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "a7229744c0a6",
+  "strategy": "manual-commit",
+  "branch": "feat/cli-tui-sync-engine",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "AGENTS.md",
+    "docs/plans/2026-06-08-007-feat-cli-tui-sync-engine-plan.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a7/229744c0a6/0/metadata.json",
+      "transcript": "/a7/229744c0a6/0/full.jsonl",
+      "context": "/a7/229744c0a6/0/context.md",
+      "content_hash": "/a7/229744c0a6/0/content_hash.txt",
+      "prompt": "/a7/229744c0a6/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 28952,
+    "cache_creation_tokens": 334354,
+    "cache_read_tokens": 6483684,
+    "output_tokens": 58713,
+    "api_call_count": 40
+  }
+}

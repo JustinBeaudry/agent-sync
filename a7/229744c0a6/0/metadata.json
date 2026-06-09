@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "a7229744c0a6",
+  "session_id": "a176ccf3-9652-4654-9754-77b8d77f7919",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T01:38:27.900191Z",
+  "branch": "feat/cli-tui-sync-engine",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "AGENTS.md",
+    "docs/plans/2026-06-08-007-feat-cli-tui-sync-engine-plan.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "a883241514ea",
+  "token_usage": {
+    "input_tokens": 28952,
+    "cache_creation_tokens": 334354,
+    "cache_read_tokens": 6483684,
+    "output_tokens": 58713,
+    "api_call_count": 40
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T01:38:27.518963Z",
+    "agent_lines": 0,
+    "human_added": 824,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 824,
+    "agent_percentage": 0
+  }
+}
