@@ -39,6 +39,16 @@ var (
 
 	// ErrPermission: a non-retryable permission/ACL denial.
 	ErrPermission = errors.New("sync: permission denied")
+
+	// ErrMidLifeDrift: a file inside a managed reserved prefix is not
+	// recorded in the ledger (a hand-edit or out-of-band addition).
+	// The sync refuses rather than clobber it; remediation is
+	// --adopt-prefix.
+	ErrMidLifeDrift = errors.New("sync: unmanaged file in reserved prefix (mid-life drift); adopt or remove it")
+
+	// ErrDeletionCountMismatch: the actual orphan-deletion count differs
+	// from the caller's --expect-deletions guard.
+	ErrDeletionCountMismatch = errors.New("sync: orphan deletion count differs from --expect-deletions")
 )
 
 // classifyRenameError maps an os.Rename error to the swap taxonomy. An
