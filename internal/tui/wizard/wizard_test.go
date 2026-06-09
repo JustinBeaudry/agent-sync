@@ -1,0 +1,129 @@
+package wizard
+
+import (
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func TestInitConfig_Validate(t *testing.T) {
+	cases := []struct {
+		name    string
+		cfg     InitConfig
+		wantErr bool
+	}{
+		{"url pinned ok", InitConfig{SourceURL: "https://x/y.git", Commit: "abc"}, false},
+		{"local pinned ok", InitConfig{LocalPath: "/repo", Commit: "abc"}, false},
+		{"floating url ok", InitConfig{SourceURL: "https://x/y.git", Floating: true}, false},
+		{"both sources", InitConfig{SourceURL: "u", LocalPath: "/p", Commit: "abc"}, true},
+		{"no source", InitConfig{Commit: "abc"}, true},
+		{"unpinned non-floating", InitConfig{SourceURL: "u"}, true},
+		{"floating with commit", InitConfig{SourceURL: "u", Floating: true, Commit: "abc"}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.cfg.Validate()
+			if (err != nil) != c.wantErr {
+				t.Fatalf("Validate() err = %v, wantErr = %v", err, c.wantErr)
+			}
+		})
+	}
+}
+
+func TestInitConfig_ManifestYAML(t *testing.T) {
+	cfg := InitConfig{
+		SourceURL: "https://github.com/org/repo.git",
+		Ref:       "main",
+		Commit:    "0123456789abcdef0123456789abcdef01234567",
+		Targets:   []string{"claude", "cursor"},
+	}
+	out, err := cfg.ManifestYAML()
+	if err != nil {
+		t.Fatalf("ManifestYAML: %v", err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		"version: 1",
+		"url: https://github.com/org/repo.git",
+		"ref: main",
+		"commit: 0123456789abcdef0123456789abcdef01234567",
+		"trusted_sha: 0123456789abcdef0123456789abcdef01234567",
+		"- claude",
+		"- cursor",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("manifest missing %q:\n%s", want, s)
+		}
+	}
+	// A floating manifest must NOT emit a commit/trusted_sha or a floating key.
+	floatOut, _ := InitConfig{SourceURL: "u", Floating: true}.ManifestYAML()
+	if strings.Contains(string(floatOut), "commit:") || strings.Contains(string(floatOut), "trusted_sha:") {
+		t.Errorf("floating manifest should not pin:\n%s", floatOut)
+	}
+	if strings.Contains(string(floatOut), "floating:") {
+		t.Errorf("schema has no floating key; should not be emitted:\n%s", floatOut)
+	}
+}
+
+// key builds a rune keypress message.
+func key(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
+
+func typeString(m *initModel, s string) {
+	for _, r := range s {
+		m.Update(key(r))
+	}
+}
+
+func TestInitModel_FullFlowProducesConfig(t *testing.T) {
+	m := newInitModel(true, []string{"claude", "cursor"})
+
+	// Phase source: type a URL, Enter.
+	typeString(m, "https://github.com/org/repo.git")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.phase != phaseRef {
+		t.Fatalf("after source, phase = %v, want phaseRef", m.phase)
+	}
+
+	// Phase ref: type "main", Enter.
+	typeString(m, "main")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.phase != phaseTargets {
+		t.Fatalf("after ref, phase = %v, want phaseTargets", m.phase)
+	}
+
+	// Phase targets: both start selected; toggle cursor item (claude) off,
+	// then confirm with Enter → only cursor remains.
+	m.Update(key(' ')) // toggle claude off
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.phase != phaseConfirm {
+		t.Fatalf("after targets, phase = %v, want phaseConfirm", m.phase)
+	}
+
+	// Phase confirm: press y.
+	m.Update(key('y'))
+	if !m.committed {
+		t.Fatal("expected committed=true after y")
+	}
+	if m.cfg.SourceURL != "https://github.com/org/repo.git" {
+		t.Errorf("source = %q", m.cfg.SourceURL)
+	}
+	if m.cfg.Ref != "main" {
+		t.Errorf("ref = %q", m.cfg.Ref)
+	}
+	// claude toggled off → only cursor selected.
+	if len(m.cfg.Targets) != 1 || m.cfg.Targets[0] != "cursor" {
+		t.Errorf("targets = %v, want [cursor]", m.cfg.Targets)
+	}
+}
+
+func TestInitModel_EscAborts(t *testing.T) {
+	m := newInitModel(true, []string{"claude"})
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.committed {
+		t.Fatal("esc should not commit")
+	}
+	if !m.quitting {
+		t.Fatal("esc should set quitting")
+	}
+}
