@@ -65,19 +65,31 @@ func RenderText(w io.Writer, plan engine.PlanResult) error {
 			}
 			continue
 		}
-		writeList(w, "create", t.WouldCreate)
-		writeList(w, "update", t.WouldUpdate)
-		writeList(w, "delete", t.WouldDelete)
-		writeList(w, "out-of-band-modified", t.OutOfBand)
-		writeList(w, "warning", t.Warnings)
+		for _, list := range []struct {
+			label string
+			items []string
+		}{
+			{"create", t.WouldCreate},
+			{"update", t.WouldUpdate},
+			{"delete", t.WouldDelete},
+			{"out-of-band-modified", t.OutOfBand},
+			{"warning", t.Warnings},
+		} {
+			if err := writeList(w, list.label, list.items); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
-func writeList(w io.Writer, label string, items []string) {
+func writeList(w io.Writer, label string, items []string) error {
 	for _, it := range items {
-		_, _ = fmt.Fprintf(w, "  %s: %s\n", label, it)
+		if _, err := fmt.Fprintf(w, "  %s: %s\n", label, it); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // MarshalJSON renders the plan as the stable validate JSON contract.
