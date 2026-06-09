@@ -19,6 +19,12 @@ var (
 	// ErrDrift is returned when a reserved prefix holds unmanaged
 	// content and the prefix was not listed in Options.AdoptPrefixes.
 	ErrDrift = errors.New("engine: reserved prefix has drift; adopt or resolve")
+
+	// ErrEmitOpsMismatch is returned when an adapter's EmitResult.Ops
+	// (full op envelopes) does not agree 1:1 with EmitResult.OpsPerformed
+	// (the gated {kind, path} summary). The engine refuses to write a set
+	// the runtime gates never vetted.
+	ErrEmitOpsMismatch = errors.New("engine: emit ops do not match the op summary")
 )
 
 type targetStatus int
@@ -68,6 +74,12 @@ func resolvedTargets(all, filter []string) []string {
 // state. In atomic mode the run aborts on the first target failure; in
 // best-effort mode failures are recorded and the run continues.
 func Sync(ctx context.Context, req Request) (report.Summary, error) {
+	if req.Root == nil {
+		return report.Summary{}, errors.New("engine: request root is nil")
+	}
+	if req.Registry == nil {
+		return report.Summary{}, errors.New("engine: request registry is nil")
+	}
 	opts := req.Options
 	now := opts.now()
 	log := opts.logger()
@@ -121,6 +133,12 @@ func Sync(ctx context.Context, req Request) (report.Summary, error) {
 // the per-target change set without mutating the workspace. It powers
 // `validate`.
 func Plan(ctx context.Context, req Request) (PlanResult, error) {
+	if req.Root == nil {
+		return PlanResult{}, errors.New("engine: request root is nil")
+	}
+	if req.Registry == nil {
+		return PlanResult{}, errors.New("engine: request registry is nil")
+	}
 	opts := req.Options
 	now := opts.now()
 

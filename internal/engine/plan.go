@@ -61,8 +61,20 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 			change.WouldUpdate = append(change.WouldUpdate, p)
 		default:
 			// Ledger says unchanged — check for out-of-band edits on disk.
-			if onDisk, ok := readHash(req.Root, p); ok && onDisk != prev.SHA256 {
-				change.OutOfBand = append(change.OutOfBand, p)
+			onDisk, rerr := readHash(req.Root, p)
+			switch {
+			case rerr == nil:
+				if onDisk != prev.SHA256 {
+					change.OutOfBand = append(change.OutOfBand, p)
+				}
+			case errors.Is(rerr, fs.ErrNotExist):
+				// File expected by the ledger is gone — not an out-of-band
+				// edit; the orphan/delete accounting covers absence.
+			default:
+				// A real read failure (permission, I/O) must not be silently
+				// swallowed as "unchanged".
+				change.Error = rerr.Error()
+				return change
 			}
 		}
 	}
@@ -93,19 +105,18 @@ func sortedStrings(in []string) []string {
 }
 
 // readHash reads the file at relPath through the root and returns its
-// sha256 hex, or ("", false) if it cannot be read (absent/irregular).
-func readHash(root *fsroot.Root, relPath string) (string, bool) {
+// sha256 hex. The error is returned verbatim (callers branch on
+// fs.ErrNotExist) so real I/O/permission failures are never silently
+// swallowed as "unchanged".
+func readHash(root *fsroot.Root, relPath string) (string, error) {
 	f, err := root.Inner().Open(relPath)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return "", false
-		}
-		return "", false
+		return "", err
 	}
 	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return "", false
+		return "", err
 	}
-	return sha256Hex(data), true
+	return sha256Hex(data), nil
 }
