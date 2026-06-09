@@ -1,0 +1,92 @@
+# goreleaser configuration for agent-sync.
+# Docs: https://goreleaser.com
+#
+# Local dry run:   goreleaser release --snapshot --clean --skip=sign
+# Real release:    pushing a tag matching v* triggers .github/workflows/release.yml
+version: 2
+
+project_name: agent-sync
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+builds:
+  - id: agent-sync
+    main: ./cmd/agent-sync
+    binary: agent-sync
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # windows/arm64 deferred per the v1 plan (Unit 21).
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: agent-sync
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# minisign signature over the checksums file. Activated only when a signing key
+# is present (MINISIGN_KEY), so local snapshot builds and forks without the
+# secret do not fail. The CI key must be UNENCRYPTED (generate with
+# `minisign -G -W`); its secrecy is provided by the GitHub secret, so no
+# interactive passphrase prompt can hang the release. Verify a download with:
+#   minisign -Vm checksums.txt -P <public key>
+signs:
+  - id: minisign
+    cmd: sh
+    args:
+      - "-c"
+      - 'if [ -n "$MINISIGN_KEY" ]; then k="$(mktemp)"; printf "%s" "$MINISIGN_KEY" > "$k"; minisign -S -s "$k" -m "${artifact}" -x "${signature}"; rc=$?; rm -f "$k"; exit $rc; else echo "MINISIGN_KEY not set; skipping signature for ${artifact}"; fi'
+    artifacts: checksum
+    signature: "${artifact}.minisig"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "merge conflict"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  draft: true
+  prerelease: auto
+  footer: |
+    ---
+    SHA-256 checksums are in `checksums.txt`. When present, `checksums.txt.minisig`
+    is a minisign signature over that file. See the threat model
+    (`docs/threat-model.md`) for the verification procedure.
