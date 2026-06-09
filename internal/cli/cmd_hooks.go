@@ -33,21 +33,20 @@ func newHooksInstallCommand(_ RootDeps) *cobra.Command {
 		Short: "Install post-merge/post-checkout hooks that run `aienvs sync`",
 		Long: "Install git hooks (post-merge, post-checkout) that run " +
 			"`aienvs sync --post-merge` after pulls and checkouts. Requires " +
-			"--install-hooks (or an interactive confirmation) to proceed.",
+			"--install-hooks to proceed (hooks change git behavior, so the " +
+			"opt-in is explicit; this command never prompts).",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rc, _ := runtimeFrom(cmd.Context())
+			rc, err := mustRuntime(cmd)
+			if err != nil {
+				return err
+			}
 
-			// Explicit opt-in: hooks change git behavior, so require
-			// --install-hooks. In non-interactive mode without it, fail fast.
+			// Explicit opt-in: hooks change git behavior, so --install-hooks
+			// is always required. This command never prompts.
 			if !installHooks {
-				if err := requireFlag(rc.Access.NonInteractive, false, "--install-hooks", "confirm git hook installation"); err != nil {
-					return err
-				}
-				if !rc.Access.NonInteractive {
-					return fmt.Errorf("hooks install: pass --install-hooks to confirm modifying git hooks")
-				}
+				return fmt.Errorf("hooks install: pass --install-hooks to confirm modifying git hooks")
 			}
 
 			ws, err := workspace.Find(rc.Flags.Workspace, workspace.Options{Workspace: rc.Flags.Workspace})
@@ -95,7 +94,10 @@ func newHooksUninstallCommand() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rc, _ := runtimeFrom(cmd.Context())
+			rc, err := mustRuntime(cmd)
+			if err != nil {
+				return err
+			}
 			ws, err := workspace.Find(rc.Flags.Workspace, workspace.Options{Workspace: rc.Flags.Workspace})
 			if err != nil {
 				return fmt.Errorf("hooks uninstall: locate workspace: %w", err)

@@ -97,13 +97,76 @@ func TestInstall_AppendPreservesPredecessor(t *testing.T) {
 	if _, err := Install(repo, o); err != nil {
 		t.Fatalf("Install --append: %v", err)
 	}
-	data, _ := os.ReadFile(hookPath)
-	s := string(data)
-	if !strings.Contains(s, "echo predecessor") {
-		t.Error("append wrapper dropped the predecessor")
+	// The predecessor is preserved in the sidecar (run as a subprocess so
+	// its exit cannot skip aienvs), not inlined.
+	sidecar, _ := os.ReadFile(hookPath + predecessorSuffix)
+	if !strings.Contains(string(sidecar), "echo predecessor") {
+		t.Errorf("predecessor sidecar missing the original hook:\n%s", sidecar)
 	}
-	if !strings.Contains(s, "sync --post-merge") {
+	wrapper, _ := os.ReadFile(hookPath)
+	w := string(wrapper)
+	if !strings.Contains(w, predecessorSuffix) {
+		t.Error("wrapper does not invoke the predecessor sidecar")
+	}
+	if !strings.Contains(w, "sync --post-merge") {
 		t.Error("append wrapper missing aienvs sync")
+	}
+	// Uninstall restores the predecessor to the hook path.
+	if _, err := Uninstall(repo); err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	restored, _ := os.ReadFile(hookPath)
+	if !strings.Contains(string(restored), "echo predecessor") {
+		t.Errorf("uninstall did not restore the appended predecessor:\n%s", restored)
+	}
+}
+
+func TestHooksDir_WorktreeGitFile(t *testing.T) {
+	// Simulate a worktree where .git is a FILE pointing at the real gitdir.
+	repo := t.TempDir()
+	realGit := filepath.Join(repo, "actual-gitdir")
+	if err := os.MkdirAll(filepath.Join(realGit, "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".git"), []byte("gitdir: "+realGit+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := opts(repo)
+	o.AienvsPath = "/usr/local/bin/aienvs"
+	res, err := Install(repo, o)
+	if err != nil {
+		t.Fatalf("Install in worktree: %v", err)
+	}
+	if len(res.Installed) != len(ManagedHooks) {
+		t.Fatalf("installed %v, want %v", res.Installed, ManagedHooks)
+	}
+	if _, statErr := os.Stat(filepath.Join(realGit, "hooks", "post-merge")); statErr != nil {
+		t.Fatalf("hook not written into the worktree's real gitdir: %v", statErr)
+	}
+}
+
+func TestReadHooksPath_CaseInsensitive(t *testing.T) {
+	repo := t.TempDir()
+	gitDir := filepath.Join(repo, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	custom := filepath.Join(repo, "myhooks")
+	if err := os.MkdirAll(custom, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Lowercase key — git treats config keys case-insensitively.
+	if err := os.WriteFile(filepath.Join(gitDir, "config"),
+		[]byte("[core]\n\thookspath = "+custom+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := opts(repo)
+	o.AienvsPath = "/usr/local/bin/aienvs"
+	if _, err := Install(repo, o); err != nil {
+		t.Fatalf("Install with lowercase hookspath: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(custom, "post-merge")); statErr != nil {
+		t.Fatalf("hook not written to the case-insensitive hooksPath dir: %v", statErr)
 	}
 }
 
