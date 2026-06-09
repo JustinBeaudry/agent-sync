@@ -21,7 +21,7 @@ import (
 // Pending entries arise from sync observing a known URL with a new SHA
 // in a non-interactive path (or an interactive path where we've chosen not
 // to prompt mid-sync, per plan decision #9). The user reviews via
-// `aienvs trust pending` and promotes via `aienvs trust promote`.
+// `agent-sync trust pending` and promotes via `agent-sync trust promote`.
 type PendingStore struct {
 	path string
 	mu   sync.Mutex

@@ -1,4 +1,4 @@
-# Project aienvs manifest.
+# Project agent-sync manifest.
 # Owned by: platform-eng@example.com
 version: 1
 
@@ -6,7 +6,7 @@ version: 1
 canonical:
   url: https://github.com/example/agents-config.git
   ref: main
-  # commit is filled by `aienvs init`.
+  # commit is filled by `agent-sync init`.
   commit: ""
 
 # Project trust anchor — must match canonical.commit post-resolve.

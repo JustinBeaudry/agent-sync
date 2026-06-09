@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	contract "github.com/aienvs/aienvs/internal/adapter/contract"
+	contract "github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 // TestParseInboundMessage_RejectsTrailingBytes covers the smuggled-frame

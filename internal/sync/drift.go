@@ -3,8 +3,8 @@ package sync
 import (
 	"fmt"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ledger"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ledger"
 )
 
 // ScanDrift refuses if any file inside the reserved prefix is not

@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aienvs/aienvs/internal/engine"
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/report"
+	"github.com/agent-sync/agent-sync/internal/engine"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/report"
 )
 
 // hookSkippedMarker records that a git-hook-driven sync yielded to an

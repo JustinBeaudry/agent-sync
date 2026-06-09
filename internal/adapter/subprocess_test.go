@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 // echoBinaryPath is the cached path to the compiled testdata echo

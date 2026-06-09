@@ -1,4 +1,4 @@
-// Package cursor implements the bundled aienvs adapter for Cursor.
+// Package cursor implements the bundled agent-sync adapter for Cursor.
 //
 // The adapter consumes IR v1 nodes and emits the v1 op vocabulary
 // (write_file, write_tool_owned, mkdir, delete, warning) for Cursor's
@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 const (

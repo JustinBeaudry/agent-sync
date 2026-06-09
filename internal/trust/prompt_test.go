@@ -100,7 +100,7 @@ func TestPromptRevokedBannerNoPrompt(t *testing.T) {
 	if !strings.Contains(s, urlX) {
 		t.Errorf("banner missing URL: %q", s)
 	}
-	if !strings.Contains(s, "aienvs trust reset") {
+	if !strings.Contains(s, "agent-sync trust reset") {
 		t.Errorf("banner missing remediation: %q", s)
 	}
 

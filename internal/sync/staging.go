@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 // stagingDirName is the per-parent scratch directory that holds staged

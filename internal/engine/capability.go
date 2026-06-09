@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/internal/adapter/contract"
-	"github.com/aienvs/aienvs/internal/report"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/report"
 )
 
 // writeCapabilityReport assembles and persists the per-target capability

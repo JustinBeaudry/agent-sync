@@ -90,7 +90,7 @@ func extractMarkdownFrontmatter(src []byte) (Frontmatter, []byte, error) {
 
 // extractJSONFrontmatter parses a JSON file, peels off any reserved
 // `__aienvs_*` top-level keys, and returns a Frontmatter plus a re-emitted
-// body with those keys stripped. Non-aienvs keys preserve their original
+// body with those keys stripped. Non-agent-sync keys preserve their original
 // ordering and structure (encoding/json's map ordering is sorted, which
 // is what JSON consumers should already tolerate).
 //

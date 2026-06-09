@@ -1,12 +1,12 @@
 ---
-title: aienvs Adapter Protocol v1
+title: agent-sync Adapter Protocol v1
 status: frozen
 version: aienvs/v1
 date: 2026-04-26
 owner: internal/adapter
 ---
 
-# aienvs Adapter Protocol v1
+# agent-sync Adapter Protocol v1
 
 This document is the authoritative wire-format specification for
 `aienvs/v1` adapters. It defines the bytes sent over stdio, the JSON-RPC
@@ -41,7 +41,7 @@ wire contract from this document alone.
 
 ## 1. Overview
 
-An `aienvs` adapter is a subprocess that translates `aienvs` IR into
+An `agent-sync` adapter is a subprocess that translates `agent-sync` IR into
 adapter operations. The runtime owns process management and safety
 checks; adapters own only protocol responses and declarative output.
 
@@ -136,14 +136,14 @@ Responses carry `id` and exactly one of `result` or `error`.
 
 ### Error object
 
-Errors use the JSON-RPC 2.0 object plus an `aienvs` extension in
+Errors use the JSON-RPC 2.0 object plus an `agent-sync` extension in
 `error.data`.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `code` | int | yes | JSON-RPC error code |
 | `message` | string | yes | human-readable summary |
-| `data.error_class` | string | no | `aienvs` runtime classifier |
+| `data.error_class` | string | no | `agent-sync` runtime classifier |
 | `data.detail` | any JSON | no | opaque structured detail |
 
 Shape:
@@ -169,7 +169,7 @@ Envelope invariants:
 - Responses MUST NOT include `method`.
 - A response with both `result` and `error` is invalid.
 - A response with neither `result` nor `error` is invalid.
-- `id` may be integer, string, or `null`; `aienvs` emits integers.
+- `id` may be integer, string, or `null`; `agent-sync` emits integers.
 
 ## 4. Lifecycle
 
@@ -200,7 +200,7 @@ Method summary:
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `client` | string | yes | runtime identity, currently `aienvs` |
+| `client` | string | yes | runtime identity, currently `agent-sync` |
 | `protocol_versions` | `[]string` | yes | ordered offered versions, v1 currently offers `["aienvs/v1"]` |
 | `cookie` | string | yes | magic cookie the adapter MUST echo back |
 | `workspace_root` | string | yes | absolute workspace path |
@@ -546,7 +546,7 @@ The frozen corpus lives under
 `internal/adapter/conformance/corpus/`. The public CLI entry point is:
 
 ```bash
-aienvs adapter conformance-test ./my-adapter --format=json
+agent-sync adapter conformance-test ./my-adapter --format=json
 ```
 
 Default CLI behavior runs the positive corpus (`happy-*` plus
@@ -581,7 +581,7 @@ The JSON output schema is:
 
 ## 16. CLI Reference
 
-`aienvs adapter conformance-test` exit codes:
+`agent-sync adapter conformance-test` exit codes:
 
 - `0`: all cases passed (skips do not count as failures)
 - `1`: one or more cases failed

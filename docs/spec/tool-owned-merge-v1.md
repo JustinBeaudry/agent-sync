@@ -1,9 +1,9 @@
 # Tool-owned-file merge — v1 contract
 
-Authoritative contract for `internal/merge`: how aienvs surgically
+Authoritative contract for `internal/merge`: how agent-sync surgically
 inserts, updates, and removes its own managed entries inside
 **user-owned** files without corrupting user-authored content. This is
-the highest data-loss surface in aienvs; the rules here are
+the highest data-loss surface in agent-sync; the rules here are
 load-bearing. Implementation: `internal/merge/`. Adapters (Units 9–11)
 emit `write_tool_owned` ops with these locator kinds; the sync engine
 (Unit 13) drives `ApplyToFile`.
@@ -31,7 +31,7 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
   per-external-file flock across the read-merge-write and writes via
   `fsroot.StagedWrite` (temp + fsync + rename). It `MkdirAll`s the
   target's parent first (StagedWrite does not create parents).
-- **`slice_hash`** is the SHA-256 of the exact rendered aienvs slice as
+- **`slice_hash`** is the SHA-256 of the exact rendered agent-sync slice as
   written (the JSON value at the pointer / the rendered TOML table span
   / the markdown begin..end block). Empty on remove. Deterministic
   across runs, so the ledger sees no spurious drift.
@@ -50,8 +50,8 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
   under the pointer that is not an object (e.g. `mcpServers` is an
   array/scalar); a pre-existing duplicate `aienvs_<id>` key under the
   parent (ledger drift); entry content that is not a valid JSON value.
-- **Remove of the last aienvs entry keeps the now-empty parent**
-  (`"mcpServers": {}`); the parent is not pruned (pruning a key aienvs
+- **Remove of the last agent-sync entry keeps the now-empty parent**
+  (`"mcpServers": {}`); the parent is not pruned (pruning a key agent-sync
   may not have created requires provenance and is deferred).
 
 ## TOML (`.codex/config.toml`)
@@ -59,9 +59,9 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
 - **Engine:** a **string-aware line-splice** (NOT a `go-toml/v2`
   re-encode). go-toml/v2's decode→encode drops user `#` comments and
   rewrites quoting/formatting (verified), so the user's bytes are never
-  re-rendered. Only the aienvs table's line span is inserted / replaced
+  re-rendered. Only the agent-sync table's line span is inserted / replaced
   / removed; `go-toml/v2` is used only to **validate** the input parses
-  and to validate the rendered aienvs table fragment.
+  and to validate the rendered agent-sync table fragment.
 - **Locator:** `mcp_servers.aienvs_<id>` → table `[mcp_servers.aienvs_<id>]`.
 - **String-aware span location (load-bearing):** the line scanner
   tracks TOML multiline-string state (`"""`, `'''`), so a header-shaped
@@ -75,7 +75,7 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
 - **Preserved byte-identical:** user comments, table order, and all
   user table bytes. Aienvs tables are appended after user content.
 - **Rejected (`ErrMalformedToolOwnedFile`):** invalid TOML input; a
-  pre-existing duplicate aienvs table; an aienvs body that does not
+  pre-existing duplicate agent-sync table; an agent-sync body that does not
   parse as TOML.
 
 ## Markdown (`AGENTS.md`, `CLAUDE.md`)

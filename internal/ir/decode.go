@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aienvs/aienvs/internal/git"
+	"github.com/agent-sync/agent-sync/internal/git"
 )
 
 // DecodeOptions configures the decoder.

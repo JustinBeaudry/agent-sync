@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 // openRoot opens a fresh fsroot.Root on a temp workspace with NO

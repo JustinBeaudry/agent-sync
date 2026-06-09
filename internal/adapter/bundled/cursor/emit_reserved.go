@@ -3,7 +3,7 @@ package cursor
 import (
 	"fmt"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 const (
@@ -12,7 +12,7 @@ const (
 )
 
 // emitRule maps one rule node to:
-//   - mkdir(.cursor/rules/aienvs)               (deduped per-emit)
+//   - mkdir(.cursor/rules/agent-sync)               (deduped per-emit)
 //   - write_file(.cursor/rules/aienvs/README.md) (deduped per-emit)
 //   - write_file(.cursor/rules/aienvs/<id>.mdc)
 //

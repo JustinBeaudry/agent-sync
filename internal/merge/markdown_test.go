@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 func mdUpsert(id, body string) MergeEntry {
@@ -57,7 +57,7 @@ func TestMergeMarkdown_NewFileGetsHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("merge: %v", err)
 	}
-	if !strings.Contains(out, "Partially managed by aienvs") {
+	if !strings.Contains(out, "Partially managed by agent-sync") {
 		t.Errorf("new file missing managed header:\n%s", out)
 	}
 	if !strings.Contains(out, "<!-- aienvs:begin id=foo -->") {

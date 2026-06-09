@@ -11,7 +11,7 @@ import (
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 var (
@@ -89,7 +89,7 @@ func WriteResolvedSHA(orig []byte, commit, trustedSHA string) ([]byte, error) {
 	return out, nil
 }
 
-// WriteTrustedSHA is the `aienvs trust pin` subcommand's writer: it
+// WriteTrustedSHA is the `agent-sync trust pin` subcommand's writer: it
 // updates only `trusted_sha:` and leaves `canonical.commit:` alone.
 // See plan decision #9.
 func WriteTrustedSHA(orig []byte, trustedSHA string) ([]byte, error) {

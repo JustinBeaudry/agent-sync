@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/cache"
 )
 
 func loadPairs(t *testing.T, name string) [][2]string {

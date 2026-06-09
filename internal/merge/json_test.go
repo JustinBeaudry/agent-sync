@@ -7,7 +7,7 @@ import (
 
 	"github.com/tidwall/gjson"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 func jsonUpsert(locator string, content string) MergeEntry {
@@ -39,7 +39,7 @@ func TestMergeJSON_UpsertPreservesUserServers(t *testing.T) {
 	if hash == "" {
 		t.Error("upsert should return a non-empty slice hash")
 	}
-	// aienvs entry present and correct.
+	// agent-sync entry present and correct.
 	if gjson.GetBytes(out, "mcpServers.aienvs_foo.command").String() != "node" {
 		t.Errorf("aienvs_foo not set correctly: %s", out)
 	}
@@ -59,7 +59,7 @@ func TestMergeJSON_UpsertPreservesUserServers(t *testing.T) {
 
 func TestMergeJSON_UpsertThenRemoveIsIdentity(t *testing.T) {
 	t.Parallel()
-	// The strongest no-corruption proof: insert then delete the aienvs
+	// The strongest no-corruption proof: insert then delete the agent-sync
 	// key must restore the original bytes exactly.
 	withFoo, _, err := mergeJSON([]byte(userMCP), jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`))
 	if err != nil {
@@ -132,7 +132,7 @@ func TestMergeJSON_EmptyParentKeptAfterRemove(t *testing.T) {
 		t.Errorf("mcpServers parent should remain an (empty) object; got %s", out)
 	}
 	if len(gjson.GetBytes(out, "mcpServers").Map()) != 0 {
-		t.Errorf("mcpServers should be empty after removing the sole aienvs entry; got %s", out)
+		t.Errorf("mcpServers should be empty after removing the sole agent-sync entry; got %s", out)
 	}
 }
 

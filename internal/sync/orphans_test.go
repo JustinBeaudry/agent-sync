@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/ledger"
+	"github.com/agent-sync/agent-sync/internal/ledger"
 )
 
 func led(paths ...string) ledger.Ledger {

@@ -1,4 +1,4 @@
-// Package watch implements aienvs's foreground watch mode: a debounced,
+// Package watch implements agent-sync's foreground watch mode: a debounced,
 // cancellable fsnotify loop that re-runs a sync when the manifest or
 // canonical source changes. It is deliberately not a daemon — it runs in
 // the foreground, owns a context cancelled by the caller (SIGINT), and

@@ -114,7 +114,7 @@ func Decide(in DecideInput) (Decision, error) {
 			d.Kind = KindDecisionRequired
 			d.Remediation = fmt.Sprintf(
 				"trusted_sha (%s) does not match resolved SHA (%s). "+
-					"Run `aienvs trust promote %s --pin-manifest` to accept, or "+
+					"Run `agent-sync trust promote %s --pin-manifest` to accept, or "+
 					"update canonical.commit to match.",
 				shortSHA(in.ManifestTrustedSHA), shortSHA(in.ResolvedSHA), in.URL,
 			)
@@ -125,7 +125,7 @@ func Decide(in DecideInput) (Decision, error) {
 		d.Kind = KindProceedWithReminder
 		d.Reminder = fmt.Sprintf(
 			"Newer SHA available for %s: %s (currently pinned to %s). "+
-				"Run `aienvs trust pending` to review.",
+				"Run `agent-sync trust pending` to review.",
 			in.URL, shortSHA(in.ResolvedSHA), shortSHA(in.ManifestTrustedSHA),
 		)
 		d.AppendPending = PendingEntry{
@@ -210,7 +210,7 @@ func Decide(in DecideInput) (Decision, error) {
 		d.Kind = KindProceedWithReminder
 		d.Reminder = fmt.Sprintf(
 			"Newer SHA available for %s: %s (previously trusted %s). "+
-				"Run `aienvs trust pending` to review.",
+				"Run `agent-sync trust pending` to review.",
 			in.URL, shortSHA(in.ResolvedSHA), shortSHA(in.State.CurrentSHA),
 		)
 		d.AppendPending = PendingEntry{

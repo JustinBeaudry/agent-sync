@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 const machineIDRel = ".aienv/state/machine-id"

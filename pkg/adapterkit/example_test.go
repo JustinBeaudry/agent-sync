@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 func ExampleNewServer() {

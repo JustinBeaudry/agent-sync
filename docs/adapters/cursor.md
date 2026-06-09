@@ -1,5 +1,5 @@
 ---
-title: aienvs `cursor` adapter — concept→destination reference
+title: agent-sync `cursor` adapter — concept→destination reference
 status: active
 date: 2026-06-08
 adapter: cursor
@@ -84,7 +84,7 @@ report names the gap honestly. No files are written for these kinds.
 - **`command`** — Cursor has no per-project custom slash-command file
   analogous to `.claude/commands/`.
 - **`plugin-reference`** — Cursor has no project-level plugin manifest
-  that aienvs can populate.
+  that agent-sync can populate.
 
 ## Legacy `.cursorrules`
 
@@ -124,11 +124,11 @@ read project-level `AGENTS.md`.
 
 ## Exit path
 
-To unbind aienvs from a workspace and remove every file the `cursor`
+To unbind agent-sync from a workspace and remove every file the `cursor`
 adapter has emitted:
 
 ```bash
-aienvs unmanage cursor
+agent-sync unmanage cursor
 ```
 
 The command (Unit 24 of the master plan, not yet shipped) uses the

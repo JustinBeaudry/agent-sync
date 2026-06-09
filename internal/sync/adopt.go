@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ledger"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ledger"
 )
 
 // backupsDir is where adopt-prefix backup tarballs are written.

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 )
 
 // emitRule maps one rule node to:
-//   - mkdir(.claude/rules/aienvs)            (deduped per-emit)
+//   - mkdir(.claude/rules/agent-sync)            (deduped per-emit)
 //   - write_file(.claude/rules/aienvs/README.md)  (deduped per-emit)
 //   - write_file(.claude/rules/aienvs/<id>.md)
 //   - warning op when the body opens with `paths:` frontmatter
@@ -62,7 +62,7 @@ func emitRule(emitted *emittedOps, node irNode, state *emitState) error {
 	return nil
 }
 
-// emitCommand mirrors emitRule under .claude/commands/aienvs. See
+// emitCommand mirrors emitRule under .claude/commands/agent-sync. See
 // emitRule's Rule-of-Three note before collapsing.
 func emitCommand(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)

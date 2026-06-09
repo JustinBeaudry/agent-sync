@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/locks"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/locks"
 )
 
 func applyHarness(t *testing.T) (*fsroot.Root, *locks.FileLockRegistry, string) {

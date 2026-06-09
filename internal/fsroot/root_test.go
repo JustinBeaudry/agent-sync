@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 func TestOpenWorkspaceRoot_Succeeds(t *testing.T) {

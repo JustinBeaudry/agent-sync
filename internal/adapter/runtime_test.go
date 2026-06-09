@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 // scriptedAdapter is a bundled adapter that responds to wire frames

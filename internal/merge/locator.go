@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aienvs/aienvs/internal/ir"
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 // aienvsKeyPrefix is the key/table-name prefix that marks an entry as
@@ -23,7 +23,7 @@ type MergeEntry struct {
 	Remove  bool                     // true = delete the entry/table/section
 }
 
-// entryID extracts and validates the aienvs id from the entry's
+// entryID extracts and validates the agent-sync id from the entry's
 // locator, per kind. Extraction is by exact `aienvs_` / `aienvs:`
 // prefix strip — never by splitting on the last separator — because
 // ids may contain underscores and hyphens (aienvs_foo_bar -> foo_bar).

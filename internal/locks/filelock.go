@@ -14,7 +14,7 @@ import (
 
 	"github.com/gofrs/flock"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 const fileLocksDirRel = ".aienv/state/filelocks"

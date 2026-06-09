@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 )
 
 func runInit(t *testing.T, args ...string) (string, string, error) {
@@ -96,7 +96,7 @@ func TestInit_RefusesToOverwrite(t *testing.T) {
 }
 
 // TestInit_ThenSync proves the init -> sync loop closes: a manifest
-// written by `aienvs init` is synced successfully by `aienvs sync`.
+// written by `agent-sync init` is synced successfully by `agent-sync sync`.
 func TestInit_ThenSync(t *testing.T) {
 	requireGit(t)
 	canonical, sha := makeCanonicalRepo(t)

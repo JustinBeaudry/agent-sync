@@ -7,7 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/aienvs/aienvs/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
 func TestLoadCorpus_SortsCasesByName(t *testing.T) {

@@ -1,7 +1,7 @@
-# AGENTS.md — guidance for agents working on aienvs itself
+# AGENTS.md — guidance for agents working on agent-sync itself
 
 This file is meta: it guides coding agents (human or otherwise) who are
-**contributing to the `aienvs` codebase**. It is not consumed by the sync
+**contributing to the `agent-sync` codebase**. It is not consumed by the sync
 pipeline and is not rendered into any target tool.
 
 ## Authoritative references

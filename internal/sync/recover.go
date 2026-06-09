@@ -7,7 +7,7 @@ import (
 	"path"
 	"sort"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 // generationsToKeep is how many completed/failed staging generations to
@@ -163,7 +163,7 @@ func prune(root *fsroot.Root, stagingRoot string, gens []string) error {
 }
 
 // CleanScratch force-removes all staging generations under a parent
-// (`aienvs sync --clean-scratch`).
+// (`agent-sync sync --clean-scratch`).
 func CleanScratch(root *fsroot.Root, parentRel string) error {
 	stagingRoot := path.Join(parentRel, stagingDirName)
 	if err := root.Inner().RemoveAll(stagingRoot); err != nil {

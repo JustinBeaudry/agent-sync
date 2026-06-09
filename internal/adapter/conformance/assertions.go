@@ -7,8 +7,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 func MatchOps(expected, actual []contract.OpRecord, strictOrder bool) (bool, []contract.OpRecord, []contract.OpRecord) {

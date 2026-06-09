@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-// markerOpen is the literal opener every aienvs marker shares. A body
+// markerOpen is the literal opener every agent-sync marker shares. A body
 // containing it means a caller passed pre-wrapped content (the engine
 // owns markers) — rejected loudly so a Unit 13 double-wrap mistake
 // fails in tests, not in production.
 const markerOpen = "<!-- aienvs:"
 
-// mergeMarkdown upserts or removes the aienvs managed section for the
+// mergeMarkdown upserts or removes the agent-sync managed section for the
 // entry's id. It owns the begin/end markers (KTD 5): the caller passes
 // the INNER body. Recovery is refuse-don't-guess — any malformed marker
 // state returns ErrMalformedManagedSection naming the line, with no
@@ -26,7 +26,7 @@ func mergeMarkdown(existing []byte, e MergeEntry) (result []byte, sliceHash, war
 		return nil, "", "", err
 	}
 	if !e.Remove && strings.Contains(string(e.Content), markerOpen) {
-		return nil, "", "", fmt.Errorf("merge: markdown body contains aienvs marker %q (the engine owns markers; pass inner body only)", markerOpen)
+		return nil, "", "", fmt.Errorf("merge: markdown body contains agent-sync marker %q (the engine owns markers; pass inner body only)", markerOpen)
 	}
 
 	nl := detectNewline(existing)
@@ -58,7 +58,7 @@ func mergeMarkdown(existing []byte, e MergeEntry) (result []byte, sliceHash, war
 
 	// Append a new section at EOF (with a top-of-file header for a new file).
 	if len(strings.TrimSpace(string(existing))) == 0 {
-		header := "<!-- Partially managed by aienvs — edit outside the aienvs:begin / aienvs:end markers only. -->" + nl + nl
+		header := "<!-- Partially managed by agent-sync — edit outside the aienvs:begin / aienvs:end markers only. -->" + nl + nl
 		return []byte(header + block), sliceHash, warn, nil
 	}
 	if n := len(lines); n > 0 && !strings.HasSuffix(lines[n-1], "\n") {
@@ -107,7 +107,7 @@ func scanMarkers(lines []string, targetID string) (markerPair, string, error) {
 			if mid == targetID {
 				return markerPair{}, "", fmt.Errorf("%w: indented marker for managed id %q at line %d", ErrMalformedManagedSection, targetID, i+1)
 			}
-			warning = fmt.Sprintf("indented aienvs marker at line %d treated as user content", i+1)
+			warning = fmt.Sprintf("indented agent-sync marker at line %d treated as user content", i+1)
 			continue
 		}
 

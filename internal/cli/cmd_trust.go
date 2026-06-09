@@ -1,5 +1,5 @@
-// Package cli holds cobra command factories for the aienvs CLI. Unit 6
-// introduces the first subcommand tree (`aienvs trust`); Unit 16 will wire
+// Package cli holds cobra command factories for the agent-sync CLI. Unit 6
+// introduces the first subcommand tree (`agent-sync trust`); Unit 16 will wire
 // the full root command + fang styling.
 package cli
 
@@ -21,9 +21,9 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/spf13/cobra"
 
-	"github.com/aienvs/aienvs/internal/cache"
-	"github.com/aienvs/aienvs/internal/manifest"
-	"github.com/aienvs/aienvs/internal/trust"
+	"github.com/agent-sync/agent-sync/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/trust"
 )
 
 // yamlUnmarshal is a thin alias so we can keep the import list tidy and
@@ -60,7 +60,7 @@ type TrustDeps struct {
 	Hostname string
 }
 
-// NewTrustCommand returns the `aienvs trust` cobra subtree. The caller
+// NewTrustCommand returns the `agent-sync trust` cobra subtree. The caller
 // (Unit 16) adds it to the root command.
 func NewTrustCommand(deps TrustDeps) *cobra.Command {
 	cmd := &cobra.Command{
@@ -411,7 +411,7 @@ func newTrustPromoteCmd(deps TrustDeps) *cobra.Command {
 					return fmt.Errorf(
 						"trust promote: pending entry for %s is stale "+
 							"(pending.old_sha=%s, current trusted=%s); "+
-							"re-run sync to refresh the pending queue, then `aienvs trust pending`",
+							"re-run sync to refresh the pending queue, then `agent-sync trust pending`",
 						url, shortSHAOrDash(pending.OldSHA), shortSHAOrDash(prevSHA),
 					)
 				}
@@ -616,7 +616,7 @@ func newTrustResetCmd(deps TrustDeps) *cobra.Command {
 			if priorSHA == "" {
 				return fmt.Errorf(
 					"trust reset: no prior trust record found for %s; "+
-						"use `aienvs trust add %s <sha>` to grant fresh trust",
+						"use `agent-sync trust add %s <sha>` to grant fresh trust",
 					url, url,
 				)
 			}

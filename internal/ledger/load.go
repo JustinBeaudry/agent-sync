@@ -8,8 +8,8 @@ import (
 	"io"
 	"io/fs"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
 // relPath returns the workspace-relative ledger path for a target.

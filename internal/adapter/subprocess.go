@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 // CookieEnvVar is the env var name the runtime uses to deliver the

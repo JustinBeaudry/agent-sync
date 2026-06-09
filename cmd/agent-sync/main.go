@@ -1,6 +1,6 @@
-// Command aienvs is the entry point for the aienvs CLI.
+// Command agent-sync is the entry point for the agent-sync CLI.
 //
-// aienvs keeps AI-agent configuration for multiple tools in sync from a
+// agent-sync keeps AI-agent configuration for multiple tools in sync from a
 // single Git-backed manifest. See the repository README and
 // docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md for the
 // architecture.
@@ -12,7 +12,7 @@ import (
 
 	"github.com/charmbracelet/fang"
 
-	"github.com/aienvs/aienvs/internal/cli"
+	"github.com/agent-sync/agent-sync/internal/cli"
 )
 
 // version is overwritten at build time via -ldflags.

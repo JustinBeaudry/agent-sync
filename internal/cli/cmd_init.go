@@ -9,12 +9,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aienvs/aienvs/internal/cache"
-	"github.com/aienvs/aienvs/internal/git"
-	"github.com/aienvs/aienvs/internal/manifest"
-	"github.com/aienvs/aienvs/internal/tui"
-	"github.com/aienvs/aienvs/internal/tui/wizard"
-	"github.com/aienvs/aienvs/internal/workspace"
+	"github.com/agent-sync/agent-sync/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/git"
+	"github.com/agent-sync/agent-sync/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/tui"
+	"github.com/agent-sync/agent-sync/internal/tui/wizard"
+	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
 func newInitCommand(deps RootDeps) *cobra.Command {
@@ -43,7 +43,7 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 			}
 
 			// The destination directory comes from --dir, falling back to the
-			// global --workspace flag, so `aienvs --workspace X init ...` writes
+			// global --workspace flag, so `agent-sync --workspace X init ...` writes
 			// to X.
 			destDir := dir
 			if destDir == "" {

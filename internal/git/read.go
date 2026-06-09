@@ -33,7 +33,7 @@ var ErrShaNotInCache = errors.New("git: sha not in cache")
 //
 // Symlinks are returned with Mode == 0o120000 and the blob content is
 // the link target. Callers upstream decide whether to follow them;
-// aienvs's IR decoder treats symlinks as opaque blobs.
+// agent-sync's IR decoder treats symlinks as opaque blobs.
 type TreeEntry struct {
 	Path string
 	Mode uint32
@@ -41,7 +41,7 @@ type TreeEntry struct {
 	Hash string
 }
 
-// Repository wraps a materialized bare clone so the rest of aienvs can
+// Repository wraps a materialized bare clone so the rest of agent-sync can
 // read trees and blobs without importing go-git directly.
 //
 // Instances are cheap to construct but hold an open object store, so
@@ -98,7 +98,7 @@ func (r *Repository) HasCommit(sha string) (bool, error) {
 // ReadTree walks the tree reachable from commitSHA and returns every
 // blob entry under it, keyed by POSIX path. Sub-trees are expanded
 // recursively; submodule gitlinks are skipped (they are not part of the
-// canonical source tree from aienvs's perspective).
+// canonical source tree from agent-sync's perspective).
 //
 // Deterministic order: entries are sorted by Path so callers consuming
 // the slice for diffing or hashing get stable results across runs.

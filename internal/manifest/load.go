@@ -128,7 +128,7 @@ func Validate(m *Manifest, opts LoadOptions) error {
 	}
 
 	if m.Version == 0 {
-		// Default to v1 for the greenfield phase. Once aienvs ships, this
+		// Default to v1 for the greenfield phase. Once agent-sync ships, this
 		// should become required.
 		m.Version = 1
 	}

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
 // stateDir is the workspace-relative directory holding all per-target

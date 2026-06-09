@@ -1,6 +1,6 @@
 # IR v1
 
-The Intermediate Representation (IR) is the format `aienvs` decodes
+The Intermediate Representation (IR) is the format `agent-sync` decodes
 canonical-repo content into before any adapter sees it. Every adapter
 (claude, cursor, codex, …) consumes IR, never raw canonical files; every
 target tool's output is derived from IR, never from another tool's output.
@@ -184,7 +184,7 @@ The decoder MUST satisfy these invariants. They are test-suite-enforced.
    test fixture's filesystem must not change IR output (the order is
    derived from node identity, not the host fs).
 3. **Provenance is git-blob-keyed.** `BlobSHA` is the SHA git itself
-   computes for the file content, not a `aienvs`-derived hash. This lets
+   computes for the file content, not a `agent-sync`-derived hash. This lets
    downstream tooling (ledger, validate, diff) cross-check against
    `git cat-file` output.
 4. **No timestamps anywhere.** The IR carries no wall-clock fields.

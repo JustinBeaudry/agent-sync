@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/workspace"
+	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
 func writeManifest(t *testing.T, dir string) string {

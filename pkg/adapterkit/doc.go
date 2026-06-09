@@ -1,4 +1,4 @@
-// Package adapterkit is the supported SDK for writing aienvs adapters in Go.
+// Package adapterkit is the supported SDK for writing agent-sync adapters in Go.
 // It handles framing, JSON-RPC envelopes, the magic-cookie handshake,
 // capability negotiation, and lifecycle dispatch so adapter authors only write
 // handlers.

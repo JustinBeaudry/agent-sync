@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ir"
-	"github.com/aienvs/aienvs/internal/report"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/report"
 )
 
 // Options carries per-run policy. Zero values are sensible: atomic mode,

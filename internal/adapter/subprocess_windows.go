@@ -10,7 +10,7 @@ package adapter
 // any signal other than os.Kill on Windows returns an error along the
 // lines of "not supported by windows" for processes that are not
 // attached to the caller's console group — which is the common case
-// for adapters spawned by the aienvs CLI (no shared console, often
+// for adapters spawned by the agent-sync CLI (no shared console, often
 // started with a hidden window or detached). Even when delivery does
 // succeed (CTRL_BREAK_EVENT to a console-group process), many child
 // processes ignore it.

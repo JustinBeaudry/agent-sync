@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aienvs/aienvs/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 )
 
 // adapterBinaryPrefix is the magic filename prefix that PATH discovery
@@ -47,7 +47,7 @@ func (s Source) String() string {
 	}
 }
 
-// BundledAdapter is an adapter compiled into the aienvs binary itself.
+// BundledAdapter is an adapter compiled into the agent-sync binary itself.
 // The runtime spawns it as a goroutine speaking the wire protocol over
 // io.Pipe. Run is invoked by the in-process transport in inproc.go.
 type BundledAdapter struct {

@@ -14,8 +14,8 @@ import (
 
 	"github.com/gofrs/flock"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
 const (
@@ -291,7 +291,7 @@ func (l *TargetLock) noticef(format string, args ...any) {
 	if w == nil {
 		w = os.Stderr
 	}
-	_, _ = fmt.Fprintf(w, "aienvs: "+format+"\n", args...)
+	_, _ = fmt.Fprintf(w, "agent-sync: "+format+"\n", args...)
 }
 
 // guardStatePrefix refuses when any guarded state-dir component is a

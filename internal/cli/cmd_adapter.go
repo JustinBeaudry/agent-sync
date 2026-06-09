@@ -15,8 +15,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aienvs/aienvs/internal/adapter/conformance"
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter/conformance"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 const (
@@ -100,10 +100,10 @@ func newAdapterConformanceTestCmd(deps AdapterDeps) *cobra.Command {
 			"  1  One or more cases failed\n" +
 			"  2  Binary could not be spawned (path not found, not executable, is a directory)",
 		Example: strings.Join([]string{
-			"aienvs adapter conformance-test ./my-adapter",
-			"aienvs adapter conformance-test ./my-adapter --format=json",
-			"aienvs adapter conformance-test ./my-adapter --filter='^happy-' --timeout=5s",
-			"aienvs adapter conformance-test ./my-adapter --include-adversarial",
+			"agent-sync adapter conformance-test ./my-adapter",
+			"agent-sync adapter conformance-test ./my-adapter --format=json",
+			"agent-sync adapter conformance-test ./my-adapter --filter='^happy-' --timeout=5s",
+			"agent-sync adapter conformance-test ./my-adapter --include-adversarial",
 		}, "\n"),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
