@@ -52,18 +52,16 @@ checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
-# minisign signature over the checksums file. Activated only when a signing key
-# is present (MINISIGN_KEY), so local snapshot builds and forks without the
-# secret do not fail. The CI key must be UNENCRYPTED (generate with
-# `minisign -G -W`); its secrecy is provided by the GitHub secret, so no
-# interactive passphrase prompt can hang the release. Verify a download with:
-#   minisign -Vm checksums.txt -P <public key>
+# minisign signature over the checksums file, delegated to a shellcheck-able
+# script. Activated only when a signing key is present (MINISIGN_KEY), so local
+# snapshot builds and forks without the secret do not fail — see
+# scripts/sign-release.sh for the key requirements and verification command.
 signs:
   - id: minisign
-    cmd: sh
+    cmd: scripts/sign-release.sh
     args:
-      - "-c"
-      - 'if [ -n "$MINISIGN_KEY" ]; then k="$(mktemp)"; printf "%s" "$MINISIGN_KEY" > "$k"; minisign -S -s "$k" -m "${artifact}" -x "${signature}"; rc=$?; rm -f "$k"; exit $rc; else echo "MINISIGN_KEY not set; skipping signature for ${artifact}"; fi'
+      - "${artifact}"
+      - "${signature}"
     artifacts: checksum
     signature: "${artifact}.minisig"
 

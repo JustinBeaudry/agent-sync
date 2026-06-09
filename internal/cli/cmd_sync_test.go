@@ -4,41 +4,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/agent-sync/agent-sync/internal/gittest"
 )
 
-// requireGit skips when git is unavailable (dev hosts; CI always has git).
-// When AGENT_SYNC_REQUIRE_GIT is set (CI), a missing git is a hard failure
-// instead of a skip, so the real-git end-to-end path can never silently
-// vanish from the suite.
+// requireGit / mustGit delegate to the shared gittest helpers; kept as
+// package-local aliases so this package's many call sites stay unchanged.
 func requireGit(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		if os.Getenv("AGENT_SYNC_REQUIRE_GIT") != "" {
-			t.Fatalf("git not on PATH but AGENT_SYNC_REQUIRE_GIT is set: %v", err)
-		}
-		t.Skipf("git not on PATH: %v", err)
-	}
+	gittest.RequireGit(t)
 }
 
 func mustGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=aienvs-test", "GIT_AUTHOR_EMAIL=test@agent-sync.invalid",
-		"GIT_COMMITTER_NAME=aienvs-test", "GIT_COMMITTER_EMAIL=test@agent-sync.invalid",
-		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
-		"GIT_TERMINAL_PROMPT=0", "LC_ALL=C",
-	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
-	}
-	return strings.TrimSpace(string(out))
+	return gittest.MustGit(t, dir, args...)
 }
 
 // makeCanonicalRepo builds a local git repo with one rule file and returns

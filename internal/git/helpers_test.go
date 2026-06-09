@@ -3,10 +3,10 @@ package git
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/agent-sync/agent-sync/internal/gittest"
 )
 
 // testRepo captures the state of a temporary repository fixture.
@@ -26,27 +26,11 @@ type testRepo struct {
 }
 
 // mustGit runs a `git` subcommand in dir with the test-harness env.
-// Test identities are forced on every invocation so the host
-// environment's ~/.gitconfig cannot bleed in.
+// Delegates to the shared gittest helper; kept as a package-local alias so
+// the many call sites in this package's tests stay unchanged.
 func mustGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=aienvs-test",
-		"GIT_AUTHOR_EMAIL=test@agent-sync.invalid",
-		"GIT_COMMITTER_NAME=aienvs-test",
-		"GIT_COMMITTER_EMAIL=test@agent-sync.invalid",
-		"GIT_CONFIG_GLOBAL=/dev/null",
-		"GIT_CONFIG_SYSTEM=/dev/null",
-		"GIT_TERMINAL_PROMPT=0",
-		"LC_ALL=C",
-	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
-	}
-	return strings.TrimSpace(string(out))
+	return gittest.MustGit(t, dir, args...)
 }
 
 // makeRepo creates a new repository on disk with two commits on main
@@ -132,12 +116,7 @@ func write(t *testing.T, path, content string) {
 // instead of a skip, so git-backed tests can never silently vanish.
 func requireGit(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		if os.Getenv("AGENT_SYNC_REQUIRE_GIT") != "" {
-			t.Fatalf("git not available on PATH but AGENT_SYNC_REQUIRE_GIT is set: %v", err)
-		}
-		t.Skipf("git not available on PATH: %v", err)
-	}
+	gittest.RequireGit(t)
 }
 
 // withDetectReset ensures DetectGit's memo is cleared before and after
