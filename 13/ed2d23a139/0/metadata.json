@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "13ed2d23a139",
+  "session_id": "a176ccf3-9652-4654-9754-77b8d77f7919",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T01:41:38.269099Z",
+  "branch": "feat/cli-tui-sync-engine",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/contract/protocol.go",
+    "pkg/adapterkit/types.go",
+    "internal/adapter/contract/schema/emit.json",
+    "internal/adapter/bundled/claude/emit.go",
+    "internal/adapter/bundled/cursor/emit.go",
+    "internal/adapter/bundled/claude/emit_opcontent_test.go",
+    "docs/spec/emit-op-content-v1.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "a883241514ea",
+  "checkpoint_transcript_start": 253,
+  "transcript_lines_at_start": 253,
+  "token_usage": {
+    "input_tokens": 1246,
+    "cache_creation_tokens": 19222,
+    "cache_read_tokens": 6219331,
+    "output_tokens": 12040,
+    "api_call_count": 26
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T01:41:37.861369Z",
+    "agent_lines": 198,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 198,
+    "agent_percentage": 100
+  }
+}
