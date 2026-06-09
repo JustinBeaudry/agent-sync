@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "1ea8b92858ad",
+  "session_id": "a176ccf3-9652-4654-9754-77b8d77f7919",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T01:52:36.754754Z",
+  "branch": "feat/cli-tui-sync-engine",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/engine/irwire.go",
+    "internal/engine/request.go",
+    "internal/engine/target.go",
+    "internal/engine/engine.go",
+    "internal/engine/plan.go",
+    "internal/engine/capability.go",
+    "internal/engine/irwire_test.go",
+    "internal/engine/engine_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "a883241514ea",
+  "checkpoint_transcript_start": 348,
+  "transcript_lines_at_start": 348,
+  "token_usage": {
+    "input_tokens": 2452,
+    "cache_creation_tokens": 67290,
+    "cache_read_tokens": 11074674,
+    "output_tokens": 48709,
+    "api_call_count": 38
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T01:52:36.298179Z",
+    "agent_lines": 1249,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1249,
+    "agent_percentage": 100
+  }
+}

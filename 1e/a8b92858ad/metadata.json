@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "1ea8b92858ad",
+  "strategy": "manual-commit",
+  "branch": "feat/cli-tui-sync-engine",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/engine/capability.go",
+    "internal/engine/engine.go",
+    "internal/engine/engine_test.go",
+    "internal/engine/irwire.go",
+    "internal/engine/irwire_test.go",
+    "internal/engine/plan.go",
+    "internal/engine/request.go",
+    "internal/engine/target.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1e/a8b92858ad/0/metadata.json",
+      "transcript": "/1e/a8b92858ad/0/full.jsonl",
+      "context": "/1e/a8b92858ad/0/context.md",
+      "content_hash": "/1e/a8b92858ad/0/content_hash.txt",
+      "prompt": "/1e/a8b92858ad/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2452,
+    "cache_creation_tokens": 67290,
+    "cache_read_tokens": 11074674,
+    "output_tokens": 48709,
+    "api_call_count": 38
+  }
+}
