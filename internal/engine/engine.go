@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"sort"
 	"time"
 
 	"github.com/aienvs/aienvs/internal/report"
@@ -28,7 +27,6 @@ const (
 	statusOK targetStatus = iota
 	statusUnchanged
 	statusBlocked
-	statusFailed
 )
 
 type statusCounts struct {
@@ -89,7 +87,7 @@ func Sync(ctx context.Context, req Request) (report.Summary, error) {
 			reports = append(reports, report.TargetReport{Target: target, Status: report.StatusSkipped})
 			continue
 		}
-		start := now
+		start := opts.now()
 		res, err := applyTarget(ctx, req, target, now)
 		dur := opts.now().Sub(start).Milliseconds()
 		if err != nil {
@@ -146,8 +144,6 @@ func toTargetReport(target string, res statusResult, dur int64) report.TargetRep
 		st = report.StatusUnchanged
 	case statusBlocked:
 		st = report.StatusBlocked
-	case statusFailed:
-		st = report.StatusFailed
 	}
 	return report.TargetReport{
 		Target:     target,
@@ -161,11 +157,4 @@ func toTargetReport(target string, res statusResult, dur int64) report.TargetRep
 		},
 		Paths: res.paths,
 	}
-}
-
-// sortedStrings returns a sorted copy.
-func sortedStrings(in []string) []string {
-	out := append([]string(nil), in...)
-	sort.Strings(out)
-	return out
 }

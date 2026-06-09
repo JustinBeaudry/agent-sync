@@ -260,11 +260,16 @@ linear prompt fallback.
 internal/
   engine/
     engine.go            # Sync(ctx, Request) (report.Summary, error); Plan(ctx, Request)
-    request.go           # Request, Plan, Options (mode, offline, adopt, targets filter)
-    target.go            # per-target step sequence
-    adapters.go          # IR -> json.RawMessage marshal; session lifecycle driver
-    engine_test.go
-    target_test.go
+    request.go           # Request, PlanResult, Options (mode, adopt, targets filter)
+    target.go            # per-target step sequence + session lifecycle driver
+    plan.go              # dry-run change-set computation (powers validate)
+    irwire.go            # []ir.Node -> wire IR json.RawMessage (was "adapters.go" in draft)
+    capability.go        # best-effort capability report assembly
+    engine_test.go       # Sync/Plan integration tests (cover the target sequence)
+    irwire_test.go
+    mcp_test.go          # exact-prefix sidecar regression + within() guard
+    # (per-target scenarios are covered via engine_test.go integration, not a
+    #  separate target_test.go)
   cli/
     root.go              # NewRootCommand(deps) -> mounts all subcommands
     access.go            # TTY / NO_COLOR / accessible / output-format resolution
