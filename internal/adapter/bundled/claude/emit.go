@@ -53,14 +53,30 @@ func (e *emittedOps) add(op adapterkit.Op) {
 }
 
 // records returns the OpRecord summary slice the v1 protocol carries
-// in EmitResult.OpsPerformed. Content is built but discarded — the
-// wire format only carries summaries.
+// in EmitResult.OpsPerformed — the {kind, path} pairs the runtime's
+// declared-outputs and capability-lied gates run against.
 func (e *emittedOps) records() []adapterkit.OpRecord {
 	out := make([]adapterkit.OpRecord, 0, len(e.ops))
 	for _, op := range e.ops {
 		out = append(out, adapterkit.OpRecord{Op: op.OpKind(), Path: op.OpPath()})
 	}
 	return out
+}
+
+// wireOps marshals each accumulated op to its wire envelope for
+// EmitResult.Ops, in the same order as records(). This carries the op
+// content to the CLI core, which performs the actual writes
+// (invariant #2). Decoded caller-side via contract.DecodeOp.
+func (e *emittedOps) wireOps() ([]json.RawMessage, error) {
+	out := make([]json.RawMessage, 0, len(e.ops))
+	for _, op := range e.ops {
+		raw, err := json.Marshal(op)
+		if err != nil {
+			return nil, fmt.Errorf("claude: marshal op %s %q: %w", op.OpKind(), op.OpPath(), err)
+		}
+		out = append(out, raw)
+	}
+	return out, nil
 }
 
 // handleEmit is the OnEmit handler the bundled adapter registers.
@@ -132,7 +148,14 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.E
 		}
 	}
 
-	return adapterkit.EmitResult{OpsPerformed: emitted.records()}, nil
+	wire, err := emitted.wireOps()
+	if err != nil {
+		return adapterkit.EmitResult{}, &adapterkit.Error{
+			Code:    adapterkit.CodeInternalError,
+			Message: err.Error(),
+		}
+	}
+	return adapterkit.EmitResult{OpsPerformed: emitted.records(), Ops: wire}, nil
 }
 
 // emitState carries per-emit dedup tables. Threading one struct

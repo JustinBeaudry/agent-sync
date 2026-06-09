@@ -186,9 +186,18 @@ type EmitParams struct {
 
 // EmitResult is the final response to an emit request: the ops the
 // adapter performed, in the order it streamed them.
+//
+// Ops carries the full op envelopes (each marshaled via the per-op wire
+// form, decodable with DecodeOp) so the CLI core can perform the actual
+// writes — invariant #2 ("adapters never write files directly"). It is
+// an additive field under the "freeze the wire frame, grow capabilities"
+// policy: older adapters omit it and it decodes to nil. OpsPerformed
+// remains the {kind, path} summary the declared-outputs and
+// capability-lied gates run against, in the same order as Ops.
 type EmitResult struct {
-	OpsPerformed []OpRecord      `json:"ops_performed"`
-	Meta         json.RawMessage `json:"_meta,omitempty"`
+	OpsPerformed []OpRecord        `json:"ops_performed"`
+	Ops          []json.RawMessage `json:"ops,omitempty"`
+	Meta         json.RawMessage   `json:"_meta,omitempty"`
 }
 
 // OpRecord is a minimal {kind, path} record of one performed op.

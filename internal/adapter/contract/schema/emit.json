@@ -17,6 +17,7 @@
       "type": "object",
       "properties": {
         "ops_performed": {"type": "array", "items": {"$ref": "#/$defs/op_record"}},
+        "ops": {"type": "array", "items": {"type": "object"}},
         "_meta": {}
       },
       "required": ["ops_performed"]

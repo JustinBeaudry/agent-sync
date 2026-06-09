@@ -148,8 +148,9 @@ type EmitParams struct {
 }
 
 type EmitResult struct {
-	OpsPerformed []OpRecord      `json:"ops_performed"`
-	Meta         json.RawMessage `json:"_meta,omitempty"`
+	OpsPerformed []OpRecord        `json:"ops_performed"`
+	Ops          []json.RawMessage `json:"ops,omitempty"`
+	Meta         json.RawMessage   `json:"_meta,omitempty"`
 }
 
 type OpRecord struct {
