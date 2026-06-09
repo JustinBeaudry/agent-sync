@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "7d225492b3a1",
+  "session_id": "a176ccf3-9652-4654-9754-77b8d77f7919",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T14:42:54.599734Z",
+  "branch": "chore/rename-aienvs-to-agent-sync",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/adapter/bundled/claude/emit.go",
+    "internal/adapter/bundled/claude/emit_opcontent_test.go",
+    "internal/adapter/bundled/cursor/emit.go",
+    "internal/engine/capability.go",
+    "internal/engine/engine_test.go",
+    "internal/engine/irwire.go",
+    "internal/engine/irwire_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c19b74ab4bff",
+  "token_usage": {
+    "input_tokens": 87531,
+    "cache_creation_tokens": 3063042,
+    "cache_read_tokens": 285983905,
+    "output_tokens": 492686,
+    "api_call_count": 582
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T14:42:53.357574Z",
+    "agent_lines": 17,
+    "human_added": 4856,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 4873,
+    "agent_percentage": 0.348861071208701
+  }
+}

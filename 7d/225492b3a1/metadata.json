@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "7d225492b3a1",
+  "strategy": "manual-commit",
+  "branch": "chore/rename-aienvs-to-agent-sync",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/adapter/bundled/claude/emit.go",
+    "internal/adapter/bundled/claude/emit_opcontent_test.go",
+    "internal/adapter/bundled/cursor/emit.go",
+    "internal/engine/capability.go",
+    "internal/engine/engine_test.go",
+    "internal/engine/irwire.go",
+    "internal/engine/irwire_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/7d/225492b3a1/0/metadata.json",
+      "transcript": "/7d/225492b3a1/0/full.jsonl",
+      "context": "/7d/225492b3a1/0/context.md",
+      "content_hash": "/7d/225492b3a1/0/content_hash.txt",
+      "prompt": "/7d/225492b3a1/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 87531,
+    "cache_creation_tokens": 3063042,
+    "cache_read_tokens": 285983905,
+    "output_tokens": 492686,
+    "api_call_count": 582
+  }
+}
