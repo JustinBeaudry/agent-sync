@@ -54,6 +54,13 @@ func (c InitConfig) Validate() error {
 	if c.Floating && c.Commit != "" {
 		return errors.New("wizard: --floating and a pinned commit are mutually exclusive")
 	}
+	// A floating local_path is rejected up front because sync cannot resolve
+	// a moving local HEAD (ErrFloatingLocalUnsupported). Failing here keeps
+	// init from writing a manifest sync would immediately refuse — a local
+	// path must be pinned to a commit.
+	if hasLocal && c.Floating {
+		return errors.New("wizard: a local path must be pinned to a commit; --floating is not supported for local_path")
+	}
 	return nil
 }
 

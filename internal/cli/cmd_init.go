@@ -42,8 +42,16 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				return err
 			}
 
+			// The destination directory comes from --dir, falling back to the
+			// global --workspace flag, so `aienvs --workspace X init ...` writes
+			// to X.
+			destDir := dir
+			if destDir == "" {
+				destDir = rc.Flags.Workspace
+			}
+
 			cfg := wizard.InitConfig{
-				Dir:       dir,
+				Dir:       destDir,
 				SourceURL: source,
 				LocalPath: localPath,
 				Ref:       ref,
@@ -65,19 +73,21 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 					return errors.New("init: aborted")
 				}
 				cfg = wcfg
-				cfg.Dir = dir
+				cfg.Dir = destDir
 				cfg.Floating = floating
 			} else {
-				// Non-interactive (or flags supplied): require a source.
-				if err := requireFlag(rc.Access.NonInteractive, source != "" || localPath != "", "--source", "canonical repo URL or local path"); err != nil {
+				// Non-interactive (or flags supplied): require a source. Name
+				// both flags — init accepts either --source or --local-path.
+				if err := requireFlag(rc.Access.NonInteractive, source != "" || localPath != "", "--source/--local-path", "canonical repo URL or local path"); err != nil {
 					return err
 				}
 			}
 
 			// Pin-at-init (invariant #4): resolve the ref to a SHA unless
-			// floating. Local paths and already-pinned configs are left as-is;
-			// a URL with a ref resolves over the network.
-			if err := resolvePin(cmd.Context(), &cfg); err != nil {
+			// floating. A URL resolves over the network; a local path resolves
+			// against the local repo (no network). Already-pinned configs are
+			// left as-is.
+			if err := resolvePin(cmd.Context(), &cfg, rc.Flags.Offline); err != nil {
 				return fmt.Errorf("init: %w", err)
 			}
 
@@ -86,8 +96,12 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 			}
 
 			target := manifestPathFor(cfg.Dir)
-			if _, err := os.Stat(target); err == nil {
+			if _, statErr := os.Stat(target); statErr == nil {
 				return fmt.Errorf("init: %s already exists (refusing to overwrite)", target)
+			} else if !errors.Is(statErr, os.ErrNotExist) {
+				// A non-"not found" stat error (permission, bad path) is fatal —
+				// proceeding would surface a less clear error later.
+				return fmt.Errorf("init: cannot check %s: %w", target, statErr)
 			}
 			data, err := cfg.ManifestYAML()
 			if err != nil {
@@ -96,9 +110,12 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 			if err := manifest.WriteFile(target, data); err != nil {
 				return fmt.Errorf("init: write manifest: %w", err)
 			}
-			// Confirm the written manifest re-loads cleanly.
+			// Confirm the written manifest re-loads cleanly; if it doesn't,
+			// remove it (best-effort) so a broken .aienv.yaml is never left
+			// stranding the user.
 			if _, err := manifest.LoadFile(target, manifest.LoadOptions{}); err != nil {
-				return fmt.Errorf("init: wrote an invalid manifest: %w", err)
+				_ = os.Remove(target)
+				return fmt.Errorf("init: wrote an invalid manifest (removed): %w", err)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "wrote %s\n", target)
 			return nil
@@ -115,18 +132,36 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 	return cmd
 }
 
-// resolvePin fills cfg.Commit when pinning is required. For a URL with a
-// ref, it resolves the ref to a SHA over the network. Local paths are not
-// network-resolved here (sync handles a pinned local path; floating local
-// is rejected downstream).
-func resolvePin(ctx context.Context, cfg *wizard.InitConfig) error {
+// resolvePin fills cfg.Commit when pinning is required:
+//   - A local path resolves its ref/HEAD against the local repo (no
+//     network), so it works offline and the wizard can pin a local source.
+//   - A URL resolves its ref to a SHA over the network; this is refused
+//     under --offline, since a remote lookup cannot run offline.
+//
+// Already-pinned (cfg.Commit set) and floating configs are left untouched.
+func resolvePin(ctx context.Context, cfg *wizard.InitConfig, offline bool) error {
 	if cfg.Floating || cfg.Commit != "" {
 		return nil
 	}
-	if cfg.SourceURL == "" {
-		// Local path with no commit: leave unpinned; Validate / sync will
-		// guide the user (floating local is unsupported).
+
+	if cfg.LocalPath != "" {
+		abs, err := filepath.Abs(cfg.LocalPath)
+		if err != nil {
+			return fmt.Errorf("resolve local path %q: %w", cfg.LocalPath, err)
+		}
+		sha, err := git.ResolveLocalRef(ctx, abs, cfg.Ref)
+		if err != nil {
+			return fmt.Errorf("resolve local ref: %w", err)
+		}
+		cfg.Commit = sha
 		return nil
+	}
+
+	if cfg.SourceURL == "" {
+		return nil
+	}
+	if offline {
+		return fmt.Errorf("cannot resolve a remote ref under --offline; pass --commit to pin or --floating to skip pinning")
 	}
 	canonical, err := cache.Canonicalize(cfg.SourceURL)
 	if err != nil {

@@ -3,6 +3,7 @@ package wizard
 import (
 	"context"
 	"io"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -10,6 +11,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/aienvs/aienvs/internal/tui"
+)
+
+// schemeRE matches a URL scheme prefix (https://, ssh://, git://, file://).
+// winDriveRE matches a Windows drive-letter path (C:\ or C:/).
+var (
+	schemeRE   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*://`)
+	winDriveRE = regexp.MustCompile(`^[a-zA-Z]:[\\/]`)
 )
 
 // Run drives the interactive init wizard and returns the collected
@@ -234,18 +242,37 @@ func (m *initModel) sourceDisplay() string {
 }
 
 // looksLikeLocalPath reports whether s is a filesystem path rather than a
-// git URL. Absolute paths and ./~ prefixes are local; scheme-bearing and
-// scp-style (host:path) strings are URLs.
+// git URL. A string is a URL only if it carries a scheme (foo://) or is
+// scp-style (user@host:path); everything else — POSIX absolute/relative
+// paths, bare names, and Windows drive paths (C:\repo) — is treated as a
+// local path. The default is "local", because a git remote always has a
+// recognizable scheme or scp shape, whereas local paths take many forms.
 func looksLikeLocalPath(s string) bool {
-	if strings.HasPrefix(s, "/") || strings.HasPrefix(s, "./") || strings.HasPrefix(s, "~") || strings.HasPrefix(s, "../") {
-		return true
-	}
-	if strings.Contains(s, "://") {
+	s = strings.TrimSpace(s)
+	if s == "" {
 		return false
 	}
-	// scp-style git@host:path or host:path
+	// Scheme-bearing URL: https://, ssh://, git://, file://, etc.
+	if schemeRE.MatchString(s) {
+		return false
+	}
+	// scp-style remote: user@host:path (an '@' before the first ':').
+	if at := strings.IndexByte(s, '@'); at >= 0 {
+		if colon := strings.IndexByte(s, ':'); colon > at {
+			return false
+		}
+	}
+	// Windows drive path (C:\ or C:/) is local, even though it contains ':'.
+	if winDriveRE.MatchString(s) {
+		return true
+	}
+	// A bare "host:path" with no '@' and no drive letter is ambiguous; treat
+	// a single-letter prefix before ':' as a Windows drive (handled above)
+	// and anything else with a ':' as an scp-style host:path remote.
 	if strings.Contains(s, ":") {
 		return false
 	}
-	return false
+	// No scheme, no scp shape, no ambiguous colon → a local path
+	// (absolute, ./, ../, ~, or a bare relative name like "repo/sub").
+	return true
 }
