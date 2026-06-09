@@ -137,12 +137,13 @@ func NewRootCommand(deps RootDeps) *cobra.Command {
 	pf.BoolVar(&flags.NonInteractive, "non-interactive", false, "never prompt; fail fast on a missing required value")
 	pf.Bool("yes", false, "alias for --non-interactive")
 
-	// Mount subcommands. Additional subcommands (hooks, watch) mount here
-	// as their units land.
+	// Mount subcommands.
 	root.AddCommand(newInitCommand(deps))
 	root.AddCommand(newSyncCommand(deps))
 	root.AddCommand(newStatusCommand())
 	root.AddCommand(newValidateCommand(deps))
+	root.AddCommand(newHooksCommand(deps))
+	root.AddCommand(newWatchCommand(deps))
 	root.AddCommand(NewTrustCommand(TrustDeps{
 		In:  deps.in(),
 		Out: deps.out(),
