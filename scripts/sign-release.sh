@@ -11,6 +11,11 @@
 # Verify a download with:  minisign -Vm checksums.txt -P <public key>
 set -eu
 
+if [ "$#" -lt 2 ]; then
+	echo "Usage: $0 <artifact> <signature>" >&2
+	exit 1
+fi
+
 artifact="$1"
 signature="$2"
 
@@ -19,6 +24,9 @@ if [ -z "${MINISIGN_KEY:-}" ]; then
 	exit 0
 fi
 
+# Restrict the key tempfile to the owner. mktemp already creates 0600 files,
+# but umask 077 is cheap defense-in-depth for the unencrypted signing key.
+umask 077
 key="$(mktemp)"
 trap 'rm -f "$key"' EXIT
 printf '%s' "$MINISIGN_KEY" >"$key"
