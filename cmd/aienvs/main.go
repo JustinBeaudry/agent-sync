@@ -8,8 +8,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
+
+	"github.com/charmbracelet/fang"
 
 	"github.com/aienvs/aienvs/internal/cli"
 )
@@ -25,14 +26,12 @@ func run(args []string) int {
 	root := cli.NewRootCommand(cli.RootDeps{Version: version})
 	root.SetArgs(args)
 
-	// Plain cobra execution. Fang styling (KTD-8) is applied here once the
-	// charm dependencies land with the TUI units; the command tree is fully
-	// functional without it.
-	err := root.ExecuteContext(context.Background())
+	// Fang wraps the cobra root for styled help/errors/man/completions
+	// (KTD-8). It prints the error itself (the root sets SilenceErrors); we
+	// translate it to a process exit code via the documented exit-code
+	// carriers (trust, adapter, missing-flag, report verdict).
+	err := fang.Execute(context.Background(), root)
 	if err != nil {
-		// Root sets SilenceErrors, so surface the error here and map it to a
-		// process exit code via the documented exit-code carriers.
-		_, _ = fmt.Fprintln(os.Stderr, "aienvs:", err)
 		return cli.MapExit(err)
 	}
 	return 0
