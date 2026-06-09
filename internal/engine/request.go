@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"io"
 	"log/slog"
 	"time"
 
@@ -106,9 +107,8 @@ func (o Options) logger() *slog.Logger {
 	if o.Logger != nil {
 		return o.Logger
 	}
-	return slog.New(slog.NewTextHandler(discard{}, &slog.HandlerOptions{Level: slog.LevelError}))
+	// Quiet by default: a library should not write to stderr unless the
+	// caller (the CLI layer) injects a logger. Per AGENTS.md, when logs
+	// do flow they go to stderr — that is the injected logger's job.
+	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 }
-
-type discard struct{}
-
-func (discard) Write(p []byte) (int, error) { return len(p), nil }

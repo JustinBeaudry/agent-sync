@@ -85,6 +85,13 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 	return change
 }
 
+// sortedStrings returns a sorted copy of in.
+func sortedStrings(in []string) []string {
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+	return out
+}
+
 // readHash reads the file at relPath through the root and returns its
 // sha256 hex, or ("", false) if it cannot be read (absent/irregular).
 func readHash(root *fsroot.Root, relPath string) (string, bool) {

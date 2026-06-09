@@ -187,6 +187,15 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	}
 	bySubdir := map[string]*subdirWork{}
 	var toolOwned []contract.OpWriteToolOwned
+	// fileOutputs are write ops whose path is exactly an owned-output path
+	// (e.g. the .aienvs-managed sidecar): a single managed file, not a
+	// directory tree. They are written atomically via StagedWrite, never
+	// staged-and-swapped as a directory (which would nest the file inside a
+	// like-named dir).
+	var fileOutputs []contract.OpWriteFile
+	// fileType marks owned-output paths that name a single file rather than
+	// a subdir tree, so the directory swap loop skips them.
+	fileType := map[string]bool{}
 	newEntries := map[string]ledger.Entry{}
 
 	for _, op := range out.ops {
@@ -196,15 +205,21 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 			if pre == "" {
 				return statusResult{}, fmt.Errorf("engine: write_file %q outside any owned subdir", o.Path)
 			}
+			h := sha256Hex(o.Content)
+			bumpChanged(o.Path, h)
+			newEntries[o.Path] = ledger.Entry{Path: o.Path, SHA256: h, Size: int64(len(o.Content)), EmittedAt: now}
+			if o.Path == pre {
+				// Single-file owned output.
+				fileOutputs = append(fileOutputs, o)
+				fileType[pre] = true
+				continue
+			}
 			w := bySubdir[pre]
 			if w == nil {
 				w = &subdirWork{}
 				bySubdir[pre] = w
 			}
 			w.writes = append(w.writes, o)
-			h := sha256Hex(o.Content)
-			bumpChanged(o.Path, h)
-			newEntries[o.Path] = ledger.Entry{Path: o.Path, SHA256: h, Size: int64(len(o.Content)), EmittedAt: now}
 		case contract.OpMkdir:
 			pre := ownerOf(out.ownedPrefixes, o.Path)
 			if pre == "" {
@@ -228,23 +243,58 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	// An owned subdir is swapped when it has ops this run OR previously
 	// held managed entries (so removed files vanish atomically). Subdirs
 	// that are empty in both states are skipped to avoid spurious dirs.
+	// A prior single-file output (ledger entry whose path equals an owned
+	// output exactly) is also file-type, so its removal is handled by
+	// orphan deletion rather than a directory swap.
 	oldHadUnder := map[string]bool{}
 	for _, e := range oldLedger.Entries {
 		if pre := ownerOf(out.ownedPrefixes, e.Path); pre != "" {
 			oldHadUnder[pre] = true
+			if e.Path == pre {
+				fileType[pre] = true
+			}
 		}
 	}
 
-	// Stage + swap each relevant owned subdir. Order is sorted for
-	// determinism.
+	// Single-file owned outputs: write atomically in place. StagedWrite is
+	// itself temp-write + fsync + rename, so no directory swap is needed.
+	for _, fo := range fileOutputs {
+		if mkErr := root.Inner().MkdirAll(path.Dir(fo.Path), 0o755); mkErr != nil {
+			return statusResult{}, fmt.Errorf("engine: mkdir parent of %s: %w", fo.Path, mkErr)
+		}
+		mode := fo.Mode
+		if mode == 0 {
+			mode = 0o644
+		}
+		if werr := root.StagedWrite(fo.Path, fo.Content, fsModeOf(mode)); werr != nil {
+			return statusResult{}, fmt.Errorf("engine: write file output %s: %w", fo.Path, werr)
+		}
+	}
+
+	// Stage + swap each relevant owned subdir (directory-tree outputs).
+	// Order is sorted for determinism.
 	subdirs := append([]string(nil), out.ownedPrefixes...)
 	sort.Strings(subdirs)
+	recovered := map[string]bool{}
 	for _, pre := range subdirs {
+		if fileType[pre] {
+			continue
+		}
 		w := bySubdir[pre]
 		if w == nil && !oldHadUnder[pre] {
 			continue
 		}
 		parentRel := path.Dir(pre)
+		// Recovery is keyed on the staging parent, which is nested under
+		// each prefix's parent — a top-level Recover(".") never sees it.
+		// Drive any half-finished swap for this parent to a clean state
+		// before re-staging (AGENTS invariant #6).
+		if !recovered[parentRel] {
+			if _, rerr := syncpkg.Recover(root, parentRel); rerr != nil {
+				return statusResult{}, fmt.Errorf("engine: recover %s: %w", parentRel, rerr)
+			}
+			recovered[parentRel] = true
+		}
 		leaf := path.Base(pre)
 		stagingLeafRel, serr := syncpkg.Stage(root, parentRel, leaf, gen)
 		if serr != nil {
@@ -257,13 +307,20 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 				if rel == "" {
 					continue
 				}
-				if mkErr := root.Inner().MkdirAll(path.Join(stagingLeafRel, rel), 0o755); mkErr != nil {
+				dst := path.Join(stagingLeafRel, rel)
+				if !within(stagingLeafRel, dst) {
+					return statusResult{}, fmt.Errorf("engine: mkdir %q escapes owned prefix %q", m.Path, pre)
+				}
+				if mkErr := root.Inner().MkdirAll(dst, 0o755); mkErr != nil {
 					return statusResult{}, fmt.Errorf("engine: stage mkdir %s: %w", rel, mkErr)
 				}
 			}
 			for _, wf := range w.writes {
 				rel := strings.TrimPrefix(wf.Path, pre+"/")
 				dst := path.Join(stagingLeafRel, rel)
+				if !within(stagingLeafRel, dst) {
+					return statusResult{}, fmt.Errorf("engine: write_file %q escapes owned prefix %q", wf.Path, pre)
+				}
 				if mkErr := root.Inner().MkdirAll(path.Dir(dst), 0o755); mkErr != nil {
 					return statusResult{}, fmt.Errorf("engine: stage parent %s: %w", dst, mkErr)
 				}
@@ -295,10 +352,10 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 		if regErr != nil {
 			return statusResult{}, fmt.Errorf("engine: file lock registry: %w", regErr)
 		}
+		holder := "engine:" + target
 		for _, o := range toolOwned {
 			entry := merge.MergeEntry{Kind: adapterkit.ToolOwnedKind(o.Kind), Locator: o.Locator, Content: o.Content}
-			absLockPath := path.Join(req.WorkspacePath, o.Path)
-			sliceHash, _, merr := merge.ApplyToFile(ctx, root, reg, o.Path, entry, absLockPath)
+			sliceHash, _, merr := merge.ApplyToFile(ctx, root, reg, o.Path, entry, holder)
 			if merr != nil {
 				return statusResult{}, fmt.Errorf("engine: merge %s: %w", o.Path, merr)
 			}
@@ -375,4 +432,15 @@ func commitOrPlaceholder(c string) string {
 		return "0000000000000000000000000000000000000000"
 	}
 	return c
+}
+
+// within reports whether target (a slash path) is lexically contained
+// within baseRel after cleaning — a defense against adapter op paths
+// containing ".." that path.Join would resolve outside the staged
+// prefix. The fsroot layer blocks root escape; this blocks in-root
+// prefix escape into another adapter's territory or user files.
+func within(baseRel, target string) bool {
+	b := path.Clean(baseRel)
+	t := path.Clean(target)
+	return t == b || strings.HasPrefix(t, b+"/")
 }

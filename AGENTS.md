@@ -79,5 +79,7 @@ These are non-negotiable; violating them breaks v1:
 - [ ] If you changed public behavior: updated docs/ and CHANGELOG (once
       introduced).
 - [ ] If you changed the protocol or adapter contract: bumped the version
-      per the compatibility policy in unit 8.
+      per the compatibility policy in unit 8, OR documented the change as
+      additive (no new required fields, `omitempty`, backward-compat test
+      present) under the "freeze the wire frame, grow capabilities" policy.
 - [ ] If you changed the plan's invariants: updated the plan first.
