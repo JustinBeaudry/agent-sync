@@ -4,15 +4,14 @@
 // single Git-backed manifest. See the repository README and
 // docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md for the
 // architecture.
-//
-// This file is an intentional stub until unit 16 (cobra + fang wiring)
-// lands. It exists now so every later unit can be wired through `go run`
-// and so the Go module has a buildable main package.
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+
+	"github.com/aienvs/aienvs/internal/cli"
 )
 
 // version is overwritten at build time via -ldflags.
@@ -23,11 +22,18 @@ func main() {
 }
 
 func run(args []string) int {
-	if len(args) == 1 && (args[0] == "--version" || args[0] == "-v") {
-		_, _ = fmt.Fprintln(os.Stdout, version)
-		return 0
+	root := cli.NewRootCommand(cli.RootDeps{Version: version})
+	root.SetArgs(args)
+
+	// Plain cobra execution. Fang styling (KTD-8) is applied here once the
+	// charm dependencies land with the TUI units; the command tree is fully
+	// functional without it.
+	err := root.ExecuteContext(context.Background())
+	if err != nil {
+		// Root sets SilenceErrors, so surface the error here and map it to a
+		// process exit code via the documented exit-code carriers.
+		_, _ = fmt.Fprintln(os.Stderr, "aienvs:", err)
+		return cli.MapExit(err)
 	}
-	_, _ = fmt.Fprintln(os.Stderr, "aienvs: CLI surface not yet implemented (unit 16).")
-	_, _ = fmt.Fprintln(os.Stderr, "       See docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md")
-	return 2
+	return 0
 }
