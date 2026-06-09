@@ -1,0 +1,51 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "80ae398ffe2a",
+  "session_id": "d1268886-7773-4f15-8479-915fc89ebabc",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-09T16:55:50.531689Z",
+  "branch": "chore/production-hardening",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-06-09-001-test-coverage-floor-80-plan.md",
+    "internal/validate/validate_test.go",
+    "conformance/echo/emit_test.go",
+    "cmd/agent-sync/main_test.go",
+    "pkg/adapterkit/op_roundtrip_test.go",
+    "internal/adapter/conformance/assertions_match_test.go",
+    "internal/engine/irwire_skill_test.go",
+    "internal/cli/cmd_watch_test.go",
+    "internal/trust/store_extra_test.go",
+    "internal/cli/cmd_init_resolvepin_test.go",
+    "internal/adapter/manifest_file_test.go",
+    "internal/engine/readhash_test.go",
+    "pkg/adapterkit/exiterror_test.go",
+    "pkg/adapterkit/server.go",
+    "internal/watch/watch_extra_test.go",
+    "internal/fsroot/stat_test.go",
+    "internal/fsroot/samefs_internal_test.go",
+    "internal/adapter/classify_test.go",
+    ".github/workflows/ci.yml",
+    "CHANGELOG.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c6e453ff3ae1",
+  "checkpoint_transcript_start": 221,
+  "transcript_lines_at_start": 221,
+  "token_usage": {
+    "input_tokens": 3498,
+    "cache_creation_tokens": 162290,
+    "cache_read_tokens": 18202881,
+    "output_tokens": 75921,
+    "api_call_count": 76
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-09T16:55:50.120821Z",
+    "agent_lines": 1464,
+    "human_added": 115,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1579,
+    "agent_percentage": 92.71690943635213
+  }
+}
