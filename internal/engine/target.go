@@ -11,14 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/internal/adapter/contract"
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ledger"
-	"github.com/aienvs/aienvs/internal/locks"
-	"github.com/aienvs/aienvs/internal/merge"
-	syncpkg "github.com/aienvs/aienvs/internal/sync"
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ledger"
+	"github.com/agent-sync/agent-sync/internal/locks"
+	"github.com/agent-sync/agent-sync/internal/merge"
+	syncpkg "github.com/agent-sync/agent-sync/internal/sync"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 // genTimestampFormat is a fixed-width, lexically-sortable instant used

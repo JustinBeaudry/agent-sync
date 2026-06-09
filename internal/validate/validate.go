@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/aienvs/aienvs/internal/engine"
+	"github.com/agent-sync/agent-sync/internal/engine"
 )
 
-// Exit codes for `aienvs validate`. Operational errors (2+) are produced
+// Exit codes for `agent-sync validate`. Operational errors (2+) are produced
 // by the command layer, not here.
 const (
 	ExitNoDrift = 0

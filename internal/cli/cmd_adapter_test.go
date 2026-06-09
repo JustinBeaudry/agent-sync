@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter/conformance"
+	"github.com/agent-sync/agent-sync/internal/adapter/conformance"
 )
 
 type adapterTestEnv struct {

@@ -1,5 +1,5 @@
 // Package ledger implements the per-target emitted-path ledger that
-// records what aienvs wrote for a target, so a later sync can detect
+// records what agent-sync wrote for a target, so a later sync can detect
 // drift, remove orphans, and merge tool-owned slices surgically
 // without re-deriving ownership from the filesystem.
 //

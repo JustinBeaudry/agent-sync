@@ -27,7 +27,7 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 var nodeIDPattern = regexp.MustCompile(`\A[a-z0-9][a-z0-9_-]{0,63}\z`)

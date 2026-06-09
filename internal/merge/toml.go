@@ -9,14 +9,14 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
-// mergeTOML upserts or removes the aienvs table at the entry's
+// mergeTOML upserts or removes the agent-sync table at the entry's
 // toml-path locator inside existing.
 //
 // go-toml/v2's decode→encode does NOT preserve user comments or
 // formatting (verified by spike: it drops `#` comments and rewrites
 // quoting), so a full re-encode would destroy user content. Instead
 // this is a STRING-AWARE LINE-SPLICE: the user's bytes are never
-// re-rendered; only the aienvs table's line span is replaced/inserted/
+// re-rendered; only the agent-sync table's line span is replaced/inserted/
 // removed. The span locator tracks TOML multiline-string state so a
 // header-shaped line inside a user's """...""" / ”'...”' string is
 // never mistaken for a table header.
@@ -47,7 +47,7 @@ func mergeTOML(existing []byte, e MergeEntry) (result []byte, sliceHash string, 
 	header := "[mcp_servers." + aienvsKeyPrefix + id + "]"
 	spans := tomlTableSpans(work)
 
-	// Reject a pre-existing duplicate aienvs table.
+	// Reject a pre-existing duplicate agent-sync table.
 	matches := 0
 	for _, s := range spans {
 		if s.header == header {
@@ -70,10 +70,10 @@ func mergeTOML(existing []byte, e MergeEntry) (result []byte, sliceHash string, 
 		return joinLines(lines), "", nil
 	}
 
-	// Upsert: render and validate the aienvs table.
+	// Upsert: render and validate the agent-sync table.
 	rendered := renderAienvsTable(header, e.Content)
 	if verr := validateTOMLFragment(rendered); verr != nil {
-		return nil, "", fmt.Errorf("%w: aienvs table body is not valid TOML: %s", ErrMalformedToolOwnedFile, verr.Error())
+		return nil, "", fmt.Errorf("%w: agent-sync table body is not valid TOML: %s", ErrMalformedToolOwnedFile, verr.Error())
 	}
 	renderedLines := splitLinesKeepEnding([]byte(rendered))
 
@@ -164,7 +164,7 @@ func renderAienvsTable(header string, body []byte) string {
 	var b strings.Builder
 	b.WriteString(header)
 	b.WriteString("\n")
-	b.WriteString("# Managed by aienvs — do not edit. Regenerate: aienvs sync\n")
+	b.WriteString("# Managed by agent-sync — do not edit. Regenerate: agent-sync sync\n")
 	bs := string(body)
 	b.WriteString(bs)
 	if !strings.HasSuffix(bs, "\n") {

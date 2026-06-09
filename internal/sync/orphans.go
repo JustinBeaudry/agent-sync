@@ -6,8 +6,8 @@ import (
 	"io/fs"
 	"sort"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ledger"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ledger"
 )
 
 // Orphans returns the paths present in the old ledger but absent from

@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/aienvs/aienvs/internal/tui"
+	"github.com/agent-sync/agent-sync/internal/tui"
 )
 
 // schemeRE matches a URL scheme prefix (https://, ssh://, git://, file://).
@@ -196,7 +196,7 @@ func (m *initModel) View() string {
 		return m.theme.Help.Render("aborted") + "\n"
 	}
 	var b strings.Builder
-	b.WriteString(m.theme.Title.Render("aienvs init") + "\n\n")
+	b.WriteString(m.theme.Title.Render("agent-sync init") + "\n\n")
 	switch m.phase {
 	case phaseSource:
 		b.WriteString(m.theme.Prompt.Render("Canonical source (URL or local path):") + "\n")

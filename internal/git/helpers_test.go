@@ -34,9 +34,9 @@ func mustGit(t *testing.T, dir string, args ...string) string {
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=aienvs-test",
-		"GIT_AUTHOR_EMAIL=test@aienvs.invalid",
+		"GIT_AUTHOR_EMAIL=test@agent-sync.invalid",
 		"GIT_COMMITTER_NAME=aienvs-test",
-		"GIT_COMMITTER_EMAIL=test@aienvs.invalid",
+		"GIT_COMMITTER_EMAIL=test@agent-sync.invalid",
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_TERMINAL_PROMPT=0",
@@ -57,7 +57,7 @@ func makeRepo(t *testing.T) testRepo {
 	dir := t.TempDir()
 
 	mustGit(t, dir, "init", "--initial-branch=main", "--quiet")
-	mustGit(t, dir, "config", "user.email", "test@aienvs.invalid")
+	mustGit(t, dir, "config", "user.email", "test@agent-sync.invalid")
 	mustGit(t, dir, "config", "user.name", "aienvs-test")
 	// Ensure the post-init working tree is clean of `init.defaultBranch`
 	// warnings so CombinedOutput stays quiet.

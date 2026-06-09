@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 // InprocTransport runs a BundledAdapter in a goroutine, plumbing its

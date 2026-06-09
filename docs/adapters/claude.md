@@ -1,5 +1,5 @@
 ---
-title: aienvs `claude` adapter — concept→destination reference
+title: agent-sync `claude` adapter — concept→destination reference
 status: active
 date: 2026-04-27
 adapter: claude
@@ -75,7 +75,7 @@ be updated together.
 ## Why no AGENTS.md?
 
 Claude Code does not read project-level `AGENTS.md` as of 2026-04.
-Other agents (Cursor, Codex, Pi) do. The aienvs convention is that
+Other agents (Cursor, Codex, Pi) do. The agent-sync convention is that
 the `agents-md` IR kind targeted at `claude` writes a managed
 section into **`CLAUDE.md`**, not `AGENTS.md`, so the content is
 visible to Claude Code without writing to a file Claude Code
@@ -113,11 +113,11 @@ against the IR (full frontmatter exposure is a v1.x change).
 
 ## Exit path
 
-To unbind aienvs from a workspace and remove every file the `claude`
+To unbind agent-sync from a workspace and remove every file the `claude`
 adapter has emitted:
 
 ```bash
-aienvs unmanage claude
+agent-sync unmanage claude
 ```
 
 The command (Unit 24 of the master plan, not yet shipped) uses the

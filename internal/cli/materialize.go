@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/cache"
-	"github.com/aienvs/aienvs/internal/git"
-	"github.com/aienvs/aienvs/internal/ir"
-	"github.com/aienvs/aienvs/internal/manifest"
-	"github.com/aienvs/aienvs/internal/trust"
+	"github.com/agent-sync/agent-sync/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/git"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/trust"
 )
 
 // ErrFloatingLocalUnsupported is returned when a local_path canonical

@@ -74,8 +74,8 @@ func (p *Prompter) RenderRevokedBanner(url string) error {
 	p.write(p.color(colorRed, "@     WARNING: REVOKED TRUST ANCHOR REAPPEARED!           @\n"))
 	p.write(p.color(colorRed, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"))
 	p.write(fmt.Sprintf("The source %s was previously revoked.\n", url))
-	p.write("aienvs refuses to proceed until you explicitly re-enable it.\n")
-	p.write(fmt.Sprintf("\nRemediation:\n  aienvs trust reset %s\n", url))
+	p.write("agent-sync refuses to proceed until you explicitly re-enable it.\n")
+	p.write(fmt.Sprintf("\nRemediation:\n  agent-sync trust reset %s\n", url))
 	return fmt.Errorf("%w: %s", ErrRevokedTrustAnchor, url)
 }
 

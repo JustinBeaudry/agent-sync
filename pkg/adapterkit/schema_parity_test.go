@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	contractschema "github.com/aienvs/aienvs/internal/adapter/contract"
+	contractschema "github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 func TestSchemaParity_SamplesValidateAgainstContractSchemas(t *testing.T) {

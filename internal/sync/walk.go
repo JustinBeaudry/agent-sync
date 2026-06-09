@@ -6,7 +6,7 @@ import (
 	"io"
 	"io/fs"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 // walkFiles returns the workspace-relative paths of every regular file

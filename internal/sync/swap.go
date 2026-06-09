@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 // oldSuffix is appended to the live prefix when it is moved aside in

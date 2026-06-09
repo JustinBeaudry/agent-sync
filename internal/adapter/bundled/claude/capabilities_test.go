@@ -5,10 +5,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/internal/capmatrix"
-	"github.com/aienvs/aienvs/internal/ir"
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/internal/capmatrix"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 func TestBundled_ManifestShape(t *testing.T) {

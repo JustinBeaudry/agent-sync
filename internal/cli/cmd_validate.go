@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aienvs/aienvs/internal/engine"
-	"github.com/aienvs/aienvs/internal/validate"
+	"github.com/agent-sync/agent-sync/internal/engine"
+	"github.com/agent-sync/agent-sync/internal/validate"
 )
 
 func newValidateCommand(deps RootDeps) *cobra.Command {

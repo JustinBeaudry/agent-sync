@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 func openRoot(t *testing.T) *fsroot.Root {

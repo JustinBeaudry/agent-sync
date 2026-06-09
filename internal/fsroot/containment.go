@@ -23,7 +23,7 @@ import (
 // This is defense-in-depth on top of [os.Root]'s own filtering: [os.Root]
 // already refuses to traverse reparse points that would escape the root.
 // DetectReparsePoint refuses to write *through* any reparse-point target
-// even when it stays within the root, because aienvs treats reparse-
+// even when it stays within the root, because agent-sync treats reparse-
 // point write targets as a protocol violation from the adapter.
 func (r *Root) DetectReparsePoint(relPath string) error {
 	if err := ValidateRelPath(relPath); err != nil {

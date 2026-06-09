@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 const (
@@ -16,7 +16,7 @@ const (
 	sectionIDPrefix    = "aienvs:"
 )
 
-// markerOpenBytes is the literal HTML-comment opener every aienvs
+// markerOpenBytes is the literal HTML-comment opener every agent-sync
 // section marker uses. Body content for an agents-md node is rejected
 // when it contains this byte sequence: a hostile body could otherwise
 // inject a fake end-marker followed by a fake begin-marker, splitting
@@ -89,7 +89,7 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 // own sections to the same AGENTS.md, and the per-external-file lock
 // plus multi-section merge (Units 12, 12a) serialize and combine them.
 //
-// The body is rejected when it contains the aienvs marker opener.
+// The body is rejected when it contains the agent-sync marker opener.
 // Without this guard a body containing `<!-- aienvs:end id=other -->`
 // could break out of its own section or forge another section
 // entirely, leaving the merged AGENTS.md with conflicting markers the
@@ -106,7 +106,7 @@ func emitAgentsMD(emitted *emittedOps, node irNode) error {
 	if bytes.Contains(body, markerOpenBytes) {
 		return &adapterkit.Error{
 			Code:    adapterkit.CodeInvalidParams,
-			Message: fmt.Sprintf("cursor: agents-md %q body contains aienvs marker syntax (%q); refusing to corrupt AGENTS.md", node.ID, string(markerOpenBytes)),
+			Message: fmt.Sprintf("cursor: agents-md %q body contains agent-sync marker syntax (%q); refusing to corrupt AGENTS.md", node.ID, string(markerOpenBytes)),
 		}
 	}
 	wrapped := wrapManagedSection(node.ID, body)

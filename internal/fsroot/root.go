@@ -10,7 +10,7 @@ import (
 )
 
 // Root is the aienvs-wrapped [os.Root] handle. It is the sole legitimate
-// way for aienvs code to touch paths inside a user workspace.
+// way for agent-sync code to touch paths inside a user workspace.
 //
 // A Root is safe for concurrent use insofar as [os.Root] is: reads and
 // writes may run in parallel, but the caller is responsible for
@@ -33,13 +33,13 @@ var (
 	ErrEscapesRoot = errors.New("path escapes fsroot containment")
 
 	// ErrCrossVolume is returned when a filesystem operation would cross
-	// a filesystem boundary that aienvs refuses to traverse — notably a
+	// a filesystem boundary that agent-sync refuses to traverse — notably a
 	// rename across filesystems. The authoritative signal is the kernel
 	// EXDEV / ERROR_NOT_SAME_DEVICE, not a statfs pre-flight.
 	ErrCrossVolume = errors.New("cross-filesystem operation refused")
 
 	// ErrIrregular is returned when a target is a reparse point, device
-	// file, socket, or other irregular filesystem object that aienvs
+	// file, socket, or other irregular filesystem object that agent-sync
 	// refuses to write through.
 	ErrIrregular = errors.New("target is an irregular filesystem object")
 
@@ -165,7 +165,7 @@ func ValidateRelPath(relPath string) error {
 }
 
 // translateErr maps raw os.Root containment errors into sentinel errors
-// the rest of aienvs can branch on. Anything we do not recognize passes
+// the rest of agent-sync can branch on. Anything we do not recognize passes
 // through unchanged so callers still see the underlying syscall detail.
 func translateErr(err error) error {
 	if err == nil {

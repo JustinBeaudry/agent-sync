@@ -1,7 +1,7 @@
-// Package workspace resolves and represents a single aienvs workspace —
+// Package workspace resolves and represents a single agent-sync workspace —
 // the directory anchored by a `.aienv.yaml` manifest.
 //
-// Every aienvs invocation operates on exactly one resolved workspace
+// Every agent-sync invocation operates on exactly one resolved workspace
 // (plan decision R1). Multi-workspace isolation (plan decision #22) is
 // enforced at the filesystem layer by fsroot: writes from this process
 // must stay inside Workspace.Root.
@@ -16,7 +16,7 @@ import (
 	"os"
 )
 
-// ManifestName is the literal filename aienvs looks for when walking up
+// ManifestName is the literal filename agent-sync looks for when walking up
 // from cwd. The suffix is singular by design — see docs/spec/manifest-v1.md.
 const ManifestName = ".aienv.yaml"
 

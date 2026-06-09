@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 // emitFixture loads an IR document from testdata/ir and runs the
@@ -81,13 +81,13 @@ func TestEmitRule_HappyPath(t *testing.T) {
 	}
 
 	ruleOp := findWriteFile(t, ops, ".cursor/rules/aienvs/no-fri.mdc")
-	if !strings.HasPrefix(string(ruleOp.Content), "<!-- Managed by aienvs") {
+	if !strings.HasPrefix(string(ruleOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("rule content missing managed header; got %q", ruleOp.Content)
 	}
 	if !strings.Contains(string(ruleOp.Content), "do not edit") {
 		t.Errorf("rule content missing 'do not edit' clause; got %q", ruleOp.Content)
 	}
-	if !strings.Contains(string(ruleOp.Content), "Regenerate: aienvs sync") {
+	if !strings.Contains(string(ruleOp.Content), "Regenerate: agent-sync sync") {
 		t.Errorf("rule content missing regenerate instruction; got %q", ruleOp.Content)
 	}
 	if !strings.Contains(string(ruleOp.Content), "No PRs on Friday.") {
@@ -95,7 +95,7 @@ func TestEmitRule_HappyPath(t *testing.T) {
 	}
 
 	readmeOp := findWriteFile(t, ops, ".cursor/rules/aienvs/README.md")
-	if !strings.Contains(string(readmeOp.Content), "aienvs unmanage cursor") {
+	if !strings.Contains(string(readmeOp.Content), "agent-sync unmanage cursor") {
 		t.Errorf("README content missing exit path; got %q", readmeOp.Content)
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 // TestExtractCookieFromResult_TopLevelOnly confirms MAINT-005: the

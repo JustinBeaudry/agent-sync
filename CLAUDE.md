@@ -1,11 +1,11 @@
 # CLAUDE.md
 
-Claude Code–specific overlay for contributors working on `aienvs`.
+Claude Code–specific overlay for contributors working on `agent-sync`.
 
 Primary guidance is in [`AGENTS.md`](AGENTS.md). Read it first. This file
 adds Claude-Code-specific expectations only.
 
-## When editing `aienvs` source from Claude Code
+## When editing `agent-sync` source from Claude Code
 
 - Respect the invariants in `AGENTS.md`. They are load-bearing.
 - Prefer small, reviewable commits scoped to one unit of the plan

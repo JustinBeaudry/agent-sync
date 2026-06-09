@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/git"
+	"github.com/agent-sync/agent-sync/internal/git"
 )
 
 // canonicalRepo is a populated canonical-repo fixture for decoder tests.
@@ -41,7 +41,7 @@ func makeCanonicalRepo(t *testing.T, files []canonicalFile) canonicalRepo {
 
 	dir := t.TempDir()
 	mustGit(t, dir, "init", "--initial-branch=main", "--quiet")
-	mustGit(t, dir, "config", "user.email", "test@aienvs.invalid")
+	mustGit(t, dir, "config", "user.email", "test@agent-sync.invalid")
 	mustGit(t, dir, "config", "user.name", "aienvs-test")
 	mustGit(t, dir, "config", "init.defaultBranch", "main")
 
@@ -85,9 +85,9 @@ func mustGit(t *testing.T, dir string, args ...string) string {
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=aienvs-test",
-		"GIT_AUTHOR_EMAIL=test@aienvs.invalid",
+		"GIT_AUTHOR_EMAIL=test@agent-sync.invalid",
 		"GIT_COMMITTER_NAME=aienvs-test",
-		"GIT_COMMITTER_EMAIL=test@aienvs.invalid",
+		"GIT_COMMITTER_EMAIL=test@agent-sync.invalid",
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_TERMINAL_PROMPT=0",

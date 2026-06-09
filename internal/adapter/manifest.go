@@ -22,7 +22,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 
-	"github.com/aienvs/aienvs/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 )
 
 // MaxAdapterManifestBytes caps the on-disk size of an adapter.yaml.
@@ -30,7 +30,7 @@ import (
 // is there to defend against pathological or hostile files.
 const MaxAdapterManifestBytes = 1 << 20
 
-// ContractVersionV1 is the only contract_version this build of aienvs
+// ContractVersionV1 is the only contract_version this build of agent-sync
 // recognizes. Future protocol versions land via Unit 8b under capability
 // negotiation; the wire form itself stays at aienvs/v1.
 const ContractVersionV1 = "aienvs/v1"

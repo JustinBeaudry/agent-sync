@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/cache"
 )
 
 // buildCacheLocation constructs a cache.Location whose Canonical field

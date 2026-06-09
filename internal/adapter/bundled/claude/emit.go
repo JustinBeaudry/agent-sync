@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/aienvs/aienvs/internal/ir"
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 // irNode is the wire-side shape of one IR node delivered via

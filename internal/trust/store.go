@@ -17,7 +17,7 @@ import (
 	"github.com/gofrs/flock"
 )
 
-// CompactThresholdBytes is the file size above which `aienvs trust compact`
+// CompactThresholdBytes is the file size above which `agent-sync trust compact`
 // suggests rotating. Compact() itself runs unconditionally; callers decide
 // when to invoke it.
 const CompactThresholdBytes int64 = 1 << 20 // 1 MiB
@@ -79,7 +79,7 @@ func (s *Store) Path() string {
 //   - This guarantee assumes a local POSIX filesystem (ext4/xfs/apfs/zfs)
 //     or NTFS. Network filesystems without close-to-open consistency —
 //     notably classic NFS without O_APPEND server-side enforcement — are
-//     out of scope; users running aienvs over such mounts can see
+//     out of scope; users running agent-sync over such mounts can see
 //     interleaved appends. The trust store is documented as a per-user
 //     local artifact, so this is acceptable.
 func (s *Store) Append(e LogEntry) error {

@@ -1,15 +1,15 @@
 ---
-title: "aienvs manifest schema (v1)"
+title: "agent-sync manifest schema (v1)"
 status: active
 date: 2026-04-21
 owner: internal/manifest
 ---
 
-# aienvs manifest schema — v1
+# agent-sync manifest schema — v1
 
 The manifest is the single file that binds a workspace directory to its
 canonical agent-config source. Exactly one manifest lives per workspace;
-running `aienvs sync` resolves the workspace by walking up from cwd (or
+running `agent-sync sync` resolves the workspace by walking up from cwd (or
 honoring `--workspace <path>`) and reading the file at `<root>/.aienv.yaml`.
 
 This document is **authoritative** for the v1 schema. `internal/manifest`
@@ -19,7 +19,7 @@ is the only package that may parse or write `.aienv.yaml`.
 
 - Name: **`.aienv.yaml`** (literal, lowercase, singular).
 - Location: workspace root (the directory the user chose when running
-  `aienvs init`). Discovery semantics are in `internal/workspace`
+  `agent-sync init`). Discovery semantics are in `internal/workspace`
   (unit 3).
 
 ## Schema
@@ -36,7 +36,7 @@ canonical:
   url: https://github.com/example/agents-config.git  # exclusive with local_path
   # local_path: /absolute/path/to/a/working/clone     # exclusive with url
 
-  # Optional git ref (branch or tag). `aienvs init` resolves this to a
+  # Optional git ref (branch or tag). `agent-sync init` resolves this to a
   # SHA unless `--defer-resolve` is used.
   ref: main
 
@@ -127,7 +127,7 @@ Rules that are **deliberately** not enforced at load:
 
 Manifest schema version. v1 is the only accepted value. The loader
 defaults `version: 0` → `1` silently during the greenfield phase; once
-aienvs has shipped, this default will be removed and the field becomes
+agent-sync has shipped, this default will be removed and the field becomes
 strictly required.
 
 ### `canonical` (mapping, required)
@@ -136,17 +136,17 @@ Describes where the portable agent-config source lives.
 
 - `canonical.url` (string, xor `local_path`): Git URL.
 - `canonical.local_path` (string, xor `url`): absolute filesystem path
-  to a clone. Intended for air-gapped environments and aienvs
+  to a clone. Intended for air-gapped environments and agent-sync
   development itself.
 - `canonical.ref` (string, optional): symbolic git ref; only consumed
-  by `aienvs init` to resolve to `commit`.
+  by `agent-sync init` to resolve to `commit`.
 - `canonical.commit` (string, optional when `floating: true`): 40-char
   lowercase hex SHA. Pinning is the default.
 
 ### `trusted_sha` (string, optional)
 
 The per-project trust anchor. Lockfile-style: committed to the repo
-alongside `canonical.commit`. CI's `aienvs trust verify` fails closed if
+alongside `canonical.commit`. CI's `agent-sync trust verify` fails closed if
 this drifts from the resolved SHA. **Must** mirror `canonical.commit`
 exactly when both are set.
 
@@ -187,7 +187,7 @@ are reserved and will be added by Unit 5/6.
 ## Extension keys (`x-*`)
 
 Any top-level key whose name starts with `x-` is allowed by the
-loader's `AllowFieldPrefixes("x-")` configuration. aienvs core ignores
+loader's `AllowFieldPrefixes("x-")` configuration. agent-sync core ignores
 them. Third-party tooling (editor plugins, CI lint rules, workspace
 dashboards) can use the prefix to attach additional metadata without
 needing a core schema bump.
@@ -195,7 +195,7 @@ needing a core schema bump.
 ## Writing the manifest — `WriteResolvedSHA`
 
 `WriteResolvedSHA(orig []byte, commit, trustedSHA string) → []byte`
-is the only supported way for aienvs to mutate an existing manifest.
+is the only supported way for agent-sync to mutate an existing manifest.
 
 **Contract:**
 
@@ -212,13 +212,13 @@ is the only supported way for aienvs to mutate an existing manifest.
 5. Pass `""` for either argument to skip updating that key.
 
 `WriteTrustedSHA(orig, trustedSHA)` is a thin alias used by
-`aienvs trust pin`; it updates only `trusted_sha:`.
+`agent-sync trust pin`; it updates only `trusted_sha:`.
 
 `WriteFile(path, content)` writes the manifest through
 `internal/fsroot.StagedWrite` — atomic, containment-checked, crash-safe.
 
 ## Init template
 
-`aienvs init` emits a template that pre-declares the keys
+`agent-sync init` emits a template that pre-declares the keys
 `WriteResolvedSHA` expects. A minimal example lives at
 `testdata/manifest/valid-template-unresolved.yaml`.

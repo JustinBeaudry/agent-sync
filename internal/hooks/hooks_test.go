@@ -98,7 +98,7 @@ func TestInstall_AppendPreservesPredecessor(t *testing.T) {
 		t.Fatalf("Install --append: %v", err)
 	}
 	// The predecessor is preserved in the sidecar (run as a subprocess so
-	// its exit cannot skip aienvs), not inlined.
+	// its exit cannot skip agent-sync), not inlined.
 	sidecar, _ := os.ReadFile(hookPath + predecessorSuffix)
 	if !strings.Contains(string(sidecar), "echo predecessor") {
 		t.Errorf("predecessor sidecar missing the original hook:\n%s", sidecar)
@@ -109,7 +109,7 @@ func TestInstall_AppendPreservesPredecessor(t *testing.T) {
 		t.Error("wrapper does not invoke the predecessor sidecar")
 	}
 	if !strings.Contains(w, "sync --post-merge") {
-		t.Error("append wrapper missing aienvs sync")
+		t.Error("append wrapper missing agent-sync sync")
 	}
 	// Uninstall restores the predecessor to the hook path.
 	if _, err := Uninstall(repo); err != nil {
@@ -194,7 +194,7 @@ func TestUninstall_RemovesOnlyMarkedHooksAndRestoresBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A foreign post-checkout that aienvs also manages: simulate a foreign
+	// A foreign post-checkout that agent-sync also manages: simulate a foreign
 	// one to confirm uninstall leaves it alone.
 	foreignCheckout := filepath.Join(repo, ".git", "hooks", "post-checkout")
 	// Install wrote our marked post-checkout; replace it with a foreign one.

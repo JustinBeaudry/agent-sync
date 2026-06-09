@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aienvs/aienvs/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 )
 
 // SessionOptions configures an AdapterSession at construction. All

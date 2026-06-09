@@ -3,8 +3,8 @@ package cursor
 import (
 	"fmt"
 
-	"github.com/aienvs/aienvs/internal/ir"
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 // unsupportedNotes maps each unsupported IR kind to its user-facing

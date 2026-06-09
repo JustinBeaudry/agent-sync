@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 )
 
 const (
@@ -54,10 +54,10 @@ func TestWriteResolvedSHA_PreservesComments(t *testing.T) {
 	// Every head comment from the source must still be present after
 	// the surgical replace.
 	wantComments := []string{
-		"Project aienvs manifest",
+		"Project agent-sync manifest",
 		"Owned by: platform-eng@example.com",
 		"Canonical agent-config source",
-		"commit is filled by `aienvs init`",
+		"commit is filled by `agent-sync init`",
 		"Project trust anchor",
 		"primary adapter",
 	}

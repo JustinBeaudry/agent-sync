@@ -12,12 +12,12 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-// mergeJSON upserts or removes the aienvs entry at the entry's
+// mergeJSON upserts or removes the agent-sync entry at the entry's
 // JSON-pointer locator inside existing, preserving user keys, ordering,
 // and formatting. It strict-validates existing first; an unparseable
 // file or a non-object parent is ErrMalformedToolOwnedFile (we never
 // rewrite a file we cannot parse). Returns the merged bytes and the
-// SHA-256 of the rendered aienvs slice (empty on remove).
+// SHA-256 of the rendered agent-sync slice (empty on remove).
 func mergeJSON(existing []byte, e MergeEntry) (result []byte, sliceHash string, err error) {
 	if _, err := entryID(e); err != nil {
 		return nil, "", err
@@ -42,7 +42,7 @@ func mergeJSON(existing []byte, e MergeEntry) (result []byte, sliceHash string, 
 		if parent := gjson.GetBytes(base, parentPath); parent.Exists() && !parent.IsObject() {
 			return nil, "", fmt.Errorf("%w: %q is not a JSON object", ErrMalformedToolOwnedFile, parentPath)
 		}
-		// Reject a pre-existing duplicate of the aienvs key under the
+		// Reject a pre-existing duplicate of the agent-sync key under the
 		// parent (raw duplicate keys = ledger drift; JSON semantics make
 		// them degenerate so refuse rather than silently last-wins).
 		if dupCount(base, parentPath, lastSegment(path)) > 1 {

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	"github.com/aienvs/aienvs/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 )
 
 // makeFakeAdapterBinary creates a file named aienvs-adapter-<name> in

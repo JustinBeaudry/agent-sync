@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/adapter/contract"
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/adapter/contract"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 func caps(kinds map[string]contract.CapabilityLevel) contract.Capabilities {

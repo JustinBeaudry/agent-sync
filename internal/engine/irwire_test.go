@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
 func TestMarshalIR_MarkdownBodyEncodedAsJSONString(t *testing.T) {

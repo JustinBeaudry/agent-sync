@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aienvs/aienvs/internal/hooks"
-	"github.com/aienvs/aienvs/internal/workspace"
+	"github.com/agent-sync/agent-sync/internal/hooks"
+	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
 func newHooksCommand(deps RootDeps) *cobra.Command {
@@ -30,9 +30,9 @@ func newHooksInstallCommand(_ RootDeps) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install post-merge/post-checkout hooks that run `aienvs sync`",
+		Short: "Install post-merge/post-checkout hooks that run `agent-sync sync`",
 		Long: "Install git hooks (post-merge, post-checkout) that run " +
-			"`aienvs sync --post-merge` after pulls and checkouts. Requires " +
+			"`agent-sync sync --post-merge` after pulls and checkouts. Requires " +
 			"--install-hooks to proceed (hooks change git behavior, so the " +
 			"opt-in is explicit; this command never prompts).",
 		SilenceUsage:  true,
@@ -55,7 +55,7 @@ func newHooksInstallCommand(_ RootDeps) *cobra.Command {
 			}
 			self, err := os.Executable()
 			if err != nil {
-				return fmt.Errorf("hooks install: resolve aienvs path: %w", err)
+				return fmt.Errorf("hooks install: resolve agent-sync path: %w", err)
 			}
 			if abs, aerr := filepath.Abs(self); aerr == nil {
 				self = abs
@@ -83,7 +83,7 @@ func newHooksInstallCommand(_ RootDeps) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&installHooks, "install-hooks", false, "confirm installation of git hooks")
 	cmd.Flags().BoolVar(&replace, "replace", false, "back up and overwrite an existing foreign hook")
-	cmd.Flags().BoolVar(&appendHook, "append", false, "wrap an existing foreign hook (run it, then aienvs)")
+	cmd.Flags().BoolVar(&appendHook, "append", false, "wrap an existing foreign hook (run it, then agent-sync)")
 	return cmd
 }
 

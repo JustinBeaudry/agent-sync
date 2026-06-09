@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/cache"
 )
 
 func TestKey_Deterministic(t *testing.T) {

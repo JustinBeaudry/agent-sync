@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// gitWorkspace makes a temp dir that is both a git repo and an aienvs
+// gitWorkspace makes a temp dir that is both a git repo and an agent-sync
 // workspace (has .aienv.yaml), so workspace.Find resolves it.
 func gitWorkspace(t *testing.T) string {
 	t.Helper()

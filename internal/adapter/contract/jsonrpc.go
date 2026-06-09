@@ -259,7 +259,7 @@ type ErrorData struct {
 
 // errorWire is the on-the-wire shape of an Error. Kept distinct from
 // the Go-side Error so that Data can be elided when both ErrorClass
-// and Detail are zero — JSON-RPC clients that don't speak the aienvs
+// and Detail are zero — JSON-RPC clients that don't speak the agent-sync
 // extension see a vanilla error object.
 type errorWire struct {
 	Code    int             `json:"code"`

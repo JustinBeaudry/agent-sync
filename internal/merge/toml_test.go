@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 func tomlUpsert(id, body string) MergeEntry {
@@ -38,7 +38,7 @@ func TestMergeTOML_UpsertPreservesUserCommentsAndOrder(t *testing.T) {
 		t.Errorf("user content not preserved as a prefix:\n%s", out)
 	}
 	if !strings.Contains(string(out), "[mcp_servers.aienvs_foo]") {
-		t.Errorf("aienvs table not appended:\n%s", out)
+		t.Errorf("agent-sync table not appended:\n%s", out)
 	}
 	if !strings.Contains(string(out), "# user comment") || !strings.Contains(string(out), "# inline comment") {
 		t.Errorf("user comments dropped:\n%s", out)
@@ -77,7 +77,7 @@ func TestMergeTOML_NoOpUpsertIsByteIdentical(t *testing.T) {
 
 // TestMergeTOML_StringAwareLocator is the headline safety test: a user
 // table contains a multiline string whose body has a line that looks
-// like the aienvs table header. The locator must NOT treat it as a real
+// like the agent-sync table header. The locator must NOT treat it as a real
 // header (which would splice across the user table and eat bytes).
 func TestMergeTOML_StringAwareLocator(t *testing.T) {
 	t.Parallel()
@@ -131,9 +131,9 @@ func TestMergeTOML_Errors(t *testing.T) {
 	dup := "[mcp_servers.aienvs_foo]\ncommand = \"a\"\n\n[mcp_servers.aienvs_foo]\ncommand = \"b\"\n"
 	if _, _, err := mergeTOML([]byte(dup), tomlUpsert("foo", "command = \"node\"\n")); !errors.Is(err, ErrMalformedToolOwnedFile) {
 		// dup TOML may already fail to parse (duplicate table) — either way it must be ErrMalformedToolOwnedFile.
-		t.Errorf("duplicate aienvs table: err=%v want ErrMalformedToolOwnedFile", err)
+		t.Errorf("duplicate agent-sync table: err=%v want ErrMalformedToolOwnedFile", err)
 	}
 	if _, _, err := mergeTOML([]byte(""), tomlUpsert("foo", "command = \"\"\"unterminated\n")); !errors.Is(err, ErrMalformedToolOwnedFile) {
-		t.Errorf("invalid aienvs body: err=%v want ErrMalformedToolOwnedFile", err)
+		t.Errorf("invalid agent-sync body: err=%v want ErrMalformedToolOwnedFile", err)
 	}
 }

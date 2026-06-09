@@ -92,7 +92,7 @@ func (d RootDeps) now() func() time.Time {
 	return time.Now
 }
 
-// NewRootCommand builds the `aienvs` root command with persistent flags
+// NewRootCommand builds the `agent-sync` root command with persistent flags
 // and every subcommand mounted. It mirrors the existing factory+Deps
 // pattern (NewTrustCommand/NewAdapterCommand). The returned command is
 // fully functional via Execute() without Fang; Fang styling is applied at
@@ -101,9 +101,9 @@ func NewRootCommand(deps RootDeps) *cobra.Command {
 	flags := &PersistentFlags{}
 
 	root := &cobra.Command{
-		Use:   "aienvs",
+		Use:   "agent-sync",
 		Short: "Keep AI-agent configuration in sync from a Git-backed manifest",
-		Long: "aienvs syncs AI-agent configuration for multiple tools (Claude Code, " +
+		Long: "agent-sync syncs AI-agent configuration for multiple tools (Claude Code, " +
 			"Cursor, and more) from a single Git-backed canonical manifest.",
 		Version:       deps.Version,
 		SilenceUsage:  true,

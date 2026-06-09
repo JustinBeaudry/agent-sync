@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/workspace"
+	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
 func TestFind_ExplicitWorkspaceToFIFO(t *testing.T) {

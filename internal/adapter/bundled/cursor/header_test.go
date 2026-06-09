@@ -10,7 +10,7 @@ func TestMarkdownHeader_ContainsManagedBanner(t *testing.T) {
 	t.Parallel()
 
 	got := string(markdownHeader())
-	if !strings.Contains(got, "Managed by aienvs") {
+	if !strings.Contains(got, "Managed by agent-sync") {
 		t.Errorf("markdownHeader missing canonical banner phrase; got %q", got)
 	}
 	if !strings.HasSuffix(got, "\n\n") {
@@ -28,10 +28,10 @@ func TestJSONSidecarMarker_NamesUnmanageCommand(t *testing.T) {
 	t.Parallel()
 
 	body := string(jsonSidecarMarker())
-	if !strings.Contains(body, "Managed by aienvs") {
+	if !strings.Contains(body, "Managed by agent-sync") {
 		t.Errorf("jsonSidecarMarker missing managed banner; got %q", body)
 	}
-	if !strings.Contains(body, "aienvs unmanage cursor") {
+	if !strings.Contains(body, "agent-sync unmanage cursor") {
 		t.Errorf("jsonSidecarMarker should name the unmanage exit path; got %q", body)
 	}
 	if !strings.Contains(body, ".cursor/mcp.json") {
@@ -103,7 +103,7 @@ func TestReadmeForSubdir_NamesPathAndExit(t *testing.T) {
 	if !strings.Contains(body, ".cursor/rules/aienvs") {
 		t.Errorf("README must reference the subdir label; got %q", body)
 	}
-	if !strings.Contains(body, "aienvs unmanage cursor") {
+	if !strings.Contains(body, "agent-sync unmanage cursor") {
 		t.Errorf("README must name the unmanage exit path; got %q", body)
 	}
 	if !strings.HasPrefix(body, "# ") {

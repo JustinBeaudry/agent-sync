@@ -135,7 +135,7 @@ func TestExtractJSONFrontmatter_AllFields(t *testing.T) {
 		t.Errorf("stripped body still contains reserved keys: %s", stripped)
 	}
 	if !strings.Contains(string(stripped), "linear-server") {
-		t.Errorf("non-aienvs key dropped: %s", stripped)
+		t.Errorf("non-agent-sync key dropped: %s", stripped)
 	}
 }
 

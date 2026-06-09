@@ -6,8 +6,8 @@ import (
 	"io/fs"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/report"
-	syncpkg "github.com/aienvs/aienvs/internal/sync"
+	"github.com/agent-sync/agent-sync/internal/report"
+	syncpkg "github.com/agent-sync/agent-sync/internal/sync"
 )
 
 // Sentinel errors callers branch on with errors.Is.

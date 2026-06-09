@@ -15,7 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/aienvs/aienvs/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
 // wireNode is the on-the-wire IR node shape the adapters decode in their

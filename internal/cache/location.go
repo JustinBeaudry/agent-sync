@@ -45,7 +45,7 @@ type Location struct {
 // ResolveOptions controls where the cache lives on disk.
 //
 // Override, if non-empty, takes precedence over XDG. It must be an
-// absolute path; aienvs does not resolve it relative to cwd so a
+// absolute path; agent-sync does not resolve it relative to cwd so a
 // relative cache path in the manifest never silently shifts with the
 // invoking user's shell state.
 type ResolveOptions struct {

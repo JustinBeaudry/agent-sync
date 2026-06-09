@@ -9,7 +9,7 @@ import (
 )
 
 // Uninstall removes the managed hook wrappers from repoRoot. Only files
-// carrying the aienvs marker are removed; foreign hooks are left
+// carrying the agent-sync marker are removed; foreign hooks are left
 // untouched. The predecessor preserved by a prior install is restored:
 // a `<hook>.aienvs-backup` (from --replace) or `<hook>.aienvs-predecessor`
 // (from --append). Returns the hook names removed.

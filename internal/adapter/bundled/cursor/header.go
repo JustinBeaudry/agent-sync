@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aienvs/aienvs/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
 // managedHeaderTemplate is the canonical "do not edit" banner the
@@ -21,7 +21,7 @@ import (
 // Trailing blank line keeps a one-line gap between the header and
 // user-visible content; without it the body's first heading would
 // fold into the comment block on some markdown renderers.
-const managedHeaderTemplate = "<!-- Managed by aienvs — do not edit. Source: {source-url}@{short-sha}. Regenerate: aienvs sync -->\n\n"
+const managedHeaderTemplate = "<!-- Managed by agent-sync — do not edit. Source: {source-url}@{short-sha}. Regenerate: agent-sync sync -->\n\n"
 
 // jsonSidecarBody is the body for the .aienvs-managed sidecar marker
 // the cursor adapter writes next to .cursor/mcp.json. JSON has no
@@ -30,13 +30,13 @@ const managedHeaderTemplate = "<!-- Managed by aienvs — do not edit. Source: {
 //
 // The body is intentionally short and human-readable; it is not
 // machine-parsed by anything in v1.
-const jsonSidecarBody = `Managed by aienvs.
+const jsonSidecarBody = `Managed by agent-sync.
 
-The sibling .cursor/mcp.json file contains entries owned by aienvs
+The sibling .cursor/mcp.json file contains entries owned by agent-sync
 under the /mcpServers/aienvs_<id> JSON pointers. Other entries are
 preserved across syncs.
 
-To remove aienvs-managed entries: aienvs unmanage cursor
+To remove aienvs-managed entries: agent-sync unmanage cursor
 `
 
 // markdownHeader returns the managed-file banner used at the top of
@@ -111,13 +111,13 @@ func readmeForSubdir(subdirLabel string) []byte {
 		subdirLabel = "(unknown subdirectory)"
 	}
 	return fmt.Appendf(nil,
-		"# Managed by aienvs\n\n"+
-			"Files inside `%s/` are owned by the aienvs `cursor` adapter.\n"+
+		"# Managed by agent-sync\n\n"+
+			"Files inside `%s/` are owned by the agent-sync `cursor` adapter.\n"+
 			"Editing them by hand is detected as drift on the next sync\n"+
 			"and the changes are overwritten.\n\n"+
 			"To remove every aienvs-owned file in this directory and\n"+
 			"unbind it from the workspace, run:\n\n"+
-			"    aienvs unmanage cursor\n",
+			"    agent-sync unmanage cursor\n",
 		subdirLabel,
 	)
 }

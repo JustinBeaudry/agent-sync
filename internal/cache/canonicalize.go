@@ -25,7 +25,7 @@ import (
 )
 
 // ErrUnsupportedURL is returned when a URL is syntactically unparseable
-// or uses a scheme aienvs does not support.
+// or uses a scheme agent-sync does not support.
 var ErrUnsupportedURL = errors.New("unsupported canonical URL")
 
 // Canonicalize returns the stable canonical form of a Git URL.

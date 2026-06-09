@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 // emitFixture loads an IR document from testdata/ir and runs the
@@ -87,13 +87,13 @@ func TestEmitRule_HappyPath(t *testing.T) {
 	}
 
 	ruleOp := findWriteFile(t, ops, ".claude/rules/aienvs/no-fri.md")
-	if !strings.HasPrefix(string(ruleOp.Content), "<!-- Managed by aienvs") {
+	if !strings.HasPrefix(string(ruleOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("rule content missing managed header; got %q", ruleOp.Content)
 	}
 	if !strings.Contains(string(ruleOp.Content), "do not edit") {
 		t.Errorf("rule content missing 'do not edit' clause; got %q", ruleOp.Content)
 	}
-	if !strings.Contains(string(ruleOp.Content), "Regenerate: aienvs sync") {
+	if !strings.Contains(string(ruleOp.Content), "Regenerate: agent-sync sync") {
 		t.Errorf("rule content missing regenerate instruction; got %q", ruleOp.Content)
 	}
 	if !strings.Contains(string(ruleOp.Content), "No PRs on Friday.") {
@@ -101,7 +101,7 @@ func TestEmitRule_HappyPath(t *testing.T) {
 	}
 
 	readmeOp := findWriteFile(t, ops, ".claude/rules/aienvs/README.md")
-	if !strings.Contains(string(readmeOp.Content), "aienvs unmanage claude") {
+	if !strings.Contains(string(readmeOp.Content), "agent-sync unmanage claude") {
 		t.Errorf("README content missing exit path; got %q", readmeOp.Content)
 	}
 }
@@ -148,7 +148,7 @@ func TestEmitCommand_HappyPath(t *testing.T) {
 	}
 
 	cmdOp := findWriteFile(t, ops, ".claude/commands/aienvs/deploy.md")
-	if !strings.HasPrefix(string(cmdOp.Content), "<!-- Managed by aienvs") {
+	if !strings.HasPrefix(string(cmdOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("command content missing managed header; got %q", cmdOp.Content)
 	}
 	if !strings.Contains(string(cmdOp.Content), "Run the deploy script") {
@@ -172,7 +172,7 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	}
 
 	skillOp := findWriteFile(t, ops, ".claude/skills/aienvs-coder/SKILL.md")
-	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by aienvs") {
+	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("skill SKILL.md missing managed header; got %q", skillOp.Content)
 	}
 

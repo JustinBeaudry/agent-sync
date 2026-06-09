@@ -1,5 +1,5 @@
 // Package git materializes and reads canonical-source repositories for
-// aienvs.
+// agent-sync.
 //
 // The package splits its two concerns by transport path:
 //
@@ -334,7 +334,7 @@ func looksLikeNetworkFailure(stderr []byte) bool {
 
 // Clone performs a bare clone of `url` into `dst`, which must be an
 // empty or non-existent directory. The clone is bare (no working tree)
-// because aienvs reads repository contents through [ReadTree] /
+// because agent-sync reads repository contents through [ReadTree] /
 // [BlobContent] rather than via a checkout.
 //
 // Parent directories of dst are created with 0o750 if missing; dst

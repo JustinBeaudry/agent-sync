@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/manifest"
-	"github.com/aienvs/aienvs/internal/trust"
+	"github.com/agent-sync/agent-sync/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/trust"
 )
 
 const (

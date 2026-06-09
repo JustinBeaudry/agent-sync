@@ -1,5 +1,5 @@
 // Package hooks installs and removes git hook wrappers that run
-// `aienvs sync --post-merge` after pulls/checkouts. Wrappers are POSIX
+// `agent-sync sync --post-merge` after pulls/checkouts. Wrappers are POSIX
 // `#!/bin/sh` scripts with absolute paths baked in (so GUI git clients
 // with a minimal PATH still work) and a marker comment so uninstall only
 // ever removes aienvs-generated hooks.
@@ -17,28 +17,28 @@ import (
 // reinstall key off this exact line.
 const marker = "# aienvs-managed-hook v1"
 
-// ManagedHooks are the git hooks aienvs installs.
+// ManagedHooks are the git hooks agent-sync installs.
 var ManagedHooks = []string{"post-merge", "post-checkout"}
 
 // Sentinel errors callers branch on.
 var (
-	// ErrForeignHook is returned when a non-aienvs hook already exists and
+	// ErrForeignHook is returned when a non-agent-sync hook already exists and
 	// neither --replace nor --append was requested.
-	ErrForeignHook = errors.New("hooks: a non-aienvs hook already exists; use --replace or --append")
+	ErrForeignHook = errors.New("hooks: a non-agent-sync hook already exists; use --replace or --append")
 	// ErrNotGitRepo is returned when the target has no .git directory.
 	ErrNotGitRepo = errors.New("hooks: not a git repository (no .git directory)")
 )
 
 // Options configures installation.
 type Options struct {
-	// AienvsPath is the absolute path to the aienvs binary baked into the
+	// AienvsPath is the absolute path to the agent-sync binary baked into the
 	// wrapper. Required.
 	AienvsPath string
 	// WorkspacePath is the absolute workspace path passed to sync. Required.
 	WorkspacePath string
 	// Replace backs up and overwrites an existing foreign hook.
 	Replace bool
-	// Append wraps an existing foreign hook (runs it, then aienvs).
+	// Append wraps an existing foreign hook (runs it, then agent-sync).
 	Append bool
 }
 
@@ -138,7 +138,7 @@ func Install(repoRoot string, opts Options) (Result, error) {
 			case opts.Append:
 				// Preserve the predecessor as a separate executable sidecar
 				// the wrapper invokes as a subprocess, so the predecessor's
-				// own `exit` (common in hooks) cannot skip the aienvs step.
+				// own `exit` (common in hooks) cannot skip the agent-sync step.
 				if werr := writeAppendWrapper(path, existing, opts); werr != nil {
 					return res, werr
 				}
@@ -173,9 +173,9 @@ const predecessorSuffix = ".aienvs-predecessor"
 
 // writeAppendWrapper preserves the foreign predecessor as an executable
 // sidecar (<hook>.aienvs-predecessor) and writes a wrapper that runs it as
-// a SUBPROCESS before aienvs. Running it as a subprocess (not inlining)
+// a SUBPROCESS before agent-sync. Running it as a subprocess (not inlining)
 // means the predecessor's own `exit N` ends only that subprocess — the
-// wrapper inspects its status and still runs aienvs. A non-zero
+// wrapper inspects its status and still runs agent-sync. A non-zero
 // predecessor status aborts the hook with that status (preserving the
 // predecessor's veto semantics, e.g. a pre-commit-style guard).
 func writeAppendWrapper(path string, predecessor []byte, opts Options) error {
@@ -188,7 +188,7 @@ func writeAppendWrapper(path string, predecessor []byte, opts Options) error {
 		marker,
 		"set -eu",
 		"# Run the preserved predecessor hook as a subprocess so its exit",
-		"# does not skip aienvs; a non-zero status still vetoes the hook.",
+		"# does not skip agent-sync; a non-zero status still vetoes the hook.",
 		fmt.Sprintf("if [ -x %q ]; then %q \"$@\" || exit $?; fi", sidecar, sidecar),
 		fmt.Sprintf("exec %q sync --post-merge --workspace %q", opts.AienvsPath, opts.WorkspacePath),
 		"",
@@ -204,10 +204,10 @@ func isAienvsHook(content []byte) bool {
 // detected, since those tools also manage git hooks.
 func detectHookManagers(repoRoot string) string {
 	if fileExists(filepath.Join(repoRoot, "lefthook.yml")) || fileExists(filepath.Join(repoRoot, "lefthook.yaml")) {
-		return "lefthook detected: aienvs installed standalone git hooks; consider adding `aienvs sync --post-merge` to lefthook instead to avoid conflicts."
+		return "lefthook detected: agent-sync installed standalone git hooks; consider adding `agent-sync sync --post-merge` to lefthook instead to avoid conflicts."
 	}
 	if hasHusky(repoRoot) {
-		return "husky detected: aienvs installed standalone git hooks; consider integrating via husky to avoid conflicts."
+		return "husky detected: agent-sync installed standalone git hooks; consider integrating via husky to avoid conflicts."
 	}
 	return ""
 }

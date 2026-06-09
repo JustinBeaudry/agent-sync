@@ -1,8 +1,8 @@
-# `aienvs validate` output (v1)
+# `agent-sync validate` output (v1)
 
 Status: stable · Added: 2026-06-09 · Plan: `docs/plans/2026-06-08-007-feat-cli-tui-sync-engine-plan.md` (U4)
 
-`aienvs validate` is a dry run: it computes what a sync *would* change
+`agent-sync validate` is a dry run: it computes what a sync *would* change
 without mutating the workspace. It is the CI drift guard.
 
 ## Exit codes

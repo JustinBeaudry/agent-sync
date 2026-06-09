@@ -1,8 +1,8 @@
 // Package fsroot provides the safe-filesystem primitives that every other
-// aienvs package must use to read and write paths inside a user workspace.
+// agent-sync package must use to read and write paths inside a user workspace.
 //
 // The package wraps Go 1.25's [os.Root] with four capabilities that the rest
-// of aienvs depends on:
+// of agent-sync depends on:
 //
 //  1. Containment. All operations are scoped to a single directory handle
 //     and cannot escape it through symlinks, "..", absolute paths, or
@@ -21,7 +21,7 @@
 //
 //  4. Irregular-file refusal via [Root.DetectReparsePoint]. Reparse points,
 //     device files, sockets, and named pipes surface as
-//     [fs.ModeIrregular] after [os.Root]'s own filtering. aienvs refuses
+//     [fs.ModeIrregular] after [os.Root]'s own filtering. agent-sync refuses
 //     to write through them as defense-in-depth.
 //
 // # Scoping

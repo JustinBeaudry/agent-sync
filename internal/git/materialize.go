@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aienvs/aienvs/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/cache"
 )
 
 // ErrUnresolvablePinOffline is returned by Materialize when offline mode
@@ -133,7 +133,7 @@ func Materialize(ctx context.Context, in Input) (*Result, error) {
 				FromCache:   true,
 			}, nil
 		}
-		return nil, fmt.Errorf("%w: SHA %s not present at %s (run `aienvs sync` online once to populate)", ErrUnresolvablePinOffline, in.PinnedSHA, in.Cache.Dir)
+		return nil, fmt.Errorf("%w: SHA %s not present at %s (run `agent-sync sync` online once to populate)", ErrUnresolvablePinOffline, in.PinnedSHA, in.Cache.Dir)
 	}
 
 	// Online path: ensure a usable bare clone exists at Cache.Dir.
@@ -274,7 +274,7 @@ func uniqueScratchPath(cacheDir string) (string, error) {
 //   - a bare clone (HEAD file directly under dir, objects/ at dir)
 //   - a non-bare clone (.git/ subdirectory containing HEAD + objects)
 //
-// aienvs always creates bare clones; non-bare is accepted for
+// agent-sync always creates bare clones; non-bare is accepted for
 // forward-compat with a user-supplied cache dir that was populated by
 // some other means.
 func isBareClone(dir string) (bool, error) {

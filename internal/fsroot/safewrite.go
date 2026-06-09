@@ -69,7 +69,7 @@ func (r *Root) StagedWrite(relPath string, data []byte, mode fs.FileMode) (retEr
 		_ = f.Close()
 		// Some filesystems (tmpfs on some kernels, specific NFS mounts)
 		// legitimately refuse fsync with EINVAL. We do not currently
-		// whitelist those; aienvs writes into user workspaces that are
+		// whitelist those; agent-sync writes into user workspaces that are
 		// expected to be on durable local filesystems. If this becomes
 		// a real portability issue, gate here on errors.Is(err, syscall.EINVAL).
 		return fmt.Errorf("fsroot: fsync %q: %w", tempRel, err)
@@ -111,7 +111,7 @@ func (r *Root) fsyncParent(dir string) error {
 // uniqueTempName returns a deterministic-format but cryptographically
 // unique temp file name for a staged write. The leading "." keeps the
 // temp file out of default shell globs; the "aienv-stage" token lets
-// aienvs identify its own orphaned temp files during crash recovery.
+// agent-sync identify its own orphaned temp files during crash recovery.
 func uniqueTempName(base string) (string, error) {
 	var randBuf [8]byte
 	if _, err := rand.Read(randBuf[:]); err != nil {

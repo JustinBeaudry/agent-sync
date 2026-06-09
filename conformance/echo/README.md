@@ -17,7 +17,7 @@ Use it as a starting point:
 2. Replace the server name/version in `main.go`.
 3. Change the declared outputs to the paths your adapter owns.
 4. Replace `handleEmit` with your real IR-to-op translation logic.
-5. Run `aienvs adapter conformance-test ./your-binary --format=json` in CI.
+5. Run `agent-sync adapter conformance-test ./your-binary --format=json` in CI.
 
 The reference adapter never writes workspace files directly. It only
-returns protocol ops; the `aienvs` runtime owns applying them.
+returns protocol ops; the `agent-sync` runtime owns applying them.

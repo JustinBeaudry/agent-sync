@@ -1,6 +1,6 @@
 # Atomic swap — operations & recovery
 
-`aienvs` updates a reserved-subdirectory target (e.g. `.claude/rules/aienvs/`)
+`agent-sync` updates a reserved-subdirectory target (e.g. `.claude/rules/aienvs/`)
 **atomically**: a sync either fully lands its new generation or leaves
 the previous one byte-intact. This is done with a two-rename swap under
 the single workspace `os.Root`, a persisted sentinel, and a startup
@@ -16,7 +16,7 @@ promoted:
 1. Write sentinel `.state = intend`.
 2. `Rename(prefix → prefix.old)` — move the live generation aside (skipped on a first sync).
 3. Sentinel → `step1_done`.
-4. `Rename(staging/aienvs → prefix)` — promote the new generation.
+4. `Rename(staging/agent-sync → prefix)` — promote the new generation.
 5. Sentinel → `step2_done`.
 6. `RemoveAll(prefix.old)` (best-effort) and delete the sentinel.
 
@@ -26,7 +26,7 @@ holds open.
 
 ## Recovery states
 
-Run `aienvs sync --recover` (or it runs automatically at sync start) to
+Run `agent-sync sync --recover` (or it runs automatically at sync start) to
 reconcile any half-completed swap. The reconciler scans
 `<parent>/.aienv-staging/*/.state`:
 
@@ -46,13 +46,13 @@ they are never guessed at; they are surfaced for a human.
 
 If a leftover `prefix.old` or a sentinel at `intend`/`step1_done` is
 found and `--recover` was not just run, the sync refuses with `ErrStale`
-and recommends `aienvs sync --recover`. This stops a second sync from
+and recommends `agent-sync sync --recover`. This stops a second sync from
 stomping a half-completed one.
 
 ## Retention & scratch cleanup
 
 The last 3 staging generations per target are kept for forensics; older
-ones are pruned automatically. `aienvs sync --clean-scratch` force-clears
+ones are pruned automatically. `agent-sync sync --clean-scratch` force-clears
 all staging directories for a target.
 
 ## Error taxonomy

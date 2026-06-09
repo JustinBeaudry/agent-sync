@@ -1,4 +1,4 @@
-module github.com/aienvs/aienvs
+module github.com/agent-sync/agent-sync
 
 go 1.25
 

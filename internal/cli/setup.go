@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	claudeadapter "github.com/aienvs/aienvs/internal/adapter/bundled/claude"
-	cursoradapter "github.com/aienvs/aienvs/internal/adapter/bundled/cursor"
-	"github.com/aienvs/aienvs/internal/engine"
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/manifest"
-	"github.com/aienvs/aienvs/internal/workspace"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	claudeadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/claude"
+	cursoradapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/cursor"
+	"github.com/agent-sync/agent-sync/internal/engine"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
 // bundledAdapters returns the compiled-in adapter set. Centralized so

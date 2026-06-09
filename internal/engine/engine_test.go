@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	claudeadapter "github.com/aienvs/aienvs/internal/adapter/bundled/claude"
-	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/ir"
-	"github.com/aienvs/aienvs/internal/ledger"
-	"github.com/aienvs/aienvs/internal/report"
+	"github.com/agent-sync/agent-sync/internal/adapter"
+	claudeadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/claude"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/ledger"
+	"github.com/agent-sync/agent-sync/internal/report"
 )
 
 const testCommit = "0123456789abcdef0123456789abcdef01234567"

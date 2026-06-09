@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 func TestStagedWrite_HappyPath(t *testing.T) {
@@ -19,7 +19,7 @@ func TestStagedWrite_HappyPath(t *testing.T) {
 	r := mustOpenRoot(t, dir)
 	defer r.Close()
 
-	payload := []byte("hello aienvs\n")
+	payload := []byte("hello agent-sync\n")
 	if err := r.StagedWrite("note.txt", payload, 0o644); err != nil {
 		t.Fatalf("StagedWrite: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestStagedWrite_EscapingDirSymlinkRefused(t *testing.T) {
 // via atomic rename and does NOT dereference it. The outside target is
 // untouched; the inside path now contains the new content. This is the
 // safe outcome — an attacker who plants an escaping symlink cannot cause
-// aienvs to overwrite anything outside the root.
+// agent-sync to overwrite anything outside the root.
 func TestStagedWrite_EscapingFileSymlinkReplaced(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {

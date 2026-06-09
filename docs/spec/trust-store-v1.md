@@ -42,7 +42,7 @@ canonicalizer (which strips `userinfo` so cache keys cannot be poisoned).
 Path: `$XDG_DATA_HOME/aienvs/trust.jsonl` (resolved via `adrg/xdg`; on macOS
 this is `~/Library/Application Support/aienvs/trust.jsonl`, on Linux
 `~/.local/share/aienvs/trust.jsonl`, on Windows
-`%LOCALAPPDATA%\aienvs\trust.jsonl`).
+`%LOCALAPPDATA%\agent-sync\trust.jsonl`).
 
 File mode: `0600`. Parent directory mode: `0700`.
 
@@ -134,7 +134,7 @@ caller is interactive by construction at compact time).
 
 ### Compaction
 
-`aienvs trust compact` rewrites the log when it exceeds **1 MiB**:
+`agent-sync trust compact` rewrites the log when it exceeds **1 MiB**:
 
 - Retain the most-recent `trust` / `promote` / `allow-new-shas-*` record
   per URL.
@@ -160,7 +160,7 @@ File mode: `0600`. Parent directory mode: `0700`.
 non-interactive sync. When a sync encounters a known URL with a new SHA,
 it does **not** prompt — it appends to `pending.jsonl` and emits a one-line
 stderr reminder. The user drains the queue out-of-band via
-`aienvs trust pending` → `aienvs trust promote`.
+`agent-sync trust pending` → `agent-sync trust promote`.
 
 ### Line schema
 
@@ -179,8 +179,8 @@ stderr reminder. The user drains the queue out-of-band via
   SHA. Idempotent: if the (url, new_sha) pair already appears as the latest
   entry for that URL, the append is skipped (prevents the queue from
   ballooning on repeated syncs of the same manifest).
-- **List** via `aienvs trust pending` (latest entry per URL, newest first).
-- **Clear** on `aienvs trust promote <url>` and `aienvs trust promote --all`.
+- **List** via `agent-sync trust pending` (latest entry per URL, newest first).
+- **Clear** on `agent-sync trust promote <url>` and `agent-sync trust promote --all`.
   Cleared entries are simply removed from the file via rewrite.
 
 Pending is a queue, not a log; no history is preserved after promotion.
@@ -202,14 +202,14 @@ trusted_sha: 0123456789abcdef0123456789abcdef01234567
 Rules:
 
 1. `trusted_sha` is 40 lowercase hex characters when present.
-2. When present, it MUST equal `canonical.commit`. `aienvs trust verify` is
+2. When present, it MUST equal `canonical.commit`. `agent-sync trust verify` is
    the CI gate that enforces this.
 3. When absent, sync in interactive mode falls through to the user history.
    Sync in non-interactive mode refuses with `TrustDecisionRequired` (exit
    4) and a documented remediation.
-4. `aienvs trust pin` writes / updates the field using the manifest's
+4. `agent-sync trust pin` writes / updates the field using the manifest's
    comment-preserving writer (see `internal/manifest/write.go`).
-5. `aienvs trust promote --pin-manifest` updates both `trust.jsonl` and
+5. `agent-sync trust promote --pin-manifest` updates both `trust.jsonl` and
    `trusted_sha:` atomically in the sense that a failure in either step
    leaves a clear recovery path: if the JSONL append succeeds but the
    manifest write fails, the user gets an error naming both files; the next

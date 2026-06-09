@@ -66,7 +66,7 @@ func TestReadFrame_AcceptsCaseInsensitiveHeaders(t *testing.T) {
 func TestReadFrame_AcceptsMissingContentTypeForBackwardCompat(t *testing.T) {
 	// LSP base protocol allows omitting Content-Type. We mirror that to
 	// stay forward-compatible with stricter LSP toolchains, while
-	// WriteFrame always emits the aienvs Content-Type for clarity.
+	// WriteFrame always emits the agent-sync Content-Type for clarity.
 	t.Parallel()
 
 	raw := "Content-Length: 5\r\n\r\nhello"

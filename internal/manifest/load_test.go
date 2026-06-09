@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aienvs/aienvs/internal/manifest"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 )
 
 // strconvQuote is a tiny shim so the YAML literal builder reads cleanly.

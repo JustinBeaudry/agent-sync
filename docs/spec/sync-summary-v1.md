@@ -1,6 +1,6 @@
 # Sync summary — v1 (`--output=json` schema)
 
-Stable, versioned schema for `aienvs sync` output. Built by
+Stable, versioned schema for `agent-sync sync` output. Built by
 `internal/report`. CI consumers gate on `schema_version`.
 
 ## Per-target status tokens

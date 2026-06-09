@@ -6,9 +6,9 @@ import (
 
 	"github.com/goccy/go-yaml"
 
-	"github.com/aienvs/aienvs/internal/capmatrix"
-	"github.com/aienvs/aienvs/internal/ir"
-	"github.com/aienvs/aienvs/pkg/adapterkit"
+	"github.com/agent-sync/agent-sync/internal/capmatrix"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 //go:embed capabilities.yaml

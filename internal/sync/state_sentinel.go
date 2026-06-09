@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
 // Status is the swap sentinel's lifecycle state.
@@ -25,8 +25,8 @@ type Sentinel struct {
 	Target         string `json:"target"`
 	SHA            string `json:"sha"`
 	StartedAt      string `json:"started_at"`
-	PrefixRel      string `json:"prefix_rel"`       // e.g. .claude/rules/aienvs
-	StagingLeafRel string `json:"staging_leaf_rel"` // e.g. .claude/rules/.aienv-staging/<gen>/aienvs
+	PrefixRel      string `json:"prefix_rel"`       // e.g. .claude/rules/agent-sync
+	StagingLeafRel string `json:"staging_leaf_rel"` // e.g. .claude/rules/.aienv-staging/<gen>/agent-sync
 }
 
 func validStatus(s Status) bool {
