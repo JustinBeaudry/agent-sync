@@ -3,11 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
-
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -30,7 +30,10 @@ func newWatchCommand(deps RootDeps) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rc, _ := runtimeFrom(cmd.Context())
+			rc, err := mustRuntime(cmd)
+			if err != nil {
+				return err
+			}
 
 			ws, err := workspace.Find(rc.Flags.Workspace, workspace.Options{Workspace: rc.Flags.Workspace})
 			if err != nil {
@@ -46,8 +49,9 @@ func newWatchCommand(deps RootDeps) *cobra.Command {
 				paths = append(paths, m.Canonical.LocalPath)
 			}
 
-			// Ctrl+C cancels the watch loop cleanly.
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+			// Ctrl+C (SIGINT) or SIGTERM (process managers, Docker, K8s)
+			// cancels the watch loop cleanly.
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
 			cfg := watch.Config{

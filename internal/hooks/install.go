@@ -50,15 +50,16 @@ type Result struct {
 }
 
 // hooksDir returns the git hooks directory for repoRoot, honoring an
-// explicit core.hooksPath when set, else .git/hooks.
+// explicit core.hooksPath when set, else <gitdir>/hooks. It resolves the
+// real git dir from the .git entry, which is a directory in a normal
+// clone but a `gitdir: <path>` pointer FILE in a worktree or submodule.
 func hooksDir(repoRoot string) (string, error) {
-	gitDir := filepath.Join(repoRoot, ".git")
-	info, err := os.Stat(gitDir)
-	if err != nil || !info.IsDir() {
-		return "", ErrNotGitRepo
+	gitDir, err := resolveGitDir(repoRoot)
+	if err != nil {
+		return "", err
 	}
-	// core.hooksPath detection is intentionally minimal: read .git/config
-	// for a hooksPath entry. Absent → default .git/hooks.
+	// core.hooksPath detection is intentionally minimal: read the git
+	// config for a hooksPath entry. Absent → default <gitdir>/hooks.
 	if hp := readHooksPath(filepath.Join(gitDir, "config")); hp != "" {
 		if filepath.IsAbs(hp) {
 			return hp, nil
@@ -66,6 +67,35 @@ func hooksDir(repoRoot string) (string, error) {
 		return filepath.Join(repoRoot, hp), nil
 	}
 	return filepath.Join(gitDir, "hooks"), nil
+}
+
+// resolveGitDir returns the real git directory for repoRoot. .git is a
+// directory in a normal clone, or a file containing `gitdir: <path>` in a
+// worktree/submodule.
+func resolveGitDir(repoRoot string) (string, error) {
+	dotGit := filepath.Join(repoRoot, ".git")
+	info, err := os.Stat(dotGit)
+	if err != nil {
+		return "", ErrNotGitRepo
+	}
+	if info.IsDir() {
+		return dotGit, nil
+	}
+	// .git is a file: read the `gitdir: <path>` pointer.
+	data, rerr := os.ReadFile(dotGit) //nolint:gosec // repo's own .git pointer file
+	if rerr != nil {
+		return "", ErrNotGitRepo
+	}
+	line := strings.TrimSpace(string(data))
+	target, ok := strings.CutPrefix(line, "gitdir:")
+	if !ok {
+		return "", ErrNotGitRepo
+	}
+	target = strings.TrimSpace(target)
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(repoRoot, target)
+	}
+	return target, nil
 }
 
 // Install writes the managed hook wrappers into repoRoot's hooks dir.
@@ -106,7 +136,9 @@ func Install(repoRoot string, opts Options) (Result, error) {
 				}
 				res.BackedUp = append(res.BackedUp, backup)
 			case opts.Append:
-				// Preserve the predecessor inline so it still runs.
+				// Preserve the predecessor as a separate executable sidecar
+				// the wrapper invokes as a subprocess, so the predecessor's
+				// own `exit` (common in hooks) cannot skip the aienvs step.
 				if werr := writeAppendWrapper(path, existing, opts); werr != nil {
 					return res, werr
 				}
@@ -136,19 +168,28 @@ func wrapperScript(opts Options) string {
 	}, "\n")
 }
 
-// writeAppendWrapper writes a wrapper that runs the foreign predecessor
-// first, then aienvs. The predecessor is embedded verbatim.
+// predecessorSuffix names the sidecar that holds an --append predecessor.
+const predecessorSuffix = ".aienvs-predecessor"
+
+// writeAppendWrapper preserves the foreign predecessor as an executable
+// sidecar (<hook>.aienvs-predecessor) and writes a wrapper that runs it as
+// a SUBPROCESS before aienvs. Running it as a subprocess (not inlining)
+// means the predecessor's own `exit N` ends only that subprocess — the
+// wrapper inspects its status and still runs aienvs. A non-zero
+// predecessor status aborts the hook with that status (preserving the
+// predecessor's veto semantics, e.g. a pre-commit-style guard).
 func writeAppendWrapper(path string, predecessor []byte, opts Options) error {
-	pred := string(predecessor)
-	// Strip a leading shebang from the predecessor; our wrapper owns it.
-	pred = strings.TrimPrefix(pred, "#!/bin/sh\n")
-	pred = strings.TrimPrefix(pred, "#!/usr/bin/env sh\n")
+	sidecar := path + predecessorSuffix
+	if werr := os.WriteFile(sidecar, predecessor, 0o755); werr != nil { //nolint:gosec // hooks must be executable
+		return fmt.Errorf("hooks: write predecessor sidecar: %w", werr)
+	}
 	body := strings.Join([]string{
 		"#!/bin/sh",
 		marker,
-		"# --- begin appended predecessor ---",
-		strings.TrimRight(pred, "\n"),
-		"# --- end appended predecessor ---",
+		"set -eu",
+		"# Run the preserved predecessor hook as a subprocess so its exit",
+		"# does not skip aienvs; a non-zero status still vetoes the hook.",
+		fmt.Sprintf("if [ -x %q ]; then %q \"$@\" || exit $?; fi", sidecar, sidecar),
 		fmt.Sprintf("exec %q sync --post-merge --workspace %q", opts.AienvsPath, opts.WorkspacePath),
 		"",
 	}, "\n")
@@ -193,10 +234,14 @@ func readHooksPath(configPath string) string {
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		if after, ok := strings.CutPrefix(line, "hooksPath"); ok {
-			if eq := strings.IndexByte(after, '='); eq >= 0 {
-				return strings.TrimSpace(after[eq+1:])
-			}
+		// Git config keys are case-insensitive (hooksPath, hookspath, ...).
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:eq])
+		if strings.EqualFold(key, "hooksPath") {
+			return strings.TrimSpace(line[eq+1:])
 		}
 	}
 	return ""

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -64,9 +65,10 @@ func (discard) Write(p []byte) (int, error) { return len(p), nil }
 
 // Run watches Paths and runs OnChange (debounced) on every relevant
 // change until ctx is cancelled, then returns nil. OnChange errors are
-// logged and reported via the returned error only if ctx ended on one;
-// transient sync failures do not stop the watch — they are surfaced to the
-// caller through the OnChange callback (which writes the failure marker).
+// logged and the watch keeps running — a transient sync failure never
+// stops the watcher. Run returns a non-nil error only for a watcher setup
+// failure; OnChange errors are surfaced through the callback itself (which
+// writes the failure marker `status` reads), never via Run's return value.
 func Run(ctx context.Context, cfg Config) error {
 	if len(cfg.Paths) == 0 {
 		return errors.New("watch: no paths to watch")
@@ -82,13 +84,28 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	defer func() { _ = w.Close() }()
 
-	for _, p := range cfg.Paths {
-		// Watch the file's parent dir too: many editors replace files
-		// (rename), which fsnotify reports on the directory, not the file.
+	// Watch each path AND, for a regular file, its parent directory. Many
+	// editors save atomically by writing a temp file and renaming it over
+	// the target; fsnotify reports that as a CREATE/RENAME on the parent
+	// directory, not a WRITE on the original file — so watching the file
+	// alone would miss the most common edit pattern. Events on the parent
+	// for unrelated siblings are filtered by the debounce + the eventual
+	// no-op sync (and by IgnorePrefixes for .aienv/*).
+	watched := map[string]bool{}
+	addWatch := func(p string) {
+		if p == "" || watched[p] {
+			return
+		}
 		if err := w.Add(p); err != nil {
-			// A missing path is non-fatal; watch what we can.
 			log.Warn("watch: cannot watch path", "path", p, "err", err)
-			continue
+			return
+		}
+		watched[p] = true
+	}
+	for _, p := range cfg.Paths {
+		addWatch(p)
+		if info, statErr := os.Stat(p); statErr == nil && !info.IsDir() {
+			addWatch(filepath.Dir(p))
 		}
 	}
 

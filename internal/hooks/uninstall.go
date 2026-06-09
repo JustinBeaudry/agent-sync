@@ -1,16 +1,18 @@
 package hooks
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
 
 // Uninstall removes the managed hook wrappers from repoRoot. Only files
 // carrying the aienvs marker are removed; foreign hooks are left
-// untouched. A `<hook>.aienvs-backup` left by a prior --replace install is
-// restored when the managed hook is removed. Returns the hook names
-// removed.
+// untouched. The predecessor preserved by a prior install is restored:
+// a `<hook>.aienvs-backup` (from --replace) or `<hook>.aienvs-predecessor`
+// (from --append). Returns the hook names removed.
 func Uninstall(repoRoot string) ([]string, error) {
 	dir, err := hooksDir(repoRoot)
 	if err != nil {
@@ -21,7 +23,12 @@ func Uninstall(repoRoot string) ([]string, error) {
 		path := filepath.Join(dir, name)
 		content, readErr := os.ReadFile(path) //nolint:gosec // repo's own hooks dir
 		if readErr != nil {
-			continue // not present
+			if errors.Is(readErr, fs.ErrNotExist) {
+				continue // not present
+			}
+			// A real read error (permission, I/O) must not be swallowed as
+			// "absent" — that could leave a hook half-uninstalled silently.
+			return removed, fmt.Errorf("hooks: read %s: %w", name, readErr)
 		}
 		if !isAienvsHook(content) {
 			continue // foreign hook — never touch
@@ -31,14 +38,32 @@ func Uninstall(repoRoot string) ([]string, error) {
 		}
 		removed = append(removed, name)
 
-		// Restore a backed-up predecessor, if any.
-		backup := path + ".aienvs-backup"
-		if data, berr := os.ReadFile(backup); berr == nil { //nolint:gosec // repo's own hooks dir
-			if werr := os.WriteFile(path, data, 0o755); werr != nil { //nolint:gosec // hooks must be executable
-				return removed, fmt.Errorf("hooks: restore backup for %s: %w", name, werr)
-			}
-			_ = os.Remove(backup)
+		// Restore the preserved predecessor: --replace backup first, then
+		// the --append sidecar. Whichever exists is moved back into place.
+		if restored, rerr := restorePredecessor(path); rerr != nil {
+			return removed, fmt.Errorf("hooks: restore predecessor for %s: %w", name, rerr)
+		} else if !restored {
+			// No predecessor: clean up any orphan --append sidecar.
+			_ = os.Remove(path + predecessorSuffix)
 		}
 	}
 	return removed, nil
+}
+
+// restorePredecessor moves a preserved predecessor (from --replace backup
+// or --append sidecar) back to path, removing the sidecar. Returns true
+// when something was restored.
+func restorePredecessor(path string) (bool, error) {
+	for _, sidecar := range []string{path + ".aienvs-backup", path + predecessorSuffix} {
+		data, berr := os.ReadFile(sidecar) //nolint:gosec // repo's own hooks dir
+		if berr != nil {
+			continue
+		}
+		if werr := os.WriteFile(path, data, 0o755); werr != nil { //nolint:gosec // hooks must be executable
+			return false, werr
+		}
+		_ = os.Remove(sidecar)
+		return true, nil
+	}
+	return false, nil
 }
