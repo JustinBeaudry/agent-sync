@@ -8,14 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aienvs/aienvs/internal/adapter"
-	claudeadapter "github.com/aienvs/aienvs/internal/adapter/bundled/claude"
-	cursoradapter "github.com/aienvs/aienvs/internal/adapter/bundled/cursor"
 	"github.com/aienvs/aienvs/internal/engine"
 	"github.com/aienvs/aienvs/internal/fsroot"
-	"github.com/aienvs/aienvs/internal/manifest"
 	"github.com/aienvs/aienvs/internal/report"
-	"github.com/aienvs/aienvs/internal/workspace"
 )
 
 // hookSkippedMarker records that a git-hook-driven sync yielded to an
@@ -40,64 +35,28 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			rc, _ := runtimeFrom(cmd.Context())
-			flags := rc.Flags
-
-			ws, err := workspace.Find(flags.Workspace, workspace.Options{Workspace: flags.Workspace})
-			if err != nil {
-				return fmt.Errorf("sync: locate workspace: %w", err)
-			}
-			m, err := manifest.LoadFile(ws.ManifestPath, manifest.LoadOptions{NonInteractive: rc.Access.NonInteractive})
-			if err != nil {
-				return fmt.Errorf("sync: load manifest: %w", err)
-			}
-			root, err := fsroot.OpenWorkspaceRoot(ws.Root)
-			if err != nil {
-				return fmt.Errorf("sync: open workspace root: %w", err)
-			}
-			defer func() { _ = root.Close() }()
-
 			now := deps.now()()
-			mat, err := materialize(cmd.Context(), m, materializeOptions{Offline: flags.Offline, Now: now})
-			if err != nil {
-				return err
-			}
 
-			reg, err := adapter.DiscoverAdapters(cmd.Context(), adapter.DiscoverOptions{
-				Workspace: m,
-				Bundled: []*adapter.BundledAdapter{
-					claudeadapter.Bundled(),
-					cursoradapter.Bundled(),
-				},
-			})
+			prep, err := prepareEngine(cmd.Context(), rc, now)
 			if err != nil {
-				return fmt.Errorf("sync: discover adapters: %w", err)
+				return fmt.Errorf("sync: %w", err)
 			}
+			defer prep.Close()
 
-			opts := engine.Options{
-				AdoptPrefixes: adoptPrefixes,
-				TargetsFilter: targetFilter,
-				Now:           func() time.Time { return now },
-				Logger:        rc.Logger,
-			}
+			req := prep.Request
+			req.Options.AdoptPrefixes = adoptPrefixes
+			req.Options.TargetsFilter = targetFilter
 			if bestEffort {
-				opts.Mode = report.ModeBestEffort
+				req.Options.Mode = report.ModeBestEffort
 			} else {
-				opts.Mode = report.ModeAtomic
+				req.Options.Mode = report.ModeAtomic
 			}
 			if cmd.Flags().Changed("expect-deletions") {
-				opts.ExpectDeletions = &expectDeletions
+				req.Options.ExpectDeletions = &expectDeletions
 			}
 
-			summary, err := engine.Sync(cmd.Context(), engine.Request{
-				Root:          root,
-				WorkspacePath: ws.Root,
-				Registry:      reg,
-				Targets:       m.Targets,
-				Nodes:         mat.Nodes,
-				Skills:        mat.Skills,
-				Commit:        mat.Commit,
-				Options:       opts,
-			})
+			root := prep.Root
+			summary, err := engine.Sync(cmd.Context(), req)
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
 			}

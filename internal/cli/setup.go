@@ -1,0 +1,90 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/aienvs/aienvs/internal/adapter"
+	claudeadapter "github.com/aienvs/aienvs/internal/adapter/bundled/claude"
+	cursoradapter "github.com/aienvs/aienvs/internal/adapter/bundled/cursor"
+	"github.com/aienvs/aienvs/internal/engine"
+	"github.com/aienvs/aienvs/internal/fsroot"
+	"github.com/aienvs/aienvs/internal/manifest"
+	"github.com/aienvs/aienvs/internal/workspace"
+)
+
+// bundledAdapters returns the compiled-in adapter set. Centralized so
+// every command discovers the same adapters.
+func bundledAdapters() []*adapter.BundledAdapter {
+	return []*adapter.BundledAdapter{
+		claudeadapter.Bundled(),
+		cursoradapter.Bundled(),
+	}
+}
+
+// prepared bundles the per-invocation engine inputs shared by sync and
+// validate: an opened workspace root (the caller must Close it), the
+// loaded manifest, and a fully-built engine.Request. Close releases the
+// root.
+type prepared struct {
+	Workspace *workspace.Workspace
+	Manifest  *manifest.Manifest
+	Root      *fsroot.Root
+	Request   engine.Request
+	Close     func()
+}
+
+// prepareEngine performs the shared setup both sync and validate need:
+// locate the workspace, load the manifest, open the root, materialize the
+// canonical IR, discover adapters, and assemble an engine.Request. Per-run
+// engine.Options (mode, adopt, expect-deletions) are layered on by the
+// caller via the returned Request.Options.
+func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prepared, error) {
+	flags := rc.Flags
+	ws, err := workspace.Find(flags.Workspace, workspace.Options{Workspace: flags.Workspace})
+	if err != nil {
+		return prepared{}, fmt.Errorf("locate workspace: %w", err)
+	}
+	m, err := manifest.LoadFile(ws.ManifestPath, manifest.LoadOptions{NonInteractive: rc.Access.NonInteractive})
+	if err != nil {
+		return prepared{}, fmt.Errorf("load manifest: %w", err)
+	}
+	root, err := fsroot.OpenWorkspaceRoot(ws.Root)
+	if err != nil {
+		return prepared{}, fmt.Errorf("open workspace root: %w", err)
+	}
+
+	mat, err := materialize(ctx, m, materializeOptions{Offline: flags.Offline, Now: now})
+	if err != nil {
+		_ = root.Close()
+		return prepared{}, err
+	}
+
+	reg, err := adapter.DiscoverAdapters(ctx, adapter.DiscoverOptions{
+		Workspace: m,
+		Bundled:   bundledAdapters(),
+	})
+	if err != nil {
+		_ = root.Close()
+		return prepared{}, fmt.Errorf("discover adapters: %w", err)
+	}
+
+	req := engine.Request{
+		Root:          root,
+		WorkspacePath: ws.Root,
+		Registry:      reg,
+		Targets:       m.Targets,
+		Nodes:         mat.Nodes,
+		Skills:        mat.Skills,
+		Commit:        mat.Commit,
+		Options:       engine.Options{Now: func() time.Time { return now }, Logger: rc.Logger},
+	}
+	return prepared{
+		Workspace: ws,
+		Manifest:  m,
+		Root:      root,
+		Request:   req,
+		Close:     func() { _ = root.Close() },
+	}, nil
+}
