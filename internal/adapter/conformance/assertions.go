@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"slices"
+	"strings"
+	"syscall"
 
 	"github.com/aienvs/aienvs/internal/adapter"
 	"github.com/aienvs/aienvs/internal/adapter/contract"
@@ -79,8 +81,29 @@ func MatchError(expected string, err error) bool {
 		if errors.As(err, &exitErr) {
 			return true
 		}
-		return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+		// A subprocess that exits abnormally surfaces in one of two
+		// timing-dependent ways: the read side gets EOF, or — when the
+		// child dies before/while the harness writes the init frame — the
+		// write side gets a broken/closed pipe. Both mean the subprocess
+		// died; accept either so the assertion is timing-independent.
+		return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+			isBrokenPipe(err)
 	default:
 		return false
 	}
+}
+
+// isBrokenPipe reports whether err is a write-to-a-dead-subprocess pipe
+// failure, cross-platform. errors.Is(syscall.EPIPE) covers Unix and the
+// Go-mapped Windows case; the string checks catch the Windows pipe-closed
+// messages (ERROR_BROKEN_PIPE / ERROR_NO_DATA) that aren't always mapped
+// to EPIPE.
+func isBrokenPipe(err error) bool {
+	if errors.Is(err, syscall.EPIPE) || errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "pipe is being closed") ||
+		strings.Contains(msg, "pipe has been ended")
 }
