@@ -107,10 +107,9 @@ jobs:
           check-latest: true
           cache: true
 
-      # Regression ratchet, not the aspirational target. Current total is
-      # ~77.2%; the project target is 80% (see CLAUDE.md). Raise THRESHOLD as
-      # coverage climbs; never lower it. Packages dragging the total down today:
-      # cmd/agent-sync (0%), internal/validate (0%), conformance/echo (~21%).
+      # Enforces the 80% line-coverage floor mandated by CLAUDE.md. Current
+      # total is ~80.1%. This is a floor, not a ceiling — raise THRESHOLD as
+      # coverage climbs; never lower it to make a red build pass.
       - name: Test with coverage
         env:
           AGENT_SYNC_REQUIRE_GIT: "1"
@@ -119,7 +118,7 @@ jobs:
       - name: Enforce coverage floor
         shell: bash
         run: |
-          THRESHOLD=77.0
+          THRESHOLD=80.0
           total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')
           echo "total coverage: ${total}% (floor: ${THRESHOLD}%)"
           awk -v t="$total" -v f="$THRESHOLD" 'BEGIN { exit (t+0 >= f+0) ? 0 : 1 }' || {

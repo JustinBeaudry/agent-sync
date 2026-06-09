@@ -31,7 +31,10 @@ type ExitError struct {
 }
 
 func (e *ExitError) Error() string {
-	if e == nil || e.Err == nil {
+	if e == nil {
+		return "adapterkit: <nil exit error>"
+	}
+	if e.Err == nil {
 		return fmt.Sprintf("adapterkit: exit %d", e.Code)
 	}
 	return e.Err.Error()
