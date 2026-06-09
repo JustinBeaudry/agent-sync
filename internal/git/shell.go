@@ -433,6 +433,34 @@ func IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (boo
 	return false, fmt.Errorf("%w: is-ancestor %s..%s: %w: %s", ErrShellFailed, ancestor, descendant, err, strings.TrimSpace(stderr.String()))
 }
 
+// ResolveLocalRef resolves ref (a branch, tag, "HEAD", or SHA) to its
+// 40-char commit SHA inside the local repository at repoPath. No network
+// access — this is the local-path analogue of [LsRemote]/[ResolveRef].
+// An empty ref defaults to HEAD. The peel pattern `<ref>^{commit}` ensures
+// annotated tags resolve to the underlying commit.
+func ResolveLocalRef(ctx context.Context, repoPath, ref string) (string, error) {
+	if !filepath.IsAbs(repoPath) {
+		return "", fmt.Errorf("git: resolve-local: repo path must be absolute, got %q", repoPath)
+	}
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		ref = "HEAD"
+	}
+	cmd, err := gitCmd(ctx, repoPath, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	if err != nil {
+		return "", err
+	}
+	stdout, _, err := runCapture(cmd, "rev-parse "+ref)
+	if err != nil {
+		return "", err
+	}
+	sha := strings.TrimSpace(string(stdout))
+	if !shaPattern.MatchString(strings.ToLower(sha)) {
+		return "", fmt.Errorf("git: resolve-local: %q did not resolve to a commit SHA (got %q)", ref, sha)
+	}
+	return sha, nil
+}
+
 // HasRef reports whether `ref` resolves to an object in the repository
 // at repoPath. The check uses `git rev-parse --verify --quiet <ref>`,
 // which exits 0 when the ref exists and 1 when it does not. Any other

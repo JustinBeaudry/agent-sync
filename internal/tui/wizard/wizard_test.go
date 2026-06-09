@@ -57,12 +57,46 @@ func TestInitConfig_ManifestYAML(t *testing.T) {
 		}
 	}
 	// A floating manifest must NOT emit a commit/trusted_sha or a floating key.
-	floatOut, _ := InitConfig{SourceURL: "u", Floating: true}.ManifestYAML()
+	floatOut, ferr := InitConfig{SourceURL: "u", Floating: true}.ManifestYAML()
+	if ferr != nil {
+		t.Fatalf("floating ManifestYAML: %v", ferr)
+	}
 	if strings.Contains(string(floatOut), "commit:") || strings.Contains(string(floatOut), "trusted_sha:") {
 		t.Errorf("floating manifest should not pin:\n%s", floatOut)
 	}
 	if strings.Contains(string(floatOut), "floating:") {
 		t.Errorf("schema has no floating key; should not be emitted:\n%s", floatOut)
+	}
+}
+
+func TestLooksLikeLocalPath(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"https://github.com/org/repo.git", false},
+		{"ssh://git@github.com/org/repo.git", false},
+		{"git@github.com:org/repo.git", false}, // scp-style
+		{"/abs/path/to/repo", true},
+		{"./rel", true},
+		{"../rel", true},
+		{"~/repo", true},
+		{"my-repo", true},         // bare relative name
+		{"foo/bar", true},         // relative path, no scheme
+		{`C:\path\to\repo`, true}, // windows drive
+		{"C:/path/to/repo", true},
+	}
+	for _, c := range cases {
+		if got := looksLikeLocalPath(c.in); got != c.want {
+			t.Errorf("looksLikeLocalPath(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestInitConfig_RejectsFloatingLocalPath(t *testing.T) {
+	err := InitConfig{LocalPath: "/repo", Floating: true}.Validate()
+	if err == nil {
+		t.Fatal("floating local_path must be rejected by Validate")
 	}
 }
 

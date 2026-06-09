@@ -58,6 +58,30 @@ func TestInit_NonInteractiveMissingSourceFailsFast(t *testing.T) {
 	}
 }
 
+// TestInit_LocalPathPinsHEADWithoutCommit verifies init resolves a local
+// repo's HEAD to a SHA (no --commit, no network), so a local-path manifest
+// is pinned and immediately syncable.
+func TestInit_LocalPathPinsHEADWithoutCommit(t *testing.T) {
+	requireGit(t)
+	canonical, sha := makeCanonicalRepo(t)
+	ws := t.TempDir()
+
+	if _, errOut, err := runInit(t, "--dir", ws, "--local-path", canonical, "--target", "claude"); err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".aienv.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("manifest load: %v", lerr)
+	}
+	if m.Canonical.Commit != sha {
+		t.Fatalf("expected init to pin HEAD %s, got commit %q", sha, m.Canonical.Commit)
+	}
+	// And it syncs.
+	if _, errOut, err := runSync(t, ws); err != nil {
+		t.Fatalf("sync after local-path init: %v\n%s", err, errOut)
+	}
+}
+
 func TestInit_RefusesToOverwrite(t *testing.T) {
 	requireGit(t)
 	canonical, _ := makeCanonicalRepo(t)
