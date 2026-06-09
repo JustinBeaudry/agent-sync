@@ -113,7 +113,7 @@ jobs:
       - name: Test with coverage
         env:
           AGENT_SYNC_REQUIRE_GIT: "1"
-        run: go test -count=1 -timeout=10m -coverprofile=coverage.out ./...
+        run: go test -race -count=1 -timeout=10m -coverprofile=coverage.out ./...
 
       - name: Enforce coverage floor
         shell: bash

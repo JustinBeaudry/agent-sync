@@ -18,16 +18,18 @@ func TestExitError_ErrorAndUnwrap(t *testing.T) {
 
 	// No wrapped error: Error() reports the code.
 	bare := &ExitError{Code: 3}
-	if bare.Error() == "" {
-		t.Fatal("bare ExitError.Error() should be non-empty")
+	if bare.Error() != "adapterkit: exit 3" {
+		t.Fatalf("bare ExitError.Error() = %q, want %q", bare.Error(), "adapterkit: exit 3")
 	}
 	if bare.Unwrap() != nil {
 		t.Fatal("bare ExitError.Unwrap() should be nil")
 	}
 
-	// nil receiver is safe.
+	// nil receiver is safe and returns the documented sentinel.
 	var nilErr *ExitError
-	_ = nilErr.Error()
+	if got := nilErr.Error(); got != "adapterkit: <nil exit error>" {
+		t.Fatalf("nil ExitError.Error() = %q, want the nil sentinel", got)
+	}
 	if nilErr.Unwrap() != nil {
 		t.Fatal("nil ExitError.Unwrap() should be nil")
 	}
@@ -39,6 +41,7 @@ func TestServerState_String(t *testing.T) {
 		serverStateInitialized: "initialized",
 		serverStateReady:       "ready",
 		serverStateClosed:      "closed",
+		serverState(255):       "unknown(255)", // default branch
 	}
 	for s, want := range cases {
 		if got := s.String(); got != want {

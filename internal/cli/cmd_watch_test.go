@@ -13,14 +13,10 @@ import (
 	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
 func watchRC(ws string) *runtimeContext {
 	return &runtimeContext{
 		Access: Access{NonInteractive: true},
-		Logger: discardLogger(),
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Flags:  PersistentFlags{Workspace: ws},
 		Deps:   RootDeps{Out: io.Discard, Err: io.Discard},
 	}
@@ -63,8 +59,14 @@ func TestRunWatchSync_FailureWritesMarker(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when no manifest is present")
 	}
-	if _, statErr := os.Stat(filepath.Join(ws, lastWatchFailedRel)); statErr != nil {
-		t.Fatalf("expected failure marker written: %v", statErr)
+	// The composed runWatchSync -> writeWatchFailed path must record the cause,
+	// not just create an empty marker file.
+	body, readErr := os.ReadFile(filepath.Join(ws, lastWatchFailedRel))
+	if readErr != nil {
+		t.Fatalf("expected failure marker written: %v", readErr)
+	}
+	if !strings.Contains(string(body), err.Error()) {
+		t.Fatalf("marker body %q should contain the failure cause %q", body, err.Error())
 	}
 }
 

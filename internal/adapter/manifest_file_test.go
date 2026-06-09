@@ -20,6 +20,12 @@ func TestLoadAdapterManifestFile_Valid(t *testing.T) {
 	if m.Name != "claude" {
 		t.Fatalf("name = %q, want claude", m.Name)
 	}
+	if m.ContractVersion != "aienvs/v1" {
+		t.Fatalf("contract_version = %q, want aienvs/v1", m.ContractVersion)
+	}
+	if len(m.Command) != 1 || m.Command[0] != "x" {
+		t.Fatalf("command = %v, want [x]", m.Command)
+	}
 }
 
 func TestLoadAdapterManifestFile_Missing(t *testing.T) {
