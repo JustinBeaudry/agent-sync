@@ -31,7 +31,13 @@ These are non-negotiable; violating them breaks v1:
 2. **Adapters never write files directly.** They emit declarative ops
    over the v1 protocol; the CLI core performs the actual writes. This
    centralizes safe-write semantics and enforces declarative-only output.
-   (Units 8, 9, 10, 11.)
+   (Units 8, 9, 10, 11.) The op *content* travels to the CLI in
+   `EmitResult.Ops` (each op as a `json.RawMessage`, decoded via
+   `contract.DecodeOp`); `OpsPerformed` remains the `{kind, path}`
+   summary for the declared-outputs and capability-lied gates. This
+   `ops` field is an **additive** extension under the "freeze the wire
+   frame, grow capabilities" policy — no breaking version bump. (Plan U0,
+   `docs/plans/2026-06-08-007-feat-cli-tui-sync-engine-plan.md`.)
 3. **Non-interactive mode never prompts, never hangs.** TTY detection gates
    interactive UX; the CLI exits with a documented code and the exact flag
    needed to proceed. (Units 6, 16.)
