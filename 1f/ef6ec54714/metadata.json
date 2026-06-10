@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "1fef6ec54714",
+  "strategy": "manual-commit",
+  "branch": "refactor/rename-aienvs-to-agent-sync",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/bundled/claude/emit_test.go",
+    "internal/adapter/bundled/claude/emit_tool_owned.go",
+    "internal/adapter/bundled/claude/header.go",
+    "internal/adapter/bundled/codex/bundled.go",
+    "internal/adapter/bundled/codex/emit_errors_test.go",
+    "internal/adapter/bundled/codex/emit_test.go",
+    "internal/adapter/bundled/codex/emit_tool_owned.go",
+    "internal/adapter/bundled/cursor/emit_test.go",
+    "internal/adapter/bundled/cursor/emit_tool_owned.go",
+    "internal/adapter/bundled/cursor/header.go",
+    "internal/ir/kinds.go",
+    "internal/ir/kinds_test.go",
+    "internal/ir/types.go",
+    "internal/merge/apply_test.go",
+    "internal/merge/fuzz_test.go",
+    "internal/merge/json.go",
+    "internal/merge/json_test.go",
+    "internal/merge/locator.go",
+    "internal/merge/locator_test.go",
+    "internal/merge/toml.go",
+    "internal/merge/toml_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1f/ef6ec54714/0/metadata.json",
+      "transcript": "/1f/ef6ec54714/0/full.jsonl",
+      "context": "/1f/ef6ec54714/0/context.md",
+      "content_hash": "/1f/ef6ec54714/0/content_hash.txt",
+      "prompt": "/1f/ef6ec54714/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 12,
+    "cache_creation_tokens": 5982,
+    "cache_read_tokens": 1183095,
+    "output_tokens": 4133,
+    "api_call_count": 6
+  }
+}

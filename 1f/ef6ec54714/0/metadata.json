@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "1fef6ec54714",
+  "session_id": "8ef41bcb-d9bc-4fa4-ae16-a19811bb0b18",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-10T19:52:47.765697Z",
+  "branch": "refactor/rename-aienvs-to-agent-sync",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/bundled/cursor/emit_tool_owned.go",
+    "internal/ir/kinds_test.go",
+    "internal/ir/types.go",
+    "internal/merge/toml.go",
+    "internal/adapter/bundled/claude/header.go",
+    "internal/adapter/bundled/codex/bundled.go",
+    "internal/adapter/bundled/codex/emit_test.go",
+    "internal/adapter/bundled/codex/emit_tool_owned.go",
+    "internal/merge/json.go",
+    "internal/merge/locator_test.go",
+    "internal/merge/toml_test.go",
+    "internal/adapter/bundled/cursor/emit_test.go",
+    "internal/merge/apply_test.go",
+    "internal/merge/json_test.go",
+    "internal/merge/locator.go",
+    "internal/adapter/bundled/claude/emit_tool_owned.go",
+    "internal/adapter/bundled/codex/emit_errors_test.go",
+    "internal/adapter/bundled/cursor/header.go",
+    "internal/ir/kinds.go",
+    "internal/merge/fuzz_test.go",
+    "internal/adapter/bundled/claude/emit_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f1701a5007f9",
+  "checkpoint_transcript_start": 287,
+  "transcript_lines_at_start": 287,
+  "token_usage": {
+    "input_tokens": 12,
+    "cache_creation_tokens": 5982,
+    "cache_read_tokens": 1183095,
+    "output_tokens": 4133,
+    "api_call_count": 6
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-10T19:52:47.474994Z",
+    "agent_lines": 96,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 96,
+    "agent_percentage": 100
+  }
+}
