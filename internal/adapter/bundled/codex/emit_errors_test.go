@@ -130,6 +130,31 @@ func TestRenderTOMLTableBody_InlineNesting(t *testing.T) {
 	}
 }
 
+func TestRenderTOMLTableBody_DoesNotHTMLEscape(t *testing.T) {
+	t.Parallel()
+	// Characters common in URLs/args (<, >, &) must render literally, not as
+	// < / > / &, so .codex/config.toml stays human-readable.
+	body, err := renderTOMLTableBody(map[string]json.RawMessage{
+		"url": json.RawMessage(`"https://mcp.example/api?a=1&b=2"`),
+		"cmd": json.RawMessage(`"run <in> & echo done"`),
+	})
+	if err != nil {
+		t.Fatalf("renderTOMLTableBody: %v", err)
+	}
+	s := string(body)
+	if strings.Contains(s, `\u00`) {
+		t.Errorf("toml body must not contain \\u00xx HTML escapes; got:\n%s", s)
+	}
+	for _, want := range []string{
+		`url = "https://mcp.example/api?a=1&b=2"`,
+		`cmd = "run <in> & echo done"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("toml body missing %q; got:\n%s", want, s)
+		}
+	}
+}
+
 func TestTOMLKey_QuotesNonBareKeys(t *testing.T) {
 	t.Parallel()
 	if got := tomlKey("plain_key-1"); got != "plain_key-1" {

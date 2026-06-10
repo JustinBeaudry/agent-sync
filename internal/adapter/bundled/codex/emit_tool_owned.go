@@ -186,14 +186,21 @@ func tomlValue(v any) (string, error) {
 }
 
 // quoteTOMLString renders s as a TOML basic string. JSON string escaping is a
-// subset of TOML basic-string escaping (\", \\, \n, \t, \uXXXX, ...), so
-// json.Marshal produces a valid TOML basic string for the content MCP configs
-// carry.
+// subset of TOML basic-string escaping (\", \\, \n, \t, \uXXXX, ...), so a JSON
+// encoder produces a valid TOML basic string for the content MCP configs carry.
+//
+// HTML escaping is disabled so characters common in commands, args, and URLs
+// (<, >, &) render literally (e.g. a URL query "?a=1&b=2") instead of as
+// < / > / & — which would be valid but unreadable in a
+// human-edited .codex/config.toml.
 func quoteTOMLString(s string) string {
-	out, err := json.Marshal(s)
-	if err != nil {
-		// json.Marshal of a string never fails; fall back defensively.
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
+		// Encoding a string never fails; fall back defensively.
 		return `"` + s + `"`
 	}
-	return string(out)
+	// Encoder.Encode appends a trailing newline; strip it.
+	return strings.TrimSuffix(buf.String(), "\n")
 }
