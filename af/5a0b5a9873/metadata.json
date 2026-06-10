@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "af5a0b5a9873",
+  "strategy": "manual-commit",
+  "branch": "feat/codex-adapter",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/engine/shared_subdir_test.go",
+    "internal/engine/target.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/af/5a0b5a9873/0/metadata.json",
+      "transcript": "/af/5a0b5a9873/0/full.jsonl",
+      "context": "/af/5a0b5a9873/0/context.md",
+      "content_hash": "/af/5a0b5a9873/0/content_hash.txt",
+      "prompt": "/af/5a0b5a9873/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 66066,
+    "cache_creation_tokens": 2937508,
+    "cache_read_tokens": 209934141,
+    "output_tokens": 452661,
+    "api_call_count": 419
+  }
+}
