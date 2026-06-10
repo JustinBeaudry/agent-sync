@@ -1,0 +1,48 @@
+name: codex
+version: "0.1"
+contract_version: aienvs/v1
+reserved_prefix: .codex
+
+# concept_kinds is the authoritative per-IR-kind support declaration for the
+# codex adapter. The in-code map in capabilities.go must match this file
+# kind-for-kind; capabilities_test.go enforces the parity.
+concept_kinds:
+  agents-md:
+    status: supported
+    note: |
+      Section-merged into the workspace-root AGENTS.md as a managed section
+      between aienvs:begin / aienvs:end markers. Codex CLI reads AGENTS.md by
+      walking from the repository root to the cwd. Note: Codex caps combined
+      AGENTS.md size (project_doc_max_bytes, default 32 KiB) and prefers an
+      AGENTS.override.md when present — see docs/adapters/codex.md.
+  skill:
+    status: supported
+    note: |
+      Emitted at .agents/skills/aienvs-<id>/SKILL.md (plus assets). Codex scans
+      the shared .agents/skills/ tree from cwd up to the repository root — this
+      is a cross-tool convention, not a Codex-specific path, so the same skill
+      tree is consumed by other agents (e.g. pi) without duplication.
+  mcp-server-entry:
+    status: supported
+    note: |
+      Merged into the project-local .codex/config.toml as a [mcp_servers.aienvs_<id>]
+      table via the write_tool_owned op (toml-path locator). User content elsewhere
+      in the file is preserved. If a Codex version does not load project-local MCP
+      servers, the same table can be lifted to ~/.codex/config.toml.
+  rule:
+    status: unsupported
+    note: |
+      Codex CLI has no per-tool rule concept distinct from AGENTS.md. Targeting
+      rule at codex surfaces a degradation warning and emits no files; consolidate
+      rule content into agents-md IR nodes instead.
+  command:
+    status: unsupported
+    note: |
+      Codex custom prompts are deprecated in favor of skills, and live only in the
+      user home (~/.codex/prompts/) — they are not shareable through a repository.
+      Targeting command at codex surfaces a degradation warning; use a skill instead.
+  plugin-reference:
+    status: unsupported
+    note: |
+      Codex does not load project-level plugin-reference registries. Targeting
+      plugin-reference at codex surfaces a degradation warning and emits no files.

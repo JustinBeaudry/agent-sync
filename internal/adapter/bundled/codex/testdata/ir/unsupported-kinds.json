@@ -1,0 +1,22 @@
+{
+  "nodes": [
+    {
+      "id": "no-fri",
+      "kind": "rule",
+      "version": 1,
+      "body": "No PRs on Friday."
+    },
+    {
+      "id": "draftpr",
+      "kind": "command",
+      "version": 1,
+      "body": "Draft a PR."
+    },
+    {
+      "id": "some-plugin",
+      "kind": "plugin-reference",
+      "version": 1,
+      "body": "{\"ref\":\"owner/repo\"}"
+    }
+  ]
+}

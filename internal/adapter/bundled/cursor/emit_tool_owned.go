@@ -109,13 +109,15 @@ func emitAgentsMD(emitted *emittedOps, node irNode) error {
 			Message: fmt.Sprintf("cursor: agents-md %q body contains agent-sync marker syntax (%q); refusing to corrupt AGENTS.md", node.ID, string(markerOpenBytes)),
 		}
 	}
-	wrapped := wrapManagedSection(node.ID, body)
-
+	// The engine owns the begin/end markers (it renders the managed block from
+	// the locator during the markdown-section merge). The adapter passes the
+	// INNER body only — sending marker-wrapped content is rejected by the merge
+	// ("the engine owns markers; pass inner body only").
 	emitted.add(adapterkit.OpWriteToolOwned{
 		Path:    agentsMDPath,
 		Kind:    adapterkit.ToolOwnedKindMarkdownSection,
 		Locator: sectionIDPrefix + node.ID,
-		Content: wrapped,
+		Content: body,
 	})
 	return nil
 }

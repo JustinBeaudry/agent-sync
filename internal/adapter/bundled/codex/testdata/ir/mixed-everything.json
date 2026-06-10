@@ -1,0 +1,22 @@
+{
+  "nodes": [
+    {
+      "id": "team",
+      "kind": "agents-md",
+      "version": 1,
+      "body": "## Conventions\n\nUse conventional commits."
+    },
+    {
+      "id": "coder",
+      "kind": "skill",
+      "version": 1,
+      "body": "# Coder skill\n\nWrite production code."
+    },
+    {
+      "id": "lsp",
+      "kind": "mcp-server-entry",
+      "version": 1,
+      "body": "{\"command\":\"node\",\"args\":[\"server.js\"]}"
+    }
+  ]
+}
