@@ -33,7 +33,7 @@ func TestInit_NonInteractiveLocalPathWritesLoadableManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init: %v\n%s", err, errOut)
 	}
-	mpath := filepath.Join(ws, ".aienv.yaml")
+	mpath := filepath.Join(ws, ".agent-sync.yaml")
 	m, lerr := manifest.LoadFile(mpath, manifest.LoadOptions{})
 	if lerr != nil {
 		t.Fatalf("written manifest does not load: %v", lerr)
@@ -69,7 +69,7 @@ func TestInit_LocalPathPinsHEADWithoutCommit(t *testing.T) {
 	if _, errOut, err := runInit(t, "--dir", ws, "--local-path", canonical, "--target", "claude"); err != nil {
 		t.Fatalf("init: %v\n%s", err, errOut)
 	}
-	m, lerr := manifest.LoadFile(filepath.Join(ws, ".aienv.yaml"), manifest.LoadOptions{})
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
 	if lerr != nil {
 		t.Fatalf("manifest load: %v", lerr)
 	}
@@ -86,7 +86,7 @@ func TestInit_RefusesToOverwrite(t *testing.T) {
 	requireGit(t)
 	canonical, _ := makeCanonicalRepo(t)
 	ws := t.TempDir()
-	if err := os.WriteFile(filepath.Join(ws, ".aienv.yaml"), []byte("version: 1\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, ".agent-sync.yaml"), []byte("version: 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err := runInit(t, "--dir", ws, "--local-path", canonical, "--floating")

@@ -1,4 +1,4 @@
-# Example aienvs workspace manifest — pinned for CI.
+# Example agent-sync workspace manifest — pinned for CI.
 version: 1
 
 canonical:

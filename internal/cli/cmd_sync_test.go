@@ -53,7 +53,7 @@ func writeWorkspace(t *testing.T, canonicalPath, sha string) string {
 		"trusted_sha: " + sha + "\n" +
 		"targets:\n" +
 		"  - claude\n"
-	if err := os.WriteFile(filepath.Join(ws, ".aienv.yaml"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, ".agent-sync.yaml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return ws
@@ -144,7 +144,7 @@ func TestSync_FloatingLocalPathUnsupported(t *testing.T) {
 	ws := t.TempDir()
 	// Manifest with local_path but no commit → floating, unsupported.
 	m := "version: 1\ncanonical:\n  local_path: " + canonical + "\ntargets:\n  - claude\n"
-	if err := os.WriteFile(filepath.Join(ws, ".aienv.yaml"), []byte(m), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, ".agent-sync.yaml"), []byte(m), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err := runSync(t, ws)

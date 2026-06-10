@@ -17,7 +17,7 @@ func TestConfig_Ignored(t *testing.T) {
 	}{
 		{"/ws/.aienv/state/claude.json", true},
 		{"/ws/.aienv", true},
-		{"/ws/.aienv.yaml", false}, // sibling, not under the prefix
+		{"/ws/.agent-sync.yaml", false}, // sibling, not under the prefix
 		{"/ws/rules/x.md", false},
 	}
 	for _, c := range cases {

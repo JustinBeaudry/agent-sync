@@ -39,8 +39,8 @@ type TrustDeps struct {
 	Store   *trust.Store
 	Pending *trust.PendingStore
 
-	// ManifestPath overrides `.aienv.yaml` discovery. When empty the
-	// command falls back to `$PWD/.aienv.yaml`.
+	// ManifestPath overrides `.agent-sync.yaml` discovery. When empty the
+	// command falls back to `$PWD/.agent-sync.yaml`.
 	ManifestPath string
 
 	// Prompter is used for interactive subcommands (add, revoke, reset).
@@ -66,7 +66,7 @@ func NewTrustCommand(deps TrustDeps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "trust",
 		Short: "Manage the two-tier trust store",
-		Long: "Manage the committed project pin (trusted_sha in .aienv.yaml) " +
+		Long: "Manage the committed project pin (trusted_sha in .agent-sync.yaml) " +
 			"and the per-user trust history (trust.jsonl).",
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -118,9 +118,9 @@ func resolveManifestPath(deps TrustDeps) string {
 	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return ".aienv.yaml"
+		return ".agent-sync.yaml"
 	}
-	return filepath.Join(wd, ".aienv.yaml")
+	return filepath.Join(wd, ".agent-sync.yaml")
 }
 
 func resolvePrompter(deps TrustDeps) *trust.Prompter {
@@ -352,7 +352,7 @@ func newTrustPromoteCmd(deps TrustDeps) *cobra.Command {
 		Short: "Promote pending SHA(s) into the trust log",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// `--all` + `--pin-manifest` is a footgun: pending.jsonl is a
-			// per-user store across many workspaces, but .aienv.yaml is a
+			// per-user store across many workspaces, but .agent-sync.yaml is a
 			// per-workspace pin to a single canonical source. Looping the
 			// pin-write across every pending URL would non-deterministically
 			// overwrite the workspace manifest with whichever URL ran last.
@@ -446,7 +446,7 @@ func newTrustPromoteCmd(deps TrustDeps) *cobra.Command {
 					// canonicalization on both sides). Otherwise the user is
 					// promoting a pending entry from an unrelated workspace
 					// and `--pin-manifest` would write an unrelated SHA into
-					// the current project's .aienv.yaml.
+					// the current project's .agent-sync.yaml.
 					manifestPath := resolveManifestPath(deps)
 					if err := assertPromotedURLMatchesManifest(manifestPath, url); err != nil {
 						return err
@@ -460,14 +460,14 @@ func newTrustPromoteCmd(deps TrustDeps) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "promote every pending URL")
-	cmd.Flags().BoolVar(&pinManifest, "pin-manifest", false, "also write trusted_sha to .aienv.yaml")
+	cmd.Flags().BoolVar(&pinManifest, "pin-manifest", false, "also write trusted_sha to .agent-sync.yaml")
 	return cmd
 }
 
 // assertPromotedURLMatchesManifest returns nil when the manifest's
 // canonical.url matches promotedURL after canonicalization. It is the
 // gate that keeps `trust promote --pin-manifest` from writing an
-// unrelated workspace's SHA into .aienv.yaml.
+// unrelated workspace's SHA into .agent-sync.yaml.
 //
 // Local-canonical manifests (canonical.local_path) cannot be safely
 // pinned via promote-from-pending; we reject in that case too.
@@ -506,7 +506,7 @@ func newTrustPinCmd(deps TrustDeps) *cobra.Command {
 	var sha string
 	cmd := &cobra.Command{
 		Use:   "pin [url]",
-		Short: "Write trusted_sha into .aienv.yaml",
+		Short: "Write trusted_sha into .agent-sync.yaml",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !trust.IsSHA40(sha) {
 				return fmt.Errorf("trust pin: --sha must be 40-hex, got %q", sha)

@@ -12,7 +12,7 @@
 //
 // It does not own:
 //
-//   - The committed project pin (`trusted_sha:` in .aienv.yaml). That field
+//   - The committed project pin (`trusted_sha:` in .agent-sync.yaml). That field
 //     lives on the manifest schema; this package reads it as an input.
 //   - The sync pipeline. Sync calls Decide() and acts on the returned
 //     Decision; it does not import prompt.go.

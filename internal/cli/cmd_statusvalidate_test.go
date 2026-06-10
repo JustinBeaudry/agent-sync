@@ -86,7 +86,7 @@ func TestValidate_PerTargetErrorIsOperationalFailure(t *testing.T) {
 	// (operational), not 0 or 1.
 	m := "version: 1\ncanonical:\n  local_path: " + canonical + "\n  commit: " + sha +
 		"\ntrusted_sha: " + sha + "\ntargets:\n  - nonexistent-adapter\n"
-	if err := os.WriteFile(filepath.Join(ws, ".aienv.yaml"), []byte(m), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, ".agent-sync.yaml"), []byte(m), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err := runCmd(t, ws, "validate")

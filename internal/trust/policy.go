@@ -30,7 +30,7 @@ type DecideInput struct {
 	// ResolvedSHA is the 40-hex SHA the Git layer resolved.
 	ResolvedSHA string
 
-	// ManifestTrustedSHA is the value of `trusted_sha:` from `.aienv.yaml`.
+	// ManifestTrustedSHA is the value of `trusted_sha:` from `.agent-sync.yaml`.
 	// Empty string means absent.
 	ManifestTrustedSHA string
 
@@ -199,7 +199,7 @@ func Decide(in DecideInput) (Decision, error) {
 			d.Kind = KindDecisionRequired
 			d.Remediation = fmt.Sprintf(
 				"known URL %s changed SHA (%s -> %s). "+
-					"Commit `trusted_sha: %s` to .aienv.yaml, "+
+					"Commit `trusted_sha: %s` to .agent-sync.yaml, "+
 					"or rerun with --accept-new-source=%s.",
 				in.URL, shortSHA(in.State.CurrentSHA), shortSHA(in.ResolvedSHA),
 				in.ResolvedSHA, in.ResolvedSHA,
@@ -253,7 +253,7 @@ func Decide(in DecideInput) (Decision, error) {
 		d.Kind = KindDecisionRequired
 		d.Remediation = fmt.Sprintf(
 			"first use of %s (%s). Rerun interactively, or pass "+
-				"--accept-new-source=%s, or commit `trusted_sha: %s` to .aienv.yaml.",
+				"--accept-new-source=%s, or commit `trusted_sha: %s` to .agent-sync.yaml.",
 			in.URL, shortSHA(in.ResolvedSHA), in.ResolvedSHA, in.ResolvedSHA,
 		)
 		return d, fmt.Errorf("%w: first use of %s", ErrTrustDecisionRequired, in.URL)
