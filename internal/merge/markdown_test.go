@@ -9,10 +9,10 @@ import (
 )
 
 func mdUpsert(id, body string) MergeEntry {
-	return MergeEntry{Kind: adapterkit.ToolOwnedKindMarkdownSection, Locator: "aienvs:" + id, Content: []byte(body)}
+	return MergeEntry{Kind: adapterkit.ToolOwnedKindMarkdownSection, Locator: "agent-sync:" + id, Content: []byte(body)}
 }
 func mdRemove(id string) MergeEntry {
-	return MergeEntry{Kind: adapterkit.ToolOwnedKindMarkdownSection, Locator: "aienvs:" + id, Remove: true}
+	return MergeEntry{Kind: adapterkit.ToolOwnedKindMarkdownSection, Locator: "agent-sync:" + id, Remove: true}
 }
 
 func md(existing string, e MergeEntry) (string, string, string, error) {
@@ -22,7 +22,7 @@ func md(existing string, e MergeEntry) (string, string, string, error) {
 
 func TestMergeMarkdown_ReplacePreservesUserText(t *testing.T) {
 	t.Parallel()
-	in := "# My notes\n\nbefore text\n\n<!-- aienvs:begin id=foo -->\nOLD\n<!-- aienvs:end id=foo -->\n\nafter text\n"
+	in := "# My notes\n\nbefore text\n\n<!-- agent-sync:begin id=foo -->\nOLD\n<!-- agent-sync:end id=foo -->\n\nafter text\n"
 	out, hash, warn, err := md(in, mdUpsert("foo", "NEW BODY\n"))
 	if err != nil {
 		t.Fatalf("merge: %v", err)
@@ -41,7 +41,7 @@ func TestMergeMarkdown_ReplacePreservesUserText(t *testing.T) {
 func TestMergeMarkdown_IdOnlyAdapterGrammarAccepted(t *testing.T) {
 	t.Parallel()
 	// The adapters emit id-only begin markers (no source=); they must parse.
-	in := "<!-- aienvs:begin id=foo -->\nold\n<!-- aienvs:end id=foo -->\n"
+	in := "<!-- agent-sync:begin id=foo -->\nold\n<!-- agent-sync:end id=foo -->\n"
 	out, _, _, err := md(in, mdUpsert("foo", "new\n"))
 	if err != nil {
 		t.Fatalf("merge: %v", err)
@@ -60,7 +60,7 @@ func TestMergeMarkdown_NewFileGetsHeader(t *testing.T) {
 	if !strings.Contains(out, "Partially managed by agent-sync") {
 		t.Errorf("new file missing managed header:\n%s", out)
 	}
-	if !strings.Contains(out, "<!-- aienvs:begin id=foo -->") {
+	if !strings.Contains(out, "<!-- agent-sync:begin id=foo -->") {
 		t.Errorf("new file missing section:\n%s", out)
 	}
 }
@@ -93,14 +93,14 @@ func TestMergeMarkdown_UpsertThenRemoveIsIdentity(t *testing.T) {
 	if !strings.HasPrefix(back, in) {
 		t.Errorf("user content changed by upsert+remove:\n%q", back)
 	}
-	if strings.Contains(back, "aienvs:begin id=foo") {
+	if strings.Contains(back, "agent-sync:begin id=foo") {
 		t.Errorf("section not removed:\n%q", back)
 	}
 }
 
 func TestMergeMarkdown_NoOpUpsertByteIdentical(t *testing.T) {
 	t.Parallel()
-	in := "x\n<!-- aienvs:begin id=foo -->\nbody\n<!-- aienvs:end id=foo -->\ny\n"
+	in := "x\n<!-- agent-sync:begin id=foo -->\nbody\n<!-- agent-sync:end id=foo -->\ny\n"
 	once, _, _, err := md(in, mdUpsert("foo", "body\n"))
 	if err != nil {
 		t.Fatalf("upsert: %v", err)
@@ -112,7 +112,7 @@ func TestMergeMarkdown_NoOpUpsertByteIdentical(t *testing.T) {
 
 func TestMergeMarkdown_MultiAdapterSectionsCoexist(t *testing.T) {
 	t.Parallel()
-	in := "<!-- aienvs:begin id=cursor -->\nc\n<!-- aienvs:end id=cursor -->\n"
+	in := "<!-- agent-sync:begin id=cursor -->\nc\n<!-- agent-sync:end id=cursor -->\n"
 	out, _, _, err := md(in, mdUpsert("codex", "x\n"))
 	if err != nil {
 		t.Fatalf("merge: %v", err)
@@ -132,7 +132,7 @@ func TestMergeMarkdown_CodexCursorCoexistenceAndIndependentRemoval(t *testing.T)
 	t.Parallel()
 
 	userPlusCursor := "# My project\n\nHand-written prose.\n\n" +
-		"<!-- aienvs:begin id=cursor -->\ncursor section\n<!-- aienvs:end id=cursor -->\n"
+		"<!-- agent-sync:begin id=cursor -->\ncursor section\n<!-- agent-sync:end id=cursor -->\n"
 
 	withCodex, _, _, err := md(userPlusCursor, mdUpsert("codex", "codex section\n"))
 	if err != nil {
@@ -164,7 +164,7 @@ func TestMergeMarkdown_CodexCursorCoexistenceAndIndependentRemoval(t *testing.T)
 
 func TestMergeMarkdown_CRLFPreserved(t *testing.T) {
 	t.Parallel()
-	in := "x\r\n<!-- aienvs:begin id=foo -->\r\nold\r\n<!-- aienvs:end id=foo -->\r\n"
+	in := "x\r\n<!-- agent-sync:begin id=foo -->\r\nold\r\n<!-- agent-sync:end id=foo -->\r\n"
 	out, _, _, err := md(in, mdUpsert("foo", "new\r\n"))
 	if err != nil {
 		t.Fatalf("merge: %v", err)
@@ -177,11 +177,11 @@ func TestMergeMarkdown_CRLFPreserved(t *testing.T) {
 func TestMergeMarkdown_RecoveryRefusals(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
-		"begin no end":   "<!-- aienvs:begin id=foo -->\nbody\n",
-		"end no begin":   "body\n<!-- aienvs:end id=foo -->\n",
-		"nested begin":   "<!-- aienvs:begin id=foo -->\n<!-- aienvs:begin id=bar -->\n<!-- aienvs:end id=bar -->\n",
-		"duplicate id":   "<!-- aienvs:begin id=foo -->\na\n<!-- aienvs:end id=foo -->\n<!-- aienvs:begin id=foo -->\nb\n<!-- aienvs:end id=foo -->\n",
-		"mismatched end": "<!-- aienvs:begin id=foo -->\n<!-- aienvs:end id=bar -->\n",
+		"begin no end":   "<!-- agent-sync:begin id=foo -->\nbody\n",
+		"end no begin":   "body\n<!-- agent-sync:end id=foo -->\n",
+		"nested begin":   "<!-- agent-sync:begin id=foo -->\n<!-- agent-sync:begin id=bar -->\n<!-- agent-sync:end id=bar -->\n",
+		"duplicate id":   "<!-- agent-sync:begin id=foo -->\na\n<!-- agent-sync:end id=foo -->\n<!-- agent-sync:begin id=foo -->\nb\n<!-- agent-sync:end id=foo -->\n",
+		"mismatched end": "<!-- agent-sync:begin id=foo -->\n<!-- agent-sync:end id=bar -->\n",
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -197,7 +197,7 @@ func TestMergeMarkdown_RecoveryRefusals(t *testing.T) {
 func TestMergeMarkdown_IndentedMarkerOfManagedIdRefused(t *testing.T) {
 	t.Parallel()
 	// An indented copy of the managed id must refuse, not append a duplicate.
-	in := "<!-- aienvs:begin id=foo -->\nlive\n<!-- aienvs:end id=foo -->\n\n  <!-- aienvs:begin id=foo -->\n"
+	in := "<!-- agent-sync:begin id=foo -->\nlive\n<!-- agent-sync:end id=foo -->\n\n  <!-- agent-sync:begin id=foo -->\n"
 	_, _, _, err := md(in, mdUpsert("foo", "x\n"))
 	if !errors.Is(err, ErrMalformedManagedSection) {
 		t.Errorf("indented copy of managed id should refuse; err=%v", err)
@@ -207,7 +207,7 @@ func TestMergeMarkdown_IndentedMarkerOfManagedIdRefused(t *testing.T) {
 func TestMergeMarkdown_IndentedNonTargetMarkerWarnsAndAppends(t *testing.T) {
 	t.Parallel()
 	// An indented marker for a DIFFERENT id is user content; we append + warn.
-	in := "  <!-- aienvs:begin id=other -->\nuser text\n"
+	in := "  <!-- agent-sync:begin id=other -->\nuser text\n"
 	out, _, warn, err := md(in, mdUpsert("foo", "x\n"))
 	if err != nil {
 		t.Fatalf("merge: %v", err)
@@ -218,14 +218,14 @@ func TestMergeMarkdown_IndentedNonTargetMarkerWarnsAndAppends(t *testing.T) {
 	if !strings.Contains(out, "id=foo") {
 		t.Errorf("foo section should be appended:\n%s", out)
 	}
-	if !strings.Contains(out, "  <!-- aienvs:begin id=other -->") {
+	if !strings.Contains(out, "  <!-- agent-sync:begin id=other -->") {
 		t.Errorf("indented user line must be preserved verbatim:\n%s", out)
 	}
 }
 
 func TestMergeMarkdown_BodyWithMarkerRejected(t *testing.T) {
 	t.Parallel()
-	_, _, _, err := md("", mdUpsert("foo", "x\n<!-- aienvs:begin id=evil -->\n"))
+	_, _, _, err := md("", mdUpsert("foo", "x\n<!-- agent-sync:begin id=evil -->\n"))
 	if err == nil || errors.Is(err, ErrMalformedManagedSection) {
 		t.Errorf("body containing a marker must be a programmer error; got %v", err)
 	}

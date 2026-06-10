@@ -69,7 +69,7 @@ func capabilitiesForWire() adapterkit.Capabilities {
 // .agents/skills/ tree, MCP entries into the tool-owned .codex/config.toml,
 // and prose into the tool-owned workspace-root AGENTS.md.
 func declaredOutputs() []adapterkit.DeclaredOutput {
-	agentsMDSection := "aienvs"
+	agentsMDSection := "agent-sync"
 	return []adapterkit.DeclaredOutput{
 		// .agents/skills is the shared cross-tool skills tree (codex, pi, and
 		// the user all place skills here). shared-subdir → the engine manages

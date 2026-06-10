@@ -21,9 +21,9 @@ func TestEntryID_PerKind(t *testing.T) {
 		{"json no agent-sync prefix", adapterkit.ToolOwnedKindJSONPointer, "/mcpServers/user_foo", "", true},
 		{"toml happy", adapterkit.ToolOwnedKindTOMLPath, "mcp_servers.aienvs_foo", "foo", false},
 		{"toml wrong prefix", adapterkit.ToolOwnedKindTOMLPath, "mcp_servers.user_foo", "", true},
-		{"markdown happy", adapterkit.ToolOwnedKindMarkdownSection, "aienvs:foo", "foo", false},
+		{"markdown happy", adapterkit.ToolOwnedKindMarkdownSection, "agent-sync:foo", "foo", false},
 		{"markdown no prefix", adapterkit.ToolOwnedKindMarkdownSection, "foo", "", true},
-		{"markdown invalid id", adapterkit.ToolOwnedKindMarkdownSection, "aienvs:../escape", "", true},
+		{"markdown invalid id", adapterkit.ToolOwnedKindMarkdownSection, "agent-sync:../escape", "", true},
 		{"unknown kind", adapterkit.ToolOwnedKind("bogus"), "x", "", true},
 	}
 	for _, tc := range cases {
@@ -50,8 +50,8 @@ func TestMergeEntry_RemoveIsExplicit(t *testing.T) {
 	t.Parallel()
 	// Remove is a field, independent of Content emptiness — pin that the
 	// type carries it explicitly (no inference from empty Content).
-	upsert := MergeEntry{Kind: adapterkit.ToolOwnedKindMarkdownSection, Locator: "aienvs:foo", Content: nil, Remove: false}
-	del := MergeEntry{Kind: adapterkit.ToolOwnedKindMarkdownSection, Locator: "aienvs:foo", Content: []byte("body"), Remove: true}
+	upsert := MergeEntry{Kind: adapterkit.ToolOwnedKindMarkdownSection, Locator: "agent-sync:foo", Content: nil, Remove: false}
+	del := MergeEntry{Kind: adapterkit.ToolOwnedKindMarkdownSection, Locator: "agent-sync:foo", Content: []byte("body"), Remove: true}
 	if upsert.Remove {
 		t.Error("empty-content upsert must not be a remove")
 	}

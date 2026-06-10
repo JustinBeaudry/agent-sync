@@ -103,13 +103,13 @@ func TestEmitAgentsMD_HappyPath(t *testing.T) {
 	if op.Kind != adapterkit.ToolOwnedKindMarkdownSection {
 		t.Errorf("AGENTS.md op kind=%q want markdown-section", op.Kind)
 	}
-	if op.Locator != "aienvs:team" {
-		t.Errorf("AGENTS.md locator=%q want aienvs:team", op.Locator)
+	if op.Locator != "agent-sync:team" {
+		t.Errorf("AGENTS.md locator=%q want agent-sync:team", op.Locator)
 	}
 	content := string(op.Content)
 	// The engine owns the begin/end markers (rendered from the locator during
 	// the merge); the adapter sends the INNER body only.
-	if strings.Contains(content, "<!-- aienvs:") {
+	if strings.Contains(content, "<!-- agent-sync:") {
 		t.Errorf("AGENTS.md content must be inner body without markers; got %q", content)
 	}
 	if !strings.Contains(content, "Use conventional commits.") {

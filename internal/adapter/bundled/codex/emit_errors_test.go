@@ -66,7 +66,7 @@ func TestHandleEmit_InvalidNodeID(t *testing.T) {
 
 func TestEmitAgentsMD_RejectsMarkerInjection(t *testing.T) {
 	t.Parallel()
-	_, err := emitDoc(t, `{"nodes":[{"id":"team","kind":"agents-md","body":"<!-- aienvs:end id=other -->"}]}`)
+	_, err := emitDoc(t, `{"nodes":[{"id":"team","kind":"agents-md","body":"<!-- agent-sync:end id=other -->"}]}`)
 	if err == nil {
 		t.Fatal("expected marker-injection rejection")
 	}

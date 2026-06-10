@@ -74,7 +74,7 @@ func capabilitiesForWire() adapterkit.Capabilities {
 // outputs.
 func declaredOutputs() []adapterkit.DeclaredOutput {
 	mcpPointer := "/mcpServers"
-	agentsMDSection := "aienvs"
+	agentsMDSection := "agent-sync"
 	return []adapterkit.DeclaredOutput{
 		{Path: ".cursor/rules/aienvs", Mode: adapterkit.OutputModeOwnedSubdir},
 		{Path: ".cursor/mcp.json", Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},

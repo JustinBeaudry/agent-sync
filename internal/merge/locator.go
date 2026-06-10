@@ -17,14 +17,14 @@ const aienvsKeyPrefix = "aienvs_"
 // legitimately-empty managed section is byte-distinct from a removal.
 type MergeEntry struct {
 	Kind    adapterkit.ToolOwnedKind // json-pointer | toml-path | markdown-section
-	Locator string                   // /mcpServers/aienvs_<id> | mcp_servers.aienvs_<id> | aienvs:<id>
+	Locator string                   // /mcpServers/aienvs_<id> | mcp_servers.aienvs_<id> | agent-sync:<id>
 	Content []byte                   // inner body / JSON value / TOML table body (upsert only)
 	Source  string                   // optional marker provenance (markdown only)
 	Remove  bool                     // true = delete the entry/table/section
 }
 
 // entryID extracts and validates the agent-sync id from the entry's
-// locator, per kind. Extraction is by exact `aienvs_` / `aienvs:`
+// locator, per kind. Extraction is by exact `aienvs_` / `agent-sync:`
 // prefix strip — never by splitting on the last separator — because
 // ids may contain underscores and hyphens (aienvs_foo_bar -> foo_bar).
 func entryID(e MergeEntry) (string, error) {
@@ -39,9 +39,9 @@ func entryID(e MergeEntry) (string, error) {
 		seg := e.Locator[strings.LastIndex(e.Locator, ".")+1:]
 		return validateAienvsSeg(seg)
 	case adapterkit.ToolOwnedKindMarkdownSection:
-		id, ok := strings.CutPrefix(e.Locator, "aienvs:")
+		id, ok := strings.CutPrefix(e.Locator, "agent-sync:")
 		if !ok {
-			return "", fmt.Errorf("merge: markdown locator must be aienvs:<id>: %q", e.Locator)
+			return "", fmt.Errorf("merge: markdown locator must be agent-sync:<id>: %q", e.Locator)
 		}
 		if !ir.IsValidID(id) {
 			return "", fmt.Errorf("merge: invalid id %q", id)

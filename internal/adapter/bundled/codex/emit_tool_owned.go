@@ -15,13 +15,13 @@ const (
 	codexConfigPath = ".codex/config.toml"
 	mcpTOMLPathBase = "mcp_servers.aienvs_"
 	agentsMDPath    = "AGENTS.md"
-	sectionIDPrefix = "aienvs:"
+	sectionIDPrefix = "agent-sync:"
 )
 
 // markerOpenBytes is the literal HTML-comment opener every agent-sync section
 // marker uses. An agents-md body containing this sequence is rejected so a
 // hostile body can't forge a section split inside AGENTS.md.
-var markerOpenBytes = []byte("<!-- aienvs:")
+var markerOpenBytes = []byte("<!-- agent-sync:")
 
 // bareTOMLKey matches keys that can be written unquoted in TOML.
 var bareTOMLKey = regexp.MustCompile(`\A[A-Za-z0-9_-]+\z`)
@@ -81,7 +81,7 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode) error {
 }
 
 // emitAgentsMD writes the agents-md node into workspace-root AGENTS.md as a
-// managed section between aienvs:begin/end markers. AGENTS.md is tool-owned and
+// managed section between agent-sync:begin/end markers. AGENTS.md is tool-owned and
 // shared (codex, cursor, pi all write their own id-keyed sections); the merge
 // step preserves user content and other adapters' sections.
 func emitAgentsMD(emitted *emittedOps, node irNode) error {

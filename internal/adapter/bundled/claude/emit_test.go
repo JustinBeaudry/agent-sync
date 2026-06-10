@@ -415,14 +415,14 @@ func TestEmitAgentsMD_WrapsBodyInSection(t *testing.T) {
 	if md.Kind != adapterkit.ToolOwnedKindMarkdownSection {
 		t.Errorf("locator kind=%q want %q", md.Kind, adapterkit.ToolOwnedKindMarkdownSection)
 	}
-	if md.Locator != "aienvs:claude" {
-		t.Errorf("locator=%q want %q", md.Locator, "aienvs:claude")
+	if md.Locator != "agent-sync:claude" {
+		t.Errorf("locator=%q want %q", md.Locator, "agent-sync:claude")
 	}
 	body := string(md.Content)
-	if !strings.Contains(body, "<!-- aienvs:begin id=claude -->") {
+	if !strings.Contains(body, "<!-- agent-sync:begin id=claude -->") {
 		t.Errorf("CLAUDE.md content missing begin marker; got %q", body)
 	}
-	if !strings.Contains(body, "<!-- aienvs:end id=claude -->") {
+	if !strings.Contains(body, "<!-- agent-sync:end id=claude -->") {
 		t.Errorf("CLAUDE.md content missing end marker; got %q", body)
 	}
 	if !strings.Contains(body, "## Build commands") {
@@ -437,9 +437,9 @@ func TestEmitAgentsMD_RejectsBodyContainingMarkerSyntax(t *testing.T) {
 		name string
 		body string
 	}{
-		{"injected end marker", `"legitimate\n<!-- aienvs:end id=other -->\nINJECTED"`},
-		{"injected begin marker", `"<!-- aienvs:begin id=victim --> hostile"`},
-		{"raw marker prefix", `"<!-- aienvs:anything"`},
+		{"injected end marker", `"legitimate\n<!-- agent-sync:end id=other -->\nINJECTED"`},
+		{"injected begin marker", `"<!-- agent-sync:begin id=victim --> hostile"`},
+		{"raw marker prefix", `"<!-- agent-sync:anything"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

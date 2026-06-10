@@ -62,14 +62,14 @@ func jsonSidecarMarker() []byte {
 // silently corrupting CLAUDE.md.
 func sectionMarkerBegin(id string) []byte {
 	mustValidID(id)
-	return []byte("<!-- aienvs:begin id=" + id + " -->")
+	return []byte("<!-- agent-sync:begin id=" + id + " -->")
 }
 
 // sectionMarkerEnd returns the closing marker. See sectionMarkerBegin
 // for the id-validation contract.
 func sectionMarkerEnd(id string) []byte {
 	mustValidID(id)
-	return []byte("<!-- aienvs:end id=" + id + " -->")
+	return []byte("<!-- agent-sync:end id=" + id + " -->")
 }
 
 // wrapManagedSection wraps body bytes between the begin/end markers

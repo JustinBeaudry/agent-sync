@@ -11,15 +11,15 @@ import (
 
 func FuzzMergeMarkdown(f *testing.F) {
 	f.Add("# doc\n\nhello\n")
-	f.Add("<!-- aienvs:begin id=foo -->\nold\n<!-- aienvs:end id=foo -->\n")
-	f.Add("  <!-- aienvs:begin id=other -->\nuser\n")
+	f.Add("<!-- agent-sync:begin id=foo -->\nold\n<!-- agent-sync:end id=foo -->\n")
+	f.Add("  <!-- agent-sync:begin id=other -->\nuser\n")
 	f.Fuzz(func(t *testing.T, existing string) {
 		out, _, _, err := mergeMarkdown([]byte(existing), mdUpsert("foo", "BODY\n"))
 		if err != nil {
 			return // refusal is fine; corruption/panic is not
 		}
 		// A successful upsert must yield a re-parseable file containing foo.
-		if !strings.Contains(string(out), "aienvs:begin id=foo") {
+		if !strings.Contains(string(out), "agent-sync:begin id=foo") {
 			t.Fatalf("upsert succeeded but foo section absent:\n%s", out)
 		}
 		if _, _, _, err := mergeMarkdown(out, mdUpsert("foo", "BODY2\n")); err != nil {

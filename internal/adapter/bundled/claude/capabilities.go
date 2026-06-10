@@ -72,7 +72,7 @@ func capabilitiesForWire() adapterkit.Capabilities {
 // outputs.
 func declaredOutputs() []adapterkit.DeclaredOutput {
 	mcpPointer := "/mcpServers"
-	claudeMDSection := "aienvs"
+	claudeMDSection := "agent-sync"
 	return []adapterkit.DeclaredOutput{
 		{Path: ".claude/rules/aienvs", Mode: adapterkit.OutputModeOwnedSubdir},
 		{Path: ".claude/commands/aienvs", Mode: adapterkit.OutputModeOwnedSubdir},

@@ -129,7 +129,7 @@ func loadSpecExamples(path string) ([]specExample, error) {
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		switch {
-		case strings.HasPrefix(line, "```aienvs:fixture-name"):
+		case strings.HasPrefix(line, "```agent-sync:fixture-name"):
 			if pendingName != "" {
 				return nil, fmt.Errorf("directive for %q missing json block before next directive", pendingName)
 			}

@@ -239,14 +239,14 @@ func TestEmitAgentsMD_SendsInnerBody(t *testing.T) {
 	if md.Kind != adapterkit.ToolOwnedKindMarkdownSection {
 		t.Errorf("locator kind=%q want %q", md.Kind, adapterkit.ToolOwnedKindMarkdownSection)
 	}
-	if md.Locator != "aienvs:team" {
-		t.Errorf("locator=%q want %q", md.Locator, "aienvs:team")
+	if md.Locator != "agent-sync:team" {
+		t.Errorf("locator=%q want %q", md.Locator, "agent-sync:team")
 	}
 	body := string(md.Content)
 	// The engine owns the begin/end markers (rendered from the locator during
 	// the merge); the adapter sends the INNER body only. Marker-wrapped content
 	// is rejected by the merge.
-	if strings.Contains(body, "<!-- aienvs:") {
+	if strings.Contains(body, "<!-- agent-sync:") {
 		t.Errorf("AGENTS.md content must be inner body without markers; got %q", body)
 	}
 	if !strings.Contains(body, "## Conventions") {
@@ -261,9 +261,9 @@ func TestEmitAgentsMD_RejectsBodyContainingMarkerSyntax(t *testing.T) {
 		name string
 		body string
 	}{
-		{"injected end marker", `"legitimate\n<!-- aienvs:end id=other -->\nINJECTED"`},
-		{"injected begin marker", `"<!-- aienvs:begin id=victim --> hostile"`},
-		{"raw marker prefix", `"<!-- aienvs:anything"`},
+		{"injected end marker", `"legitimate\n<!-- agent-sync:end id=other -->\nINJECTED"`},
+		{"injected begin marker", `"<!-- agent-sync:begin id=victim --> hostile"`},
+		{"raw marker prefix", `"<!-- agent-sync:anything"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

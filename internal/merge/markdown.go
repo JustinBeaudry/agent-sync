@@ -11,7 +11,7 @@ import (
 // containing it means a caller passed pre-wrapped content (the engine
 // owns markers) — rejected loudly so a Unit 13 double-wrap mistake
 // fails in tests, not in production.
-const markerOpen = "<!-- aienvs:"
+const markerOpen = "<!-- agent-sync:"
 
 // mergeMarkdown upserts or removes the agent-sync managed section for the
 // entry's id. It owns the begin/end markers (KTD 5): the caller passes
@@ -58,7 +58,7 @@ func mergeMarkdown(existing []byte, e MergeEntry) (result []byte, sliceHash, war
 
 	// Append a new section at EOF (with a top-of-file header for a new file).
 	if len(strings.TrimSpace(string(existing))) == 0 {
-		header := "<!-- Partially managed by agent-sync — edit outside the aienvs:begin / aienvs:end markers only. -->" + nl + nl
+		header := "<!-- Partially managed by agent-sync — edit outside the agent-sync:begin / agent-sync:end markers only. -->" + nl + nl
 		return []byte(header + block), sliceHash, warn, nil
 	}
 	if n := len(lines); n > 0 && !strings.HasSuffix(lines[n-1], "\n") {
@@ -140,8 +140,8 @@ func scanMarkers(lines []string, targetID string) (markerPair, string, error) {
 	return pair, warning, nil
 }
 
-// parseBeginMarker parses `<!-- aienvs:begin id=ID -->` or
-// `<!-- aienvs:begin id=ID source=SRC -->`. Returns id, source, ok.
+// parseBeginMarker parses `<!-- agent-sync:begin id=ID -->` or
+// `<!-- agent-sync:begin id=ID source=SRC -->`. Returns id, source, ok.
 func parseBeginMarker(core string) (id, source string, ok bool) {
 	inner, ok := cutMarker(core, "begin")
 	if !ok {
@@ -160,7 +160,7 @@ func parseBeginMarker(core string) (id, source string, ok bool) {
 	return rest, "", true
 }
 
-// parseEndMarker parses `<!-- aienvs:end id=ID -->`.
+// parseEndMarker parses `<!-- agent-sync:end id=ID -->`.
 func parseEndMarker(core string) (id string, ok bool) {
 	inner, ok := cutMarker(core, "end")
 	if !ok {
@@ -173,7 +173,7 @@ func parseEndMarker(core string) (id string, ok bool) {
 	return rest, true
 }
 
-// cutMarker strips `<!-- aienvs:<verb> ` ... ` -->` and returns the inner.
+// cutMarker strips `<!-- agent-sync:<verb> ` ... ` -->` and returns the inner.
 func cutMarker(core, verb string) (string, bool) {
 	prefix := markerOpen + verb + " "
 	inner, ok := strings.CutPrefix(core, prefix)

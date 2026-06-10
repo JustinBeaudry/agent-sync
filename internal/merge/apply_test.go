@@ -37,7 +37,7 @@ func TestApplyToFile_WritesEachKind(t *testing.T) {
 	if _, _, err := ApplyToFile(ctx, root, reg, "AGENTS.md", mdUpsert("foo", "body\n"), "cursor"); err != nil {
 		t.Fatalf("markdown apply: %v", err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(ws, "AGENTS.md")); !bytes.Contains(b, []byte("aienvs:begin id=foo")) {
+	if b, _ := os.ReadFile(filepath.Join(ws, "AGENTS.md")); !bytes.Contains(b, []byte("agent-sync:begin id=foo")) {
 		t.Errorf("AGENTS.md not written: %s", b)
 	}
 	// json at workspace root
@@ -95,7 +95,7 @@ func TestApplyToFile_ConcurrentSameFileSerializes(t *testing.T) {
 	wg.Wait()
 	// Both sections present, file well-formed (no torn write).
 	b, _ := os.ReadFile(filepath.Join(ws, "AGENTS.md"))
-	if !bytes.Contains(b, []byte("aienvs:begin id=cursor")) || !bytes.Contains(b, []byte("aienvs:begin id=codex")) {
+	if !bytes.Contains(b, []byte("agent-sync:begin id=cursor")) || !bytes.Contains(b, []byte("agent-sync:begin id=codex")) {
 		t.Errorf("concurrent merges lost a section:\n%s", b)
 	}
 	// Re-parse via the engine to confirm marker integrity.
