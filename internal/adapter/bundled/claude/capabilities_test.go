@@ -113,7 +113,7 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 	want := map[string]adapterkit.OutputMode{
 		".claude/rules/aienvs":    adapterkit.OutputModeOwnedSubdir,
 		".claude/commands/aienvs": adapterkit.OutputModeOwnedSubdir,
-		".claude/skills":          adapterkit.OutputModeOwnedSubdir,
+		".claude/skills":          adapterkit.OutputModeSharedSubdir,
 		".mcp.json":               adapterkit.OutputModeToolOwnedEntry,
 		"CLAUDE.md":               adapterkit.OutputModeToolOwnedEntry,
 		".aienvs-managed":         adapterkit.OutputModeOwnedSubdir,

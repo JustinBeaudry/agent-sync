@@ -38,12 +38,16 @@ const (
 // OutputMode describes how an adapter declares ownership of an output
 // path. owned-subdir means the adapter owns the entire subtree;
 // tool-owned-entry means the adapter owns a specific entry inside a
-// tool-owned file (an MCP server entry, an AGENTS.md section, etc.).
+// tool-owned file (an MCP server entry, an AGENTS.md section, etc.);
+// shared-subdir means the adapter shares the directory with the user and
+// other tools (e.g. .agents/skills) and the engine manages only the
+// agent-sync-owned leaf entries within it, never the shared parent.
 type OutputMode string
 
 const (
 	OutputModeOwnedSubdir    OutputMode = "owned-subdir"
 	OutputModeToolOwnedEntry OutputMode = "tool-owned-entry"
+	OutputModeSharedSubdir   OutputMode = "shared-subdir"
 )
 
 // ToolOwnedKind names the structural locator scheme for write_tool_owned

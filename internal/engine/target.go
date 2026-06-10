@@ -29,9 +29,10 @@ const genTimestampFormat = "20060102T150405Z"
 // paths: the decoded ops plus the declared owned-subdir prefixes and any
 // warning notes.
 type emitOutcome struct {
-	ops           []contract.Op
-	ownedPrefixes []string // OutputModeOwnedSubdir declared output paths
-	warnings      []string
+	ops            []contract.Op
+	ownedPrefixes  []string // OutputModeOwnedSubdir declared output paths
+	sharedPrefixes []string // OutputModeSharedSubdir declared output paths
+	warnings       []string
 }
 
 // runAdapter drives one adapter's full session lifecycle and returns the
@@ -88,7 +89,10 @@ func runAdapter(ctx context.Context, req Request, target string) (emitOutcome, e
 			ErrEmitOpsMismatch, target, len(emitResult.Ops), len(emitResult.OpsPerformed))
 	}
 
-	out := emitOutcome{ownedPrefixes: ownedSubdirs(initResult.DeclaredOutputs)}
+	out := emitOutcome{
+		ownedPrefixes:  ownedSubdirs(initResult.DeclaredOutputs),
+		sharedPrefixes: sharedSubdirs(initResult.DeclaredOutputs),
+	}
 	for i, raw := range emitResult.Ops {
 		op, derr := contract.DecodeOp(raw)
 		if derr != nil {
@@ -132,6 +136,72 @@ func ownerOf(owned []string, p string) string {
 	return ""
 }
 
+// sharedSubdirs returns the declared-output paths whose mode is shared-subdir.
+// These are directories agent-sync shares with the user and other tools; the
+// engine never swaps the shared parent itself, only the agent-sync-owned leaf
+// entries within it (see effectiveOwnedPrefixes).
+func sharedSubdirs(outputs []contract.DeclaredOutput) []string {
+	var shared []string
+	for _, o := range outputs {
+		if o.Mode == contract.OutputModeSharedSubdir {
+			shared = append(shared, o.Path)
+		}
+	}
+	return shared
+}
+
+// leafUnder returns the agent-sync-managed leaf directory of p within one of
+// the shared prefixes — i.e. "<shared>/<firstSegment>" — or "" when p is not
+// under any shared prefix. The leaf (not the shared parent) is the swap unit
+// for shared-subdir outputs, so foreign sibling leaves are never touched.
+func leafUnder(shared []string, p string) string {
+	for _, sp := range shared {
+		if !strings.HasPrefix(p, sp+"/") {
+			continue
+		}
+		rest := strings.TrimPrefix(p, sp+"/")
+		seg := rest
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			seg = rest[:i]
+		}
+		if seg == "" {
+			return ""
+		}
+		return sp + "/" + seg
+	}
+	return ""
+}
+
+// effectiveOwnedPrefixes is the set of prefixes the engine treats as owned for
+// stage+swap, drift, and orphan purposes: every owned-subdir prefix, plus — for
+// each shared-subdir — only the agent-sync-managed leaf directories within it,
+// derived from this run's emitted ops and the prior ledger. The shared parent
+// is deliberately absent, so it is never swapped wholesale and foreign sibling
+// leaves (never emitted, never in the ledger) are invisible to the engine.
+// Sorted longest-first so the most specific prefix wins when paths nest.
+func effectiveOwnedPrefixes(owned, shared []string, ops []contract.Op, ledgerEntries []ledger.Entry) []string {
+	effective := append([]string(nil), owned...)
+	if len(shared) > 0 {
+		leaves := map[string]struct{}{}
+		add := func(p string) {
+			if leaf := leafUnder(shared, p); leaf != "" {
+				leaves[leaf] = struct{}{}
+			}
+		}
+		for _, op := range ops {
+			add(op.OpPath())
+		}
+		for _, e := range ledgerEntries {
+			add(e.Path)
+		}
+		for leaf := range leaves {
+			effective = append(effective, leaf)
+		}
+	}
+	sort.Slice(effective, func(i, j int) bool { return len(effective[i]) > len(effective[j]) })
+	return effective
+}
+
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
@@ -154,9 +224,17 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 		return statusResult{}, err
 	}
 
-	// Drift gate per owned subdir, unless adopting.
+	// effective is the owned set the rest of the pipeline operates on: every
+	// owned-subdir prefix plus, for each shared-subdir, only the agent-sync
+	// leaf dirs (from this run's ops + the prior ledger). The shared parent is
+	// never in this set, so it is never drift-scanned, swapped, or orphaned —
+	// foreign sibling content under a shared tree is invisible to the engine.
+	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.ops, oldLedger.Entries)
+
+	// Drift gate per owned subdir (per managed leaf for shared subdirs),
+	// unless adopting.
 	adoptedAny := false
-	for _, pre := range out.ownedPrefixes {
+	for _, pre := range effective {
 		if scanErr := syncpkg.ScanDrift(root, pre, oldLedger); scanErr != nil {
 			if adopting(req.Options.AdoptPrefixes, pre) {
 				if _, aerr := syncpkg.AdoptEntries(root, pre, now); aerr != nil {
@@ -229,7 +307,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	for _, op := range out.ops {
 		switch o := op.(type) {
 		case contract.OpWriteFile:
-			pre := ownerOf(out.ownedPrefixes, o.Path)
+			pre := ownerOf(effective, o.Path)
 			if pre == "" {
 				return statusResult{}, fmt.Errorf("engine: write_file %q outside any owned subdir", o.Path)
 			}
@@ -249,7 +327,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 			}
 			w.writes = append(w.writes, o)
 		case contract.OpMkdir:
-			pre := ownerOf(out.ownedPrefixes, o.Path)
+			pre := ownerOf(effective, o.Path)
 			if pre == "" {
 				return statusResult{}, fmt.Errorf("engine: mkdir %q outside any owned subdir", o.Path)
 			}
@@ -276,7 +354,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	// orphan deletion rather than a directory swap.
 	oldHadUnder := map[string]bool{}
 	for _, e := range oldLedger.Entries {
-		if pre := ownerOf(out.ownedPrefixes, e.Path); pre != "" {
+		if pre := ownerOf(effective, e.Path); pre != "" {
 			oldHadUnder[pre] = true
 			if e.Path == pre {
 				fileType[pre] = true
@@ -292,7 +370,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	// never counted or deleted as an orphan.
 	var deletable []string
 	for _, e := range oldLedger.Entries {
-		if ownerOf(out.ownedPrefixes, e.Path) == "" {
+		if ownerOf(effective, e.Path) == "" {
 			continue
 		}
 		if _, wanted := newEntries[e.Path]; !wanted {
@@ -325,7 +403,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 
 	// Stage + swap each relevant owned subdir (directory-tree outputs).
 	// Order is sorted for determinism.
-	subdirs := append([]string(nil), out.ownedPrefixes...)
+	subdirs := append([]string(nil), effective...)
 	sort.Strings(subdirs)
 	recovered := map[string]bool{}
 	for _, pre := range subdirs {

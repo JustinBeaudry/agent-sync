@@ -43,6 +43,12 @@ type OutputMode string
 const (
 	OutputModeOwnedSubdir    OutputMode = "owned-subdir"
 	OutputModeToolOwnedEntry OutputMode = "tool-owned-entry"
+	// OutputModeSharedSubdir is a directory the adapter shares with the user
+	// and other tools (e.g. the cross-tool .agents/skills tree). The engine
+	// manages only the agent-sync-owned leaf entries within it (swapped per
+	// leaf), never the shared parent — so foreign sibling entries are never
+	// touched. Contrast owned-subdir, where the adapter owns the entire subtree.
+	OutputModeSharedSubdir OutputMode = "shared-subdir"
 )
 
 type ToolOwnedKind string

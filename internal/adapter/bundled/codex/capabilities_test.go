@@ -118,7 +118,7 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 
 	got := declaredOutputs()
 	want := map[string]adapterkit.OutputMode{
-		".agents/skills":     adapterkit.OutputModeOwnedSubdir,
+		".agents/skills":     adapterkit.OutputModeSharedSubdir,
 		".codex/config.toml": adapterkit.OutputModeToolOwnedEntry,
 		"AGENTS.md":          adapterkit.OutputModeToolOwnedEntry,
 	}
