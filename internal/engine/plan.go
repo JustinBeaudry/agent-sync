@@ -36,6 +36,12 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 	}
 	change.Warnings = out.warnings
 
+	// Mirror applyTarget: operate on owned-subdir prefixes plus the managed
+	// leaf dirs of shared-subdirs (never the shared parent) so deletion
+	// accounting covers removed agent-sync leaves without flagging foreign
+	// sibling content under a shared tree.
+	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.ops, old.Entries)
+
 	desired := map[string]string{} // path -> sha256 (write_file only)
 	for _, op := range out.ops {
 		switch o := op.(type) {
@@ -81,7 +87,7 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 
 	// Deletions: ledger paths under an owned subdir no longer desired.
 	for _, e := range old.Entries {
-		if ownerOf(out.ownedPrefixes, e.Path) == "" {
+		if ownerOf(effective, e.Path) == "" {
 			continue
 		}
 		if _, stillWanted := desired[e.Path]; !stillWanted {

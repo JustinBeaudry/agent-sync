@@ -76,7 +76,12 @@ func declaredOutputs() []adapterkit.DeclaredOutput {
 	return []adapterkit.DeclaredOutput{
 		{Path: ".claude/rules/aienvs", Mode: adapterkit.OutputModeOwnedSubdir},
 		{Path: ".claude/commands/aienvs", Mode: adapterkit.OutputModeOwnedSubdir},
-		{Path: ".claude/skills", Mode: adapterkit.OutputModeOwnedSubdir},
+		// .claude/skills holds aienvs-<id> leaf dirs alongside the user's own
+		// skills. shared-subdir → manage only our leaves, never the parent, so
+		// user skills survive a sync. (.claude/rules/aienvs and
+		// .claude/commands/aienvs are aienvs-exclusive, so they stay
+		// owned-subdir and are swapped wholesale.)
+		{Path: ".claude/skills", Mode: adapterkit.OutputModeSharedSubdir},
 		{Path: ".mcp.json", Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},
 		{Path: "CLAUDE.md", Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &claudeMDSection},
 		// The strict-JSON sidecar marker (.aienvs-managed) is written

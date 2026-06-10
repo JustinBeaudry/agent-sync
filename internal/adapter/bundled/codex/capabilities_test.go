@@ -1,4 +1,4 @@
-package claude
+package codex
 
 import (
 	"context"
@@ -21,7 +21,6 @@ func TestBundled_ManifestShape(t *testing.T) {
 	if b.Run == nil {
 		t.Fatal("Bundled.Run is nil")
 	}
-
 	if got, want := b.Manifest.Name, adapterName; got != want {
 		t.Errorf("Manifest.Name = %q, want %q", got, want)
 	}
@@ -31,10 +30,6 @@ func TestBundled_ManifestShape(t *testing.T) {
 	if got, want := b.Manifest.ReservedPrefix, reservedPrefix; got != want {
 		t.Errorf("Manifest.ReservedPrefix = %q, want %q", got, want)
 	}
-	// Bundled adapters carry a placeholder Command so the shared
-	// adapter-manifest validator (which requires non-empty Command)
-	// accepts them at discovery time. The Run callback is what the
-	// runtime actually invokes; Command is diagnostic only.
 	if len(b.Manifest.Command) == 0 {
 		t.Error("Manifest.Command must not be empty (validator rejects empty Command even for bundled adapters)")
 	}
@@ -47,7 +42,6 @@ func TestCapabilitiesYAML_MatchesCodeMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadDeclaration: %v", err)
 	}
-
 	if got, want := d.Name, adapterName; got != want {
 		t.Errorf("declaration name=%q want %q", got, want)
 	}
@@ -58,30 +52,25 @@ func TestCapabilitiesYAML_MatchesCodeMap(t *testing.T) {
 		t.Errorf("declaration reserved_prefix=%q want %q", got, want)
 	}
 
-	// Build the YAML-side kind set keyed by ir.Kind.
 	yamlKinds := make(map[ir.Kind]capmatrix.CapabilityStatus, len(d.ConceptKinds))
 	for k, v := range d.ConceptKinds {
 		yamlKinds[ir.Kind(k)] = v.Status
 	}
 
-	// Compare key sets.
 	codeKindList := make([]string, 0, len(conceptKinds))
 	for k := range conceptKinds {
 		codeKindList = append(codeKindList, string(k))
 	}
 	sort.Strings(codeKindList)
-
 	yamlKindList := make([]string, 0, len(yamlKinds))
 	for k := range yamlKinds {
 		yamlKindList = append(yamlKindList, string(k))
 	}
 	sort.Strings(yamlKindList)
-
 	if !equalStringSlices(codeKindList, yamlKindList) {
 		t.Fatalf("kind sets diverge:\n  yaml: %v\n  code: %v", yamlKindList, codeKindList)
 	}
 
-	// Compare per-kind status.
 	for kind, codeStatus := range conceptKinds {
 		yamlStatus, ok := yamlKinds[kind]
 		if !ok {
@@ -93,16 +82,34 @@ func TestCapabilitiesYAML_MatchesCodeMap(t *testing.T) {
 		}
 	}
 
-	// Every IR kind in the v1 closed set must be declared exactly
-	// once. The test catches both omissions (a new kind added to
-	// internal/ir but not the adapter) and duplicates.
 	for _, kind := range ir.AllKinds() {
 		if _, ok := conceptKinds[kind]; !ok {
-			t.Errorf("ir kind %q not declared by claude adapter (must be supported|partial|unsupported, never silent)", kind)
+			t.Errorf("ir kind %q not declared by codex adapter (must be supported|partial|unsupported, never silent)", kind)
 		}
 	}
 	if got, want := len(conceptKinds), len(ir.AllKinds()); got != want {
 		t.Errorf("conceptKinds size %d != ir.AllKinds() size %d", got, want)
+	}
+}
+
+// TestConceptKinds_SupportSets pins the codex-specific capability mapping:
+// agents-md, skill, and mcp-server-entry are supported; rule, command, and
+// plugin-reference are unsupported. This is the honest-mapping decision
+// documented in docs/adapters/codex.md.
+func TestConceptKinds_SupportSets(t *testing.T) {
+	t.Parallel()
+
+	supported := []ir.Kind{ir.KindAgentsMD, ir.KindSkill, ir.KindMCPServerEntry}
+	for _, kind := range supported {
+		if got := conceptKinds[kind]; got != capmatrix.Supported {
+			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Supported)
+		}
+	}
+	unsupported := []ir.Kind{ir.KindRule, ir.KindCommand, ir.KindPluginReference}
+	for _, kind := range unsupported {
+		if got := conceptKinds[kind]; got != capmatrix.Unsupported {
+			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Unsupported)
+		}
 	}
 }
 
@@ -111,16 +118,14 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 
 	got := declaredOutputs()
 	want := map[string]adapterkit.OutputMode{
-		".claude/rules/aienvs":    adapterkit.OutputModeOwnedSubdir,
-		".claude/commands/aienvs": adapterkit.OutputModeOwnedSubdir,
-		".claude/skills":          adapterkit.OutputModeSharedSubdir,
-		".mcp.json":               adapterkit.OutputModeToolOwnedEntry,
-		"CLAUDE.md":               adapterkit.OutputModeToolOwnedEntry,
-		".aienvs-managed":         adapterkit.OutputModeOwnedSubdir,
+		".agents/skills":     adapterkit.OutputModeSharedSubdir,
+		".codex/config.toml": adapterkit.OutputModeToolOwnedEntry,
+		"AGENTS.md":          adapterkit.OutputModeToolOwnedEntry,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)
 	}
+	var sawAgentsMDSection bool
 	for _, d := range got {
 		mode, ok := want[d.Path]
 		if !ok {
@@ -130,31 +135,16 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 		if d.Mode != mode {
 			t.Errorf("declared output %q mode=%v want %v", d.Path, d.Mode, mode)
 		}
-	}
-
-	// Cross-check tool-owned-entry locators are present.
-	var sawMCPPointer, sawClaudeMDSection bool
-	for _, d := range got {
-		if d.Path == ".mcp.json" {
-			if d.JSONPointer == nil || *d.JSONPointer == "" {
-				t.Error(".mcp.json declared output missing JSONPointer locator")
-			} else {
-				sawMCPPointer = true
-			}
-		}
-		if d.Path == "CLAUDE.md" {
+		if d.Path == "AGENTS.md" {
 			if d.SectionID == nil || *d.SectionID == "" {
-				t.Error("CLAUDE.md declared output missing SectionID locator")
+				t.Error("AGENTS.md declared output missing SectionID locator")
 			} else {
-				sawClaudeMDSection = true
+				sawAgentsMDSection = true
 			}
 		}
 	}
-	if !sawMCPPointer {
-		t.Error(".mcp.json locator not asserted")
-	}
-	if !sawClaudeMDSection {
-		t.Error("CLAUDE.md locator not asserted")
+	if !sawAgentsMDSection {
+		t.Error("AGENTS.md locator not asserted")
 	}
 }
 
@@ -163,10 +153,10 @@ func TestCapabilitiesForWire_ExposesAllKinds(t *testing.T) {
 
 	c := capabilitiesForWire()
 	if !c.WriteToolOwned {
-		t.Error("WriteToolOwned must be true (claude emits write_tool_owned ops)")
+		t.Error("WriteToolOwned must be true (codex emits write_tool_owned ops)")
 	}
 	if c.Progress {
-		t.Error("Progress must be false in v1 (Unit 8b feature)")
+		t.Error("Progress must be false in v1")
 	}
 	for kind := range conceptKinds {
 		if _, ok := c.ConceptKinds[string(kind)]; !ok {
@@ -194,7 +184,7 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 	server.OnEmit(handleEmit)
 
 	client, cleanup := adapterkit.RunInprocServer(t, server)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	ctx := context.Background()
 	res, err := client.Initialize(ctx, adapterkit.InitializeParams{

@@ -8,8 +8,9 @@ import (
 	"testing"
 )
 
-func sentinelRelFor(m Meta) string {
-	return path.Join(testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, ".state")
+func testSentinelRel(m Meta) string {
+	leafRel := path.Join(testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, testLeaf)
+	return sentinelRelFor(leafRel)
 }
 
 // TestRecover_CompletesStep1Done builds the on-disk shape of a crash
@@ -27,7 +28,7 @@ func TestRecover_CompletesStep1Done(t *testing.T) {
 		t.Fatalf("seed move-aside: %v", err)
 	}
 	s.Status = StatusStep1Done
-	if err := writeSentinel(root, sentinelRelFor(m), s); err != nil {
+	if err := writeSentinel(root, testSentinelRel(m), s); err != nil {
 		t.Fatalf("seed sentinel: %v", err)
 	}
 
@@ -44,7 +45,7 @@ func TestRecover_CompletesStep1Done(t *testing.T) {
 	if _, e := os.Stat(filepath.Join(ws, testPrefix+".old")); !errors.Is(e, os.ErrNotExist) {
 		t.Errorf(".old not cleaned: %v", e)
 	}
-	if _, e := os.Stat(filepath.Join(ws, sentinelRelFor(m))); !errors.Is(e, os.ErrNotExist) {
+	if _, e := os.Stat(filepath.Join(ws, testSentinelRel(m))); !errors.Is(e, os.ErrNotExist) {
 		t.Errorf("sentinel not removed: %v", e)
 	}
 }
@@ -62,7 +63,7 @@ func TestRecover_Step2DoneCleansOld(t *testing.T) {
 		t.Fatalf("stage: %v", err)
 	}
 	s := Sentinel{Status: StatusStep2Done, PrefixRel: testPrefix, StagingLeafRel: path.Join(testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, testLeaf), SHA: m.SHA, StartedAt: m.Timestamp}
-	if err := writeSentinel(root, sentinelRelFor(m), s); err != nil {
+	if err := writeSentinel(root, testSentinelRel(m), s); err != nil {
 		t.Fatalf("seed sentinel: %v", err)
 	}
 
@@ -84,15 +85,20 @@ func TestRecover_IntendDiscardsStaging(t *testing.T) {
 	m := Meta{Timestamp: "20260608T010003Z", SHA: "rec0003"}
 	s := stageGen(t, root, ws, "PARTIAL", m)
 	s.Status = StatusIntend
-	if err := writeSentinel(root, sentinelRelFor(m), s); err != nil {
+	if err := writeSentinel(root, testSentinelRel(m), s); err != nil {
 		t.Fatalf("seed sentinel: %v", err)
 	}
 	if _, err := Recover(root, testParent); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	genDir := filepath.Join(ws, testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA)
-	if _, e := os.Stat(genDir); !errors.Is(e, os.ErrNotExist) {
-		t.Errorf("intend staging not discarded: %v", e)
+	// The leaf's staging dir + its sentinel are discarded; the (now-empty)
+	// generation dir may remain and is pruned later. The live prefix is intact.
+	leafStaging := filepath.Join(ws, s.StagingLeafRel)
+	if _, e := os.Stat(leafStaging); !errors.Is(e, os.ErrNotExist) {
+		t.Errorf("intend leaf staging not discarded: %v", e)
+	}
+	if _, e := os.Stat(filepath.Join(ws, testSentinelRel(m))); !errors.Is(e, os.ErrNotExist) {
+		t.Errorf("intend sentinel not removed: %v", e)
 	}
 	if got := readPrefixFile(t, ws); got != "LIVE" {
 		t.Errorf("live prefix disturbed: %q", got)

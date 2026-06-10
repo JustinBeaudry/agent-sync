@@ -46,7 +46,7 @@
       "type": "object",
       "properties": {
         "path": {"type": "string"},
-        "mode": {"enum": ["owned-subdir", "tool-owned-entry"]},
+        "mode": {"enum": ["owned-subdir", "tool-owned-entry", "shared-subdir"]},
         "json_pointer": {"type": "string", "description": "RFC 6901 JSON Pointer; aligns with ToolOwnedKindJSONPointer on OpWriteToolOwned"},
         "section_id": {"type": "string"},
         "_meta": {}

@@ -1,7 +1,6 @@
 package cursor
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 )
@@ -36,63 +35,6 @@ func TestJSONSidecarMarker_NamesUnmanageCommand(t *testing.T) {
 	}
 	if !strings.Contains(body, ".cursor/mcp.json") {
 		t.Errorf("jsonSidecarMarker should reference its sibling .cursor/mcp.json file; got %q", body)
-	}
-}
-
-func TestSectionMarkers_ShapeAndID(t *testing.T) {
-	t.Parallel()
-
-	const id = "team"
-	begin := string(sectionMarkerBegin(id))
-	end := string(sectionMarkerEnd(id))
-	if want := "<!-- aienvs:begin id=team -->"; begin != want {
-		t.Errorf("sectionMarkerBegin = %q want %q", begin, want)
-	}
-	if want := "<!-- aienvs:end id=team -->"; end != want {
-		t.Errorf("sectionMarkerEnd = %q want %q", end, want)
-	}
-}
-
-func TestSectionMarker_PanicsOnInvalidID(t *testing.T) {
-	t.Parallel()
-
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("sectionMarkerBegin must panic on invalid id; got no panic")
-		}
-	}()
-	_ = sectionMarkerBegin("../escape")
-}
-
-func TestWrapManagedSection_RoundsBodyWithMarkers(t *testing.T) {
-	t.Parallel()
-
-	got := wrapManagedSection("team", []byte("## Build\nrun make"))
-	want := "<!-- aienvs:begin id=team -->\n## Build\nrun make\n<!-- aienvs:end id=team -->\n"
-	if string(got) != want {
-		t.Errorf("wrapManagedSection mismatch:\n got: %q\nwant: %q", got, want)
-	}
-}
-
-func TestWrapManagedSection_HandlesTrailingNewlineInBody(t *testing.T) {
-	t.Parallel()
-
-	got := wrapManagedSection("team", []byte("hello\n"))
-	want := "<!-- aienvs:begin id=team -->\nhello\n<!-- aienvs:end id=team -->\n"
-	if string(got) != want {
-		t.Errorf("trailing newline duplicated:\n got: %q\nwant: %q", got, want)
-	}
-}
-
-func TestWrapManagedSection_HandlesEmptyBody(t *testing.T) {
-	t.Parallel()
-
-	got := wrapManagedSection("team", nil)
-	if !bytes.HasPrefix(got, []byte("<!-- aienvs:begin id=team -->\n")) {
-		t.Errorf("empty body must still be wrapped with begin marker; got %q", got)
-	}
-	if !bytes.HasSuffix(got, []byte("<!-- aienvs:end id=team -->\n")) {
-		t.Errorf("empty body must still be closed with end marker; got %q", got)
 	}
 }
 

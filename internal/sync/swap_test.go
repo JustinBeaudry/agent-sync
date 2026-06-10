@@ -139,7 +139,7 @@ func TestSwap_Step2FailureLeavesRecoverableShape(t *testing.T) {
 	if _, e := os.Stat(filepath.Join(ws, s.StagingLeafRel)); e != nil {
 		t.Errorf("staging should be present: %v", e)
 	}
-	sentinelRel := filepath.Join(testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, ".state")
+	sentinelRel := filepath.Join(testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, sentinelPrefix+testLeaf)
 	got, e := readSentinel(root, sentinelRel)
 	if e != nil {
 		t.Fatalf("read sentinel: %v", e)

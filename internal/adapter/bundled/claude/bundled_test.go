@@ -237,9 +237,9 @@ func pathInDeclaredOutputs(opPath string, decls []adapterkit.DeclaredOutput) boo
 		if opPath == d.Path {
 			return true
 		}
-		// Owned-subdir mode treats Path as a parent; tool-owned-entry
-		// mode treats Path as exact-match only.
-		if d.Mode == adapterkit.OutputModeOwnedSubdir {
+		// Owned-subdir and shared-subdir modes treat Path as a parent;
+		// tool-owned-entry mode treats Path as exact-match only.
+		if d.Mode == adapterkit.OutputModeOwnedSubdir || d.Mode == adapterkit.OutputModeSharedSubdir {
 			if hasPathPrefix(opPath, d.Path) {
 				return true
 			}

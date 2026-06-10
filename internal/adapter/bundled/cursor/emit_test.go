@@ -220,7 +220,7 @@ func TestEmitMCPServerEntry_DedupsSidecarAcrossMultipleNodes(t *testing.T) {
 	}
 }
 
-func TestEmitAgentsMD_WrapsBodyInSection(t *testing.T) {
+func TestEmitAgentsMD_SendsInnerBody(t *testing.T) {
 	t.Parallel()
 
 	res, ops := emitFixture(t, "agents-md-only.json")
@@ -243,11 +243,11 @@ func TestEmitAgentsMD_WrapsBodyInSection(t *testing.T) {
 		t.Errorf("locator=%q want %q", md.Locator, "aienvs:team")
 	}
 	body := string(md.Content)
-	if !strings.Contains(body, "<!-- aienvs:begin id=team -->") {
-		t.Errorf("AGENTS.md content missing begin marker; got %q", body)
-	}
-	if !strings.Contains(body, "<!-- aienvs:end id=team -->") {
-		t.Errorf("AGENTS.md content missing end marker; got %q", body)
+	// The engine owns the begin/end markers (rendered from the locator during
+	// the merge); the adapter sends the INNER body only. Marker-wrapped content
+	// is rejected by the merge.
+	if strings.Contains(body, "<!-- aienvs:") {
+		t.Errorf("AGENTS.md content must be inner body without markers; got %q", body)
 	}
 	if !strings.Contains(body, "## Conventions") {
 		t.Errorf("AGENTS.md content missing user body; got %q", body)

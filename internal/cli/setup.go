@@ -8,6 +8,7 @@ import (
 
 	"github.com/agent-sync/agent-sync/internal/adapter"
 	claudeadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/claude"
+	codexadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/codex"
 	cursoradapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/cursor"
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
@@ -21,6 +22,7 @@ func bundledAdapters() []*adapter.BundledAdapter {
 	return []*adapter.BundledAdapter{
 		claudeadapter.Bundled(),
 		cursoradapter.Bundled(),
+		codexadapter.Bundled(),
 	}
 }
 

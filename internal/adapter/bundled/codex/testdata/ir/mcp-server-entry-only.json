@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": "lsp",
+      "kind": "mcp-server-entry",
+      "version": 1,
+      "body": "{\"command\":\"node\",\"args\":[\"server.js\",\"--stdio\"],\"env\":{\"LOG\":\"debug\"}}"
+    }
+  ]
+}

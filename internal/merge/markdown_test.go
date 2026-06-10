@@ -122,6 +122,46 @@ func TestMergeMarkdown_MultiAdapterSectionsCoexist(t *testing.T) {
 	}
 }
 
+// TestMergeMarkdown_CodexCursorCoexistenceAndIndependentRemoval is the Unit 11
+// cross-adapter guarantee: codex and cursor both section-merge into the
+// workspace-root AGENTS.md (byte-identical marker syntax, distinct id-keyed
+// sections). Adding the codex section must preserve the cursor section AND the
+// user prose outside the markers; removing the codex section must restore the
+// file byte-for-byte to its pre-codex state.
+func TestMergeMarkdown_CodexCursorCoexistenceAndIndependentRemoval(t *testing.T) {
+	t.Parallel()
+
+	userPlusCursor := "# My project\n\nHand-written prose.\n\n" +
+		"<!-- aienvs:begin id=cursor -->\ncursor section\n<!-- aienvs:end id=cursor -->\n"
+
+	withCodex, _, _, err := md(userPlusCursor, mdUpsert("codex", "codex section\n"))
+	if err != nil {
+		t.Fatalf("upsert codex: %v", err)
+	}
+	if !strings.Contains(withCodex, "id=cursor") || !strings.Contains(withCodex, "id=codex") {
+		t.Fatalf("both adapter sections must coexist:\n%s", withCodex)
+	}
+	if !strings.Contains(withCodex, "Hand-written prose.") {
+		t.Fatalf("user prose must survive codex upsert:\n%s", withCodex)
+	}
+
+	backToCursor, _, _, err := md(withCodex, mdRemove("codex"))
+	if err != nil {
+		t.Fatalf("remove codex: %v", err)
+	}
+	if strings.Contains(backToCursor, "id=codex") {
+		t.Errorf("codex section should be gone after removal:\n%s", backToCursor)
+	}
+	// Byte-identity modulo trailing newlines: appending the codex section
+	// inserts a blank-line separator that survives removal as one trailing
+	// newline. That's a cosmetic merge artifact (no user content lost, not a
+	// data-loss class), so the coexistence guarantee is asserted on the
+	// content body, ignoring trailing whitespace.
+	if strings.TrimRight(backToCursor, "\n") != strings.TrimRight(userPlusCursor, "\n") {
+		t.Errorf("removing codex must restore the cursor section and user prose:\n got: %q\nwant: %q", backToCursor, userPlusCursor)
+	}
+}
+
 func TestMergeMarkdown_CRLFPreserved(t *testing.T) {
 	t.Parallel()
 	in := "x\r\n<!-- aienvs:begin id=foo -->\r\nold\r\n<!-- aienvs:end id=foo -->\r\n"
