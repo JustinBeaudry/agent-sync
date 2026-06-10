@@ -1,8 +1,8 @@
 # Build output
 /bin/
 /dist/
-/aienvs
-/aienvs.exe
+/agent-sync
+/agent-sync.exe
 
 # Go tooling
 *.test
@@ -20,9 +20,9 @@ Thumbs.db
 .vscode/
 !.vscode/settings.json.example
 
-# Local overrides — aienvs working directories
-.aienv-staging/
-.aienv-local.yaml
+# Local overrides — agent-sync working directories
+.agent-sync-staging/
+.agent-sync-local.yaml
 
 # Per-developer agent configuration (Claude Code, Cursor, Codex, Gemini,
 # Entire). Local workstation state, not repo config.

@@ -113,9 +113,9 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 	want := map[string]adapterkit.OutputMode{
 		".claude/rules/agent-sync":    adapterkit.OutputModeOwnedSubdir,
 		".claude/commands/agent-sync": adapterkit.OutputModeOwnedSubdir,
-		".claude/skills":          adapterkit.OutputModeSharedSubdir,
-		".mcp.json":               adapterkit.OutputModeToolOwnedEntry,
-		"CLAUDE.md":               adapterkit.OutputModeToolOwnedEntry,
+		".claude/skills":              adapterkit.OutputModeSharedSubdir,
+		".mcp.json":                   adapterkit.OutputModeToolOwnedEntry,
+		"CLAUDE.md":                   adapterkit.OutputModeToolOwnedEntry,
 		".agent-sync-managed":         adapterkit.OutputModeOwnedSubdir,
 	}
 	if len(got) != len(want) {

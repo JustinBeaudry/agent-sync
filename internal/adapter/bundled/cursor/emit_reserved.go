@@ -24,7 +24,7 @@ const (
 // agent-requested rules until IR frontmatter exposure lands.
 //
 // Cursor reads project rules from .cursor/rules/ as .mdc files and
-// supports nested subdirectories, which is what makes the aienvs/
+// supports nested subdirectories, which is what makes the agent-sync/
 // subfolder a valid owned subdirectory.
 func emitRule(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)
@@ -53,7 +53,7 @@ func emitRule(emitted *emittedOps, node irNode, state *emitState) error {
 //
 // Returns InvalidParams if a node ID has already taken the README
 // path inside this subdir (e.g., a rule node literally named "README"
-// — its emitted path would be .../aienvs/README.mdc, which does not
+// — its emitted path would be .../agent-sync/README.mdc, which does not
 // collide, but the README.md guard still protects the reserved file).
 func ensureSubdir(emitted *emittedOps, subdir string, state *emitState) error {
 	if state.readmeEmitted[subdir] {

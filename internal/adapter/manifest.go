@@ -32,8 +32,8 @@ const MaxAdapterManifestBytes = 1 << 20
 
 // ContractVersionV1 is the only contract_version this build of agent-sync
 // recognizes. Future protocol versions land via Unit 8b under capability
-// negotiation; the wire form itself stays at aienvs/v1.
-const ContractVersionV1 = "aienvs/v1"
+// negotiation; the wire form itself stays at agent-sync/v1.
+const ContractVersionV1 = "agent-sync/v1"
 
 // AdapterManifest describes one adapter as declared by its on-disk
 // adapter.yaml. The manifest sits next to the binary on PATH and

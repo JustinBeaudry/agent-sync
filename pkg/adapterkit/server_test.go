@@ -87,7 +87,7 @@ func TestServerRun_MissingCookieReturnsExit7(t *testing.T) {
 	if ExitCode(err) != MissingCookieExitCode {
 		t.Fatalf("ExitCode=%d want %d (err=%v)", ExitCode(err), MissingCookieExitCode, err)
 	}
-	if !strings.Contains(stderr.String(), "AIENVS_ADAPTER_COOKIE") {
+	if !strings.Contains(stderr.String(), "AGENT_SYNC_ADAPTER_COOKIE") {
 		t.Fatalf("stderr=%q", stderr.String())
 	}
 }
@@ -123,7 +123,7 @@ func TestServerRun_ProtocolVersionMismatchReturnsTypedError(t *testing.T) {
 
 	err := client.call(context.Background(), MethodInitialize, InitializeParams{
 		Client:           "test",
-		ProtocolVersions: []string{"aienvs/v0"},
+		ProtocolVersions: []string{"agent-sync/v0"},
 		Cookie:           "test-cookie",
 		WorkspaceRoot:    "/tmp/ws",
 		ReservedPrefix:   ".echo",

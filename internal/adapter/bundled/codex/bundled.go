@@ -42,7 +42,7 @@ const (
 	// span .agents/skills/, .codex/config.toml, and AGENTS.md — declared via
 	// declaredOutputs(), not constrained to this prefix (cursor likewise
 	// declares AGENTS.md outside .cursor). There is intentionally no
-	// .codex/aienvs/ reserved subdirectory.
+	// .codex/agent-sync/ reserved subdirectory.
 	reservedPrefix = ".codex"
 )
 

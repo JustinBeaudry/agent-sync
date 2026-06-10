@@ -15,7 +15,7 @@ type DecideFlags struct {
 	AcceptNewSource string
 
 	// AcceptAny reflects --accept-new-source=any. Requires AcceptAnyPeerGate
-	// (from AIENVS_ALLOW_UNSAFE_ANY=1 env or --i-understand-this-is-dangerous)
+	// (from AGENT_SYNC_ALLOW_UNSAFE_ANY=1 env or --i-understand-this-is-dangerous)
 	// to take effect; otherwise ErrTrustDecisionRequired is returned.
 	AcceptAny         bool
 	AcceptAnyPeerGate bool
@@ -188,7 +188,7 @@ func Decide(in DecideInput) (Decision, error) {
 			if in.Flags.AcceptAny {
 				if !in.Flags.AcceptAnyPeerGate {
 					d.Kind = KindDecisionRequired
-					d.Remediation = "--accept-new-source=any requires AIENVS_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
+					d.Remediation = "--accept-new-source=any requires AGENT_SYNC_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
 					return d, fmt.Errorf("%w: accept-any peer gate missing", ErrTrustDecisionRequired)
 				}
 				d.Kind = KindProceed
@@ -243,7 +243,7 @@ func Decide(in DecideInput) (Decision, error) {
 		if in.Flags.AcceptAny {
 			if !in.Flags.AcceptAnyPeerGate {
 				d.Kind = KindDecisionRequired
-				d.Remediation = "--accept-new-source=any requires AIENVS_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
+				d.Remediation = "--accept-new-source=any requires AGENT_SYNC_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
 				return d, fmt.Errorf("%w: accept-any peer gate missing", ErrTrustDecisionRequired)
 			}
 			d.Kind = KindProceed

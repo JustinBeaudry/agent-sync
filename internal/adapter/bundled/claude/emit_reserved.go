@@ -223,7 +223,7 @@ func validateAssetRelPath(skillID, relPath string) error {
 //
 // Returns InvalidParams if a node ID has already taken the README
 // path inside this subdir (e.g., a rule node literally named "README"
-// — its emitted path would be .../aienvs/README.md).
+// — its emitted path would be .../agent-sync/README.md).
 func ensureSubdir(emitted *emittedOps, subdir string, state *emitState) error {
 	if state.readmeEmitted[subdir] {
 		return nil

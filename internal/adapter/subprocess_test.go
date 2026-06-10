@@ -220,7 +220,7 @@ func TestSubprocess_StderrCaptured(t *testing.T) {
 }
 
 func TestSubprocess_NoCookieEnvCausesAdapterExit(t *testing.T) {
-	// The echo binary exits 7 if AIENVS_ADAPTER_COOKIE is missing.
+	// The echo binary exits 7 if AGENT_SYNC_ADAPTER_COOKIE is missing.
 	// This test confirms the binary's behavior — but the runtime always
 	// sets the env var, so the path is normally unreachable. We invoke
 	// the binary directly with a clean env to verify.
@@ -229,7 +229,7 @@ func TestSubprocess_NoCookieEnvCausesAdapterExit(t *testing.T) {
 	bin := ensureEchoBinary(t)
 
 	cmd := exec.Command(bin)
-	cmd.Env = []string{} // no AIENVS_ADAPTER_COOKIE
+	cmd.Env = []string{} // no AGENT_SYNC_ADAPTER_COOKIE
 	err := cmd.Run()
 	if err == nil {
 		t.Fatal("expected non-zero exit when cookie env is missing")

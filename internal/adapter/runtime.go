@@ -42,7 +42,7 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 	s.ids.MarkPending(id, contract.MethodInitialize)
 
 	params := contract.InitializeParams{
-		Client:           "aienvs",
+		Client:           "agent-sync",
 		ProtocolVersions: []string{ContractVersionV1},
 		Cookie:           s.cookie,
 		WorkspaceRoot:    s.options.WorkspaceRoot,

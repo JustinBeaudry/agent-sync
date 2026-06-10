@@ -62,7 +62,7 @@ func newHooksInstallCommand(_ RootDeps) *cobra.Command {
 			}
 
 			res, err := hooks.Install(ws.Root, hooks.Options{
-				AgentSyncPath:    self,
+				AgentSyncPath: self,
 				WorkspacePath: ws.Root,
 				Replace:       replace,
 				Append:        appendHook,

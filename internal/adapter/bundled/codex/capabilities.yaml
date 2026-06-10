@@ -1,6 +1,6 @@
 name: codex
 version: "0.1"
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 reserved_prefix: .codex
 
 # concept_kinds is the authoritative per-IR-kind support declaration for the
@@ -11,21 +11,21 @@ concept_kinds:
     status: supported
     note: |
       Section-merged into the workspace-root AGENTS.md as a managed section
-      between aienvs:begin / aienvs:end markers. Codex CLI reads AGENTS.md by
+      between agent-sync:begin / agent-sync:end markers. Codex CLI reads AGENTS.md by
       walking from the repository root to the cwd. Note: Codex caps combined
       AGENTS.md size (project_doc_max_bytes, default 32 KiB) and prefers an
       AGENTS.override.md when present — see docs/adapters/codex.md.
   skill:
     status: supported
     note: |
-      Emitted at .agents/skills/aienvs-<id>/SKILL.md (plus assets). Codex scans
+      Emitted at .agents/skills/agent-sync-<id>/SKILL.md (plus assets). Codex scans
       the shared .agents/skills/ tree from cwd up to the repository root — this
       is a cross-tool convention, not a Codex-specific path, so the same skill
       tree is consumed by other agents (e.g. pi) without duplication.
   mcp-server-entry:
     status: supported
     note: |
-      Merged into the project-local .codex/config.toml as a [mcp_servers.aienvs_<id>]
+      Merged into the project-local .codex/config.toml as a [mcp_servers.agentsync_<id>]
       table via the write_tool_owned op (toml-path locator). User content elsewhere
       in the file is preserved. If a Codex version does not load project-local MCP
       servers, the same table can be lifted to ~/.codex/config.toml.

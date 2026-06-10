@@ -30,7 +30,7 @@ type Access struct {
 	// a TTY, unless FORCE_COLOR overrides).
 	NoColor bool
 	// Accessible is true when a screen-reader-friendly linear flow should
-	// be used instead of a full TUI (TERM=dumb or AIENVS_ACCESSIBLE=1).
+	// be used instead of a full TUI (TERM=dumb or AGENT_SYNC_ACCESSIBLE=1).
 	Accessible bool
 	// NonInteractive is true when --non-interactive/--yes was set, or when
 	// stdin is not a TTY. Gates every interactive prompt.
@@ -47,7 +47,7 @@ type accessInput struct {
 	noColorEnv         bool // NO_COLOR present (any value)
 	forceColorEnv      bool // FORCE_COLOR present (any value)
 	termDumb           bool // TERM=dumb
-	accessibleEnv      bool // AIENVS_ACCESSIBLE truthy
+	accessibleEnv      bool // AGENT_SYNC_ACCESSIBLE truthy
 	nonInteractiveFlag bool
 	outputFlag         string // "", "text", or "json"
 }
@@ -56,7 +56,7 @@ type accessInput struct {
 //   - NonInteractive: flag OR stdin-not-a-TTY.
 //   - Output: explicit flag wins; else json when stdout is not a TTY, text otherwise.
 //   - NoColor: NO_COLOR or non-TTY suppresses, unless FORCE_COLOR forces.
-//   - Accessible: TERM=dumb or AIENVS_ACCESSIBLE.
+//   - Accessible: TERM=dumb or AGENT_SYNC_ACCESSIBLE.
 func resolveAccess(in accessInput) Access {
 	a := Access{
 		IsTTY:          in.stdinTTY && in.stdoutTTY,
@@ -101,7 +101,7 @@ func ResolveAccess(in io.Reader, out io.Writer, nonInteractiveFlag bool, outputF
 		noColorEnv:         noColor,
 		forceColorEnv:      forceColor,
 		termDumb:           term == "dumb",
-		accessibleEnv:      isTruthy(os.Getenv("AIENVS_ACCESSIBLE")),
+		accessibleEnv:      isTruthy(os.Getenv("AGENT_SYNC_ACCESSIBLE")),
 		nonInteractiveFlag: nonInteractiveFlag,
 		outputFlag:         outputFlag,
 	})

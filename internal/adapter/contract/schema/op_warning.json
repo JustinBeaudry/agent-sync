@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aienvs.dev/schema/v1/op_warning.json",
-  "title": "aienvs/v1 warning op",
+  "$id": "https://agent-sync.dev/schema/v1/op_warning.json",
+  "title": "agent-sync/v1 warning op",
   "type": "object",
   "properties": {
     "op": {"const": "warning"},

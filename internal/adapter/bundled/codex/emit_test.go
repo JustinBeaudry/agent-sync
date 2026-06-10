@@ -179,8 +179,8 @@ func TestEmitMixed_EmitsAllSupported(t *testing.T) {
 	wantPaths := map[string]bool{
 		".agents/skills/agent-sync-coder":          false,
 		".agents/skills/agent-sync-coder/SKILL.md": false,
-		".codex/config.toml":                   false,
-		"AGENTS.md":                            false,
+		".codex/config.toml":                       false,
+		"AGENTS.md":                                false,
 	}
 	for _, r := range res.OpsPerformed {
 		if _, ok := wantPaths[r.Path]; ok {

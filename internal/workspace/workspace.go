@@ -89,11 +89,11 @@ type Options struct {
 	MaxHops int
 }
 
-// OptionsFromEnv reads AIENVS_WORKSPACE_STOP_AT into Options.StopAt.
+// OptionsFromEnv reads AGENT_SYNC_WORKSPACE_STOP_AT into Options.StopAt.
 // Callers (typically the CLI layer) merge these with flag-derived
 // options before calling Find.
 func OptionsFromEnv() Options {
 	return Options{
-		StopAt: os.Getenv("AIENVS_WORKSPACE_STOP_AT"),
+		StopAt: os.Getenv("AGENT_SYNC_WORKSPACE_STOP_AT"),
 	}
 }

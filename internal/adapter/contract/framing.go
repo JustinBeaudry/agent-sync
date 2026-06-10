@@ -1,5 +1,5 @@
 // Package contract owns the on-the-wire types and parsers for the
-// aienvs/v1 adapter protocol. Anything that touches bytes flowing between
+// agent-sync/v1 adapter protocol. Anything that touches bytes flowing between
 // the CLI and an adapter belongs here; anything above the wire (process
 // management, lifecycle orchestration) lives in higher-level packages.
 //

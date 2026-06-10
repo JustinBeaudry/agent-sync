@@ -1,6 +1,6 @@
 {
   "name": "error-version-mismatch",
-  "description": "Adapter responds to initialize with a protocol version other than aienvs/v1.",
+  "description": "Adapter responds to initialize with a protocol version other than agent-sync/v1.",
   "ir": {
     "nodes": [
       {

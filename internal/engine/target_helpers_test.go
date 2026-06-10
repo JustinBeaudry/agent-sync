@@ -81,7 +81,7 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 	})
 
 	t.Run("foreign sibling never enters the set", func(t *testing.T) {
-		// Only an aienvs op + a foreign ledger entry that is NOT agent-sync's.
+		// Only an agent-sync op + a foreign ledger entry that is NOT agent-sync's.
 		// The foreign path is in neither this run's ops nor... wait, it IS in
 		// the ledger here only to prove union behavior: a real foreign leaf is
 		// never in the ledger. We model the union: both leaves appear.

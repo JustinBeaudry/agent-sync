@@ -31,8 +31,8 @@ func TestInitializeParams_RoundTrips(t *testing.T) {
 	t.Parallel()
 
 	src := InitializeParams{
-		Client:           "aienvs/0.1",
-		ProtocolVersions: []string{"aienvs/v1"},
+		Client:           "agent-sync/0.1",
+		ProtocolVersions: []string{"agent-sync/v1"},
 		Cookie:           "deadbeef-1234",
 		WorkspaceRoot:    "/tmp/ws",
 		ReservedPrefix:   ".claude",
@@ -52,7 +52,7 @@ func TestInitializeParams_RoundTrips(t *testing.T) {
 	if dst.Client != src.Client || dst.Cookie != src.Cookie || dst.WorkspaceRoot != src.WorkspaceRoot {
 		t.Errorf("scalar mismatch: %+v vs %+v", src, dst)
 	}
-	if len(dst.ProtocolVersions) != 1 || dst.ProtocolVersions[0] != "aienvs/v1" {
+	if len(dst.ProtocolVersions) != 1 || dst.ProtocolVersions[0] != "agent-sync/v1" {
 		t.Errorf("protocol_versions mismatch: %v", dst.ProtocolVersions)
 	}
 	if !bytes.Equal(dst.Meta, src.Meta) {
@@ -78,7 +78,7 @@ func TestInitializeResult_CarriesCapabilitiesAndDeclaredOutputs(t *testing.T) {
 
 	src := InitializeResult{
 		Server:          "echo/0.1",
-		ProtocolVersion: "aienvs/v1",
+		ProtocolVersion: "agent-sync/v1",
 		Capabilities: Capabilities{
 			ConceptKinds: map[string]CapabilityLevel{
 				"rule":             CapabilitySupported,

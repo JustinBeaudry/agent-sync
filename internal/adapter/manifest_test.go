@@ -12,7 +12,7 @@ func TestLoadAdapterManifest_MinimalRoundTrips(t *testing.T) {
 
 	src := `name: claude
 version: 0.1.0
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 command:
   - agent-sync-adapter-claude
 `
@@ -23,8 +23,8 @@ command:
 	if m.Name != "claude" {
 		t.Errorf("name: want claude, got %q", m.Name)
 	}
-	if m.ContractVersion != "aienvs/v1" {
-		t.Errorf("contract_version: want aienvs/v1, got %q", m.ContractVersion)
+	if m.ContractVersion != "agent-sync/v1" {
+		t.Errorf("contract_version: want agent-sync/v1, got %q", m.ContractVersion)
 	}
 	if len(m.Command) != 1 || m.Command[0] != "agent-sync-adapter-claude" {
 		t.Errorf("command: %v", m.Command)
@@ -36,7 +36,7 @@ func TestLoadAdapterManifest_FullManifestRoundTrips(t *testing.T) {
 
 	src := `name: cursor
 version: 1.2.3
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 command:
   - agent-sync-adapter-cursor
   - --strict
@@ -65,7 +65,7 @@ func TestSyntheticAdapterManifest_DefaultsFromBinaryName(t *testing.T) {
 	if m.Name != "foo" {
 		t.Errorf("name: %q", m.Name)
 	}
-	if m.ContractVersion != "aienvs/v1" {
+	if m.ContractVersion != "agent-sync/v1" {
 		t.Errorf("contract_version: %q", m.ContractVersion)
 	}
 	if len(m.Command) != 1 || m.Command[0] != "agent-sync-adapter-foo" {
@@ -80,8 +80,8 @@ func TestSyntheticAdapterManifest_PinsResolvedBinaryPath(t *testing.T) {
 	// run.
 	t.Parallel()
 
-	m := SyntheticAdapterManifest("foo", "/opt/aienvs/bin/agent-sync-adapter-foo")
-	if len(m.Command) != 1 || m.Command[0] != "/opt/aienvs/bin/agent-sync-adapter-foo" {
+	m := SyntheticAdapterManifest("foo", "/opt/agent-sync/bin/agent-sync-adapter-foo")
+	if len(m.Command) != 1 || m.Command[0] != "/opt/agent-sync/bin/agent-sync-adapter-foo" {
 		t.Errorf("command should be the resolved absolute path, got %v", m.Command)
 	}
 }
@@ -90,7 +90,7 @@ func TestLoadAdapterManifest_EmptyCommandRejected(t *testing.T) {
 	t.Parallel()
 
 	src := `name: foo
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 command: []
 `
 	_, err := LoadAdapterManifestBytes([]byte(src))
@@ -116,7 +116,7 @@ func TestLoadAdapterManifest_UnsupportedContractVersion(t *testing.T) {
 	t.Parallel()
 
 	src := `name: foo
-contract_version: aienvs/v0
+contract_version: agent-sync/v0
 command:
   - agent-sync-adapter-foo
 `
@@ -130,7 +130,7 @@ func TestLoadAdapterManifest_MalformedYAMLWrapsParserError(t *testing.T) {
 	t.Parallel()
 
 	src := `name: foo
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 command: [unterminated
 `
 	_, err := LoadAdapterManifestBytes([]byte(src))
@@ -154,7 +154,7 @@ func TestLoadAdapterManifest_InvalidNameWithSeparators(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			src := "name: " + name + "\ncontract_version: aienvs/v1\ncommand: [x]\n"
+			src := "name: " + name + "\ncontract_version: agent-sync/v1\ncommand: [x]\n"
 			_, err := LoadAdapterManifestBytes([]byte(src))
 			if !errors.Is(err, ErrAdapterManifestInvalidName) {
 				t.Fatalf("name=%q: want ErrAdapterManifestInvalidName, got %v", name, err)
@@ -167,7 +167,7 @@ func TestLoadAdapterManifest_ReservedPrefixNormalized(t *testing.T) {
 	t.Parallel()
 
 	src := `name: foo
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 command: [agent-sync-adapter-foo]
 reserved_prefix: .foo/
 `
@@ -203,7 +203,7 @@ func TestLoadAdapterManifest_ReservedPrefixRejectedShapes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			src := "name: foo\ncontract_version: aienvs/v1\ncommand: [agent-sync-adapter-foo]\nreserved_prefix: " + strconv.Quote(tc.v) + "\n"
+			src := "name: foo\ncontract_version: agent-sync/v1\ncommand: [agent-sync-adapter-foo]\nreserved_prefix: " + strconv.Quote(tc.v) + "\n"
 			_, err := LoadAdapterManifestBytes([]byte(src))
 			if !errors.Is(err, ErrAdapterManifestInvalidReservedPrefix) {
 				t.Fatalf("v=%q: want ErrAdapterManifestInvalidReservedPrefix, got %v", tc.v, err)
@@ -249,7 +249,7 @@ func TestLoadAdapterManifest_AcceptsXPrefixedExtensions(t *testing.T) {
 	t.Parallel()
 
 	src := `name: foo
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 command: [agent-sync-adapter-foo]
 x-future-field: experiment
 `
@@ -263,7 +263,7 @@ func TestLoadAdapterManifest_RejectsUnknownNonXFields(t *testing.T) {
 	t.Parallel()
 
 	src := `name: foo
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 command: [agent-sync-adapter-foo]
 totally_made_up: yes
 `

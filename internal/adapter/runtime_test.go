@@ -237,7 +237,7 @@ func TestSession_RejectsProtocolVersionMismatch(t *testing.T) {
 	sa := &scriptedAdapter{
 		name: "v0",
 		respondToInit: func(_ contract.InitializeParams) (json.RawMessage, *contract.Error) {
-			b := []byte(`{"server":"v0","protocol_version":"aienvs/v0","capabilities":{"concept_kinds":{},"write_tool_owned":false,"progress":false},"declared_outputs":[]}`)
+			b := []byte(`{"server":"v0","protocol_version":"agent-sync/v0","capabilities":{"concept_kinds":{},"write_tool_owned":false,"progress":false},"declared_outputs":[]}`)
 			return b, nil
 		},
 	}

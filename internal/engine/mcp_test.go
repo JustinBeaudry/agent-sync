@@ -76,9 +76,9 @@ func TestWithin(t *testing.T) {
 		base, target string
 		want         bool
 	}{
-		{".claude/rules/.agent-sync-staging/g/aienvs", ".claude/rules/.agent-sync-staging/g/aienvs/r.md", true},
-		{".claude/rules/.agent-sync-staging/g/aienvs", ".claude/rules/.agent-sync-staging/g/aienvs", true},
-		{".claude/rules/.agent-sync-staging/g/aienvs", ".claude/rules/.agent-sync-staging/g/aienvs/../../../../../evil.md", false},
+		{".claude/rules/.agent-sync-staging/g/agent-sync", ".claude/rules/.agent-sync-staging/g/agent-sync/r.md", true},
+		{".claude/rules/.agent-sync-staging/g/agent-sync", ".claude/rules/.agent-sync-staging/g/agent-sync", true},
+		{".claude/rules/.agent-sync-staging/g/agent-sync", ".claude/rules/.agent-sync-staging/g/agent-sync/../../../../../evil.md", false},
 		{".claude/x", ".claude/xother/f", false},
 	}
 	for _, c := range cases {

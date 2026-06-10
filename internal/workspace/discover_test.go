@@ -259,7 +259,7 @@ func TestFind_StopAtOutsideAncestorChain(t *testing.T) {
 }
 
 func TestOptionsFromEnv(t *testing.T) {
-	t.Setenv("AIENVS_WORKSPACE_STOP_AT", "/tmp/stop-here")
+	t.Setenv("AGENT_SYNC_WORKSPACE_STOP_AT", "/tmp/stop-here")
 	opts := workspace.OptionsFromEnv()
 	if opts.StopAt != "/tmp/stop-here" {
 		t.Errorf("StopAt = %q, want /tmp/stop-here", opts.StopAt)

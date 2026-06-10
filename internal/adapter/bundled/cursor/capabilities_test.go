@@ -133,8 +133,8 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 	got := declaredOutputs()
 	want := map[string]adapterkit.OutputMode{
 		".cursor/rules/agent-sync":    adapterkit.OutputModeOwnedSubdir,
-		".cursor/mcp.json":        adapterkit.OutputModeToolOwnedEntry,
-		"AGENTS.md":               adapterkit.OutputModeToolOwnedEntry,
+		".cursor/mcp.json":            adapterkit.OutputModeToolOwnedEntry,
+		"AGENTS.md":                   adapterkit.OutputModeToolOwnedEntry,
 		".cursor/.agent-sync-managed": adapterkit.OutputModeOwnedSubdir,
 	}
 	if len(got) != len(want) {

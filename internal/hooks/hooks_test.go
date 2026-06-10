@@ -18,7 +18,7 @@ func gitRepo(t *testing.T) string {
 }
 
 func opts(repo string) Options {
-	return Options{AgentSyncPath: "/usr/local/bin/aienvs", WorkspacePath: repo}
+	return Options{AgentSyncPath: "/usr/local/bin/agent-sync", WorkspacePath: repo}
 }
 
 func TestInstall_FreshRepo(t *testing.T) {
@@ -132,7 +132,7 @@ func TestHooksDir_WorktreeGitFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := opts(repo)
-	o.AgentSyncPath = "/usr/local/bin/aienvs"
+	o.AgentSyncPath = "/usr/local/bin/agent-sync"
 	res, err := Install(repo, o)
 	if err != nil {
 		t.Fatalf("Install in worktree: %v", err)
@@ -161,7 +161,7 @@ func TestReadHooksPath_CaseInsensitive(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := opts(repo)
-	o.AgentSyncPath = "/usr/local/bin/aienvs"
+	o.AgentSyncPath = "/usr/local/bin/agent-sync"
 	if _, err := Install(repo, o); err != nil {
 		t.Fatalf("Install with lowercase hookspath: %v", err)
 	}

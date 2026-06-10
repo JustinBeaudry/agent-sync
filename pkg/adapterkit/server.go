@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	CookieEnvVar          = "AIENVS_ADAPTER_COOKIE"
+	CookieEnvVar          = "AGENT_SYNC_ADAPTER_COOKIE"
 	MissingCookieExitCode = 7
 	DefaultMaxFrameBytes  = 16 * 1024 * 1024
 )
@@ -147,12 +147,12 @@ func (s *Server) OnShutdown(fn ShutdownFunc) {
 func (s *Server) Run(ctx context.Context) error {
 	cookie := s.getenv(CookieEnvVar)
 	if cookie == "" {
-		_, _ = fmt.Fprintln(s.stderr, "adapterkit: AIENVS_ADAPTER_COOKIE not set")
-		return &ExitError{Code: MissingCookieExitCode, Err: errors.New("adapterkit: missing AIENVS_ADAPTER_COOKIE")}
+		_, _ = fmt.Fprintln(s.stderr, "adapterkit: AGENT_SYNC_ADAPTER_COOKIE not set")
+		return &ExitError{Code: MissingCookieExitCode, Err: errors.New("adapterkit: missing AGENT_SYNC_ADAPTER_COOKIE")}
 	}
 	if !magicCookiePattern.MatchString(cookie) {
-		_, _ = fmt.Fprintln(s.stderr, "adapterkit: AIENVS_ADAPTER_COOKIE has invalid format")
-		return &ExitError{Code: MissingCookieExitCode, Err: errors.New("adapterkit: invalid AIENVS_ADAPTER_COOKIE format")}
+		_, _ = fmt.Fprintln(s.stderr, "adapterkit: AGENT_SYNC_ADAPTER_COOKIE has invalid format")
+		return &ExitError{Code: MissingCookieExitCode, Err: errors.New("adapterkit: invalid AGENT_SYNC_ADAPTER_COOKIE format")}
 	}
 	s.mu.Lock()
 	s.cookie = cookie

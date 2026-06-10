@@ -94,7 +94,7 @@ func resolveTrustStore(deps TrustDeps) (*trust.Store, error) {
 	if deps.Store != nil {
 		return deps.Store, nil
 	}
-	p, err := xdg.DataFile(filepath.Join("aienvs", "trust.jsonl"))
+	p, err := xdg.DataFile(filepath.Join("agent-sync", "trust.jsonl"))
 	if err != nil {
 		return nil, fmt.Errorf("cli: resolve trust store path: %w", err)
 	}
@@ -105,7 +105,7 @@ func resolvePendingStore(deps TrustDeps) (*trust.PendingStore, error) {
 	if deps.Pending != nil {
 		return deps.Pending, nil
 	}
-	p, err := xdg.StateFile(filepath.Join("aienvs", "pending.jsonl"))
+	p, err := xdg.StateFile(filepath.Join("agent-sync", "pending.jsonl"))
 	if err != nil {
 		return nil, fmt.Errorf("cli: resolve pending store path: %w", err)
 	}

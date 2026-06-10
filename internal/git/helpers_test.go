@@ -120,7 +120,7 @@ func requireGit(t *testing.T) {
 }
 
 // withDetectReset ensures DetectGit's memo is cleared before and after
-// the test so AIENVS_GIT_EXECUTABLE overrides take effect.
+// the test so AGENT_SYNC_GIT_EXECUTABLE overrides take effect.
 func withDetectReset(t *testing.T) {
 	t.Helper()
 	resetDetectForTests()
