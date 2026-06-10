@@ -10,13 +10,13 @@ import (
 )
 
 func TestConfig_Ignored(t *testing.T) {
-	cfg := Config{IgnorePrefixes: []string{"/ws/.aienv"}}
+	cfg := Config{IgnorePrefixes: []string{"/ws/.agent-sync"}}
 	cases := []struct {
 		path string
 		want bool
 	}{
-		{"/ws/.aienv/state/claude.json", true},
-		{"/ws/.aienv", true},
+		{"/ws/.agent-sync/state/claude.json", true},
+		{"/ws/.agent-sync", true},
 		{"/ws/.agent-sync.yaml", false}, // sibling, not under the prefix
 		{"/ws/rules/x.md", false},
 	}

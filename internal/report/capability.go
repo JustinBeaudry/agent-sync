@@ -15,7 +15,7 @@ const CapabilityReportSchemaVersion = 1
 
 // capabilityReportRel is where the report is persisted during staging
 // (before swap), so it survives an atomic rollback (decision #21).
-const capabilityReportRel = ".aienv/state/capability-report.json"
+const capabilityReportRel = ".agent-sync/state/capability-report.json"
 
 // CapabilityInput is one target's declared capabilities plus the concept
 // kinds the IR actually requires of it.
@@ -96,14 +96,14 @@ func MarshalCapability(r CapabilityReport) ([]byte, error) {
 }
 
 // WriteCapabilityReport persists the report to
-// .aienv/state/capability-report.json through the workspace root,
+// .agent-sync/state/capability-report.json through the workspace root,
 // creating the state dir if needed.
 func WriteCapabilityReport(root *fsroot.Root, r CapabilityReport) error {
 	data, err := MarshalCapability(r)
 	if err != nil {
 		return err
 	}
-	if err := root.Inner().MkdirAll(".aienv/state", 0o755); err != nil {
+	if err := root.Inner().MkdirAll(".agent-sync/state", 0o755); err != nil {
 		return fmt.Errorf("report: ensure state dir: %w", err)
 	}
 	if err := root.StagedWrite(capabilityReportRel, data, 0o600); err != nil {

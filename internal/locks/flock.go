@@ -27,7 +27,7 @@ const (
 	StaleFloor = 4 * time.Minute
 
 	retryDelay  = 50 * time.Millisecond
-	stateDirRel = ".aienv/state"
+	stateDirRel = ".agent-sync/state"
 )
 
 // sidecar is the JSON recorded next to a held target lock. machine_id
@@ -57,7 +57,7 @@ type AcquireOpts struct {
 // The flock itself must use a real absolute path (os.Root cannot hand a
 // raw FD to gofrs/flock), but every other touch of the lock file or its
 // sidecar is routed through the fsroot Root (os.Root, which refuses
-// symlink traversal) so a symlinked .aienv/state prefix or a symlinked
+// symlink traversal) so a symlinked .agent-sync/state prefix or a symlinked
 // lock leaf cannot redirect a write outside the workspace.
 type TargetLock struct {
 	root       *fsroot.Root
@@ -72,7 +72,7 @@ type TargetLock struct {
 }
 
 // NewTargetLock validates the target, guards the state-dir prefix
-// against symlinks, ensures .aienv/state/ exists, resolves the stable
+// against symlinks, ensures .agent-sync/state/ exists, resolves the stable
 // machine id, and resolves the lock paths. It opens no lock FD yet.
 func NewTargetLock(root *fsroot.Root, target string) (*TargetLock, error) {
 	if !ir.IsValidID(target) {
@@ -301,7 +301,7 @@ func (l *TargetLock) noticef(format string, args ...any) {
 // workspace (KTD 5). Extra segments (e.g. the filelocks subdir) are
 // checked when supplied. A not-yet-existing segment is fine.
 func guardStatePrefix(root *fsroot.Root, extra ...string) error {
-	segs := append([]string{".aienv", stateDirRel}, extra...)
+	segs := append([]string{".agent-sync", stateDirRel}, extra...)
 	for _, seg := range segs {
 		if err := guardLeaf(root, seg); err != nil {
 			return err

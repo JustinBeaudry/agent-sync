@@ -17,7 +17,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
-const fileLocksDirRel = ".aienv/state/filelocks"
+const fileLocksDirRel = ".agent-sync/state/filelocks"
 
 // FileLockOpts tunes a single FileLockRegistry.Acquire call. It is a
 // distinct type from AcquireOpts (the TargetLock options) because the
@@ -31,7 +31,7 @@ type FileLockOpts struct {
 // FileLockRegistry serializes the read-merge-write of shared tool-owned
 // files (workspace-root AGENTS.md, .mcp.json, etc.) across goroutines
 // and processes. It locks a dedicated hashed sidecar under
-// .aienv/state/filelocks/, never the target file itself, so the merge's
+// .agent-sync/state/filelocks/, never the target file itself, so the merge's
 // own temp+rename (Unit 12a) is not fighting the lock.
 type FileLockRegistry struct {
 	root *fsroot.Root
@@ -54,7 +54,7 @@ type keyLock struct {
 // subdir against symlinks, ensures the filelocks dir exists, and
 // resolves its absolute path.
 func NewFileLockRegistry(root *fsroot.Root) (*FileLockRegistry, error) {
-	// Guard .aienv, .aienv/state, AND .aienv/state/filelocks — the lock
+	// Guard .agent-sync, .agent-sync/state, AND .agent-sync/state/filelocks — the lock
 	// FDs open one level deeper than the target lock, so the filelocks
 	// segment must be in the guarded set too.
 	if err := guardStatePrefix(root, fileLocksDirRel); err != nil {

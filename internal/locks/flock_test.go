@@ -163,9 +163,9 @@ func TestTargetLock_ClockSkewUsesMtimeCrossCheck(t *testing.T) {
 func TestTargetLock_UnsafePrefixRefused(t *testing.T) {
 	t.Parallel()
 	root := openRoot(t)
-	// Make .aienv a symlink to a sibling dir.
+	// Make .agent-sync a symlink to a sibling dir.
 	target := t.TempDir()
-	if err := os.Symlink(target, filepath.Join(root.Path(), ".aienv")); err != nil {
+	if err := os.Symlink(target, filepath.Join(root.Path(), ".agent-sync")); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
 	_, err := NewTargetLock(root, "claude")
@@ -247,7 +247,7 @@ func TestMachineID_RecoversFromPoisonedEmptyFile(t *testing.T) {
 	t.Parallel()
 	root := openRoot(t)
 	// Simulate a crash-poisoned empty machine-id file.
-	dir := filepath.Join(root.Path(), ".aienv", "state")
+	dir := filepath.Join(root.Path(), ".agent-sync", "state")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

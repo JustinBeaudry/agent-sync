@@ -56,7 +56,7 @@ func TestRecover_ImpossibleStateIsLoggedNotActed(t *testing.T) {
 		t.Errorf("expected an impossible-state event, got %+v", events)
 	}
 	// Nothing destructive happened: staging + .old + live prefix all intact.
-	genDir := filepath.Join(ws, testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA)
+	genDir := filepath.Join(ws, testParent, ".agent-sync-staging", m.Timestamp+"-"+m.SHA)
 	if _, e := os.Stat(genDir); e != nil {
 		t.Errorf("staging should be left intact for operator: %v", e)
 	}
@@ -69,7 +69,7 @@ func TestRecover_UnreadableSentinelRequiresIntervention(t *testing.T) {
 	t.Parallel()
 	root, ws := newWS(t)
 	gen := "20260608T020002Z-bad0001"
-	genDir := filepath.Join(ws, testParent, ".aienv-staging", gen)
+	genDir := filepath.Join(ws, testParent, ".agent-sync-staging", gen)
 	if err := os.MkdirAll(genDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestRecover_UnreadableSentinelRequiresIntervention(t *testing.T) {
 func TestStagingGenRel_Shape(t *testing.T) {
 	t.Parallel()
 	rel := stagingGenRel(testParent, Meta{Timestamp: "T", SHA: "S"})
-	if rel != path.Join(testParent, ".aienv-staging", "T-S") {
+	if rel != path.Join(testParent, ".agent-sync-staging", "T-S") {
 		t.Errorf("unexpected staging gen rel: %s", rel)
 	}
 }

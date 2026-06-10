@@ -12,13 +12,13 @@ import (
 
 // stateDir is the workspace-relative directory holding all per-target
 // ledgers and lock files.
-const stateDir = ".aienv/state"
+const stateDir = ".agent-sync/state"
 
 // Write persists l for its target atomically.
 //
 // It stamps the current schema version, sorts entries by path (so
 // output is deterministic and golden-comparable), ensures the
-// .aienv/state/ directory exists (StagedWrite does not create parent
+// .agent-sync/state/ directory exists (StagedWrite does not create parent
 // directories), then writes through fsroot's atomic temp+fsync+rename.
 func Write(root *fsroot.Root, l Ledger) error {
 	if !ir.IsValidID(l.Target) {
@@ -53,7 +53,7 @@ func Write(root *fsroot.Root, l Ledger) error {
 	return nil
 }
 
-// ensureStateDir creates .aienv/state/ through the fsroot Root if it
+// ensureStateDir creates .agent-sync/state/ through the fsroot Root if it
 // does not already exist. MkdirAll through os.Root keeps the creation
 // inside the containment boundary. StagedWrite (and gofrs/flock) do
 // not create parent directories, so first sync depends on this.

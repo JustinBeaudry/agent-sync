@@ -22,7 +22,7 @@ type RecoveryEvent struct {
 	Action string // human-readable outcome
 }
 
-// Recover scans <parentRel>/.aienv-staging/* and drives each sentinel
+// Recover scans <parentRel>/.agent-sync-staging/* and drives each sentinel
 // to a terminal clean state per the recovery table, then prunes to the
 // last generationsToKeep generations. It is idempotent: on a clean tree
 // it does nothing. Defensive "impossible" states are logged (returned

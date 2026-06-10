@@ -85,7 +85,7 @@ func TestSync_LocalPathEndToEnd(t *testing.T) {
 		t.Fatalf("expected rule file %s: %v", ruleFile, statErr)
 	}
 	// The ledger was written.
-	if _, statErr := os.Stat(filepath.Join(ws, ".aienv", "state", "claude.json")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(ws, ".agent-sync", "state", "claude.json")); statErr != nil {
 		t.Fatalf("expected ledger: %v", statErr)
 	}
 	_ = out

@@ -16,7 +16,7 @@ import (
 
 // lastWatchFailedRel is the marker watch mode writes on failure (U9). When
 // present, status surfaces it as a banner.
-const lastWatchFailedRel = ".aienv/state/last-watch.failed"
+const lastWatchFailedRel = ".agent-sync/state/last-watch.failed"
 
 // statusReport is the read-only status document.
 type statusReport struct {
@@ -97,7 +97,7 @@ func newStatusCommand() *cobra.Command {
 func renderStatusText(cmd *cobra.Command, rep statusReport) error {
 	w := cmd.OutOrStdout()
 	if rep.WatchFailed {
-		if _, err := fmt.Fprintln(w, "WARNING: the last watch-mode sync failed (see .aienv/state/last-watch.failed)"); err != nil {
+		if _, err := fmt.Fprintln(w, "WARNING: the last watch-mode sync failed (see .agent-sync/state/last-watch.failed)"); err != nil {
 			return err
 		}
 	}

@@ -80,7 +80,7 @@ func TestWriteCapabilityReport(t *testing.T) {
 	if err := WriteCapabilityReport(root, r); err != nil {
 		t.Fatalf("WriteCapabilityReport: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(ws, ".aienv", "state", "capability-report.json"))
+	data, err := os.ReadFile(filepath.Join(ws, ".agent-sync", "state", "capability-report.json"))
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}

@@ -117,7 +117,7 @@ func uniqueTempName(base string) (string, error) {
 	if _, err := rand.Read(randBuf[:]); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(".%s.aienv-stage.%s.tmp", base, hex.EncodeToString(randBuf[:])), nil
+	return fmt.Sprintf(".%s.agent-sync-stage.%s.tmp", base, hex.EncodeToString(randBuf[:])), nil
 }
 
 // translateRenameErr maps EXDEV / ERROR_NOT_SAME_DEVICE to

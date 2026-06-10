@@ -56,7 +56,7 @@ func newWatchCommand(deps RootDeps) *cobra.Command {
 
 			cfg := watch.Config{
 				Paths:          paths,
-				IgnorePrefixes: []string{filepath.Join(ws.Root, ".aienv")},
+				IgnorePrefixes: []string{filepath.Join(ws.Root, ".agent-sync")},
 				Debounce:       time.Duration(debounceMs) * time.Millisecond,
 				Logger:         rc.Logger,
 				OnChange: func(ctx context.Context) error {

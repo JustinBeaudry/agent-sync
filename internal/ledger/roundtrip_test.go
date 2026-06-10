@@ -12,8 +12,8 @@ import (
 )
 
 // openRoot opens a fresh fsroot.Root on a temp workspace with NO
-// pre-existing .aienv/ — so the first-sync directory-creation path is
-// actually exercised (a test that pre-created .aienv/state would mask
+// pre-existing .agent-sync/ — so the first-sync directory-creation path is
+// actually exercised (a test that pre-created .agent-sync/state would mask
 // the StagedWrite-doesn't-create-parents gap).
 func openRoot(t *testing.T) *fsroot.Root {
 	t.Helper()
@@ -26,7 +26,7 @@ func openRoot(t *testing.T) *fsroot.Root {
 }
 
 // writeRawLedger writes raw bytes to the ledger path for a target,
-// creating .aienv/state/ first. Used to simulate corrupted / odd
+// creating .agent-sync/state/ first. Used to simulate corrupted / odd
 // on-disk files.
 func writeRawLedger(t *testing.T, root *fsroot.Root, target string, data []byte) {
 	t.Helper()

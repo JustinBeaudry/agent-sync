@@ -132,7 +132,7 @@ func TestStatus_WatchFailedBanner(t *testing.T) {
 	canonical, sha := makeCanonicalRepo(t)
 	ws := writeWorkspace(t, canonical, sha)
 	// Plant the watch-failure marker.
-	stateDir := filepath.Join(ws, ".aienv", "state")
+	stateDir := filepath.Join(ws, ".agent-sync", "state")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

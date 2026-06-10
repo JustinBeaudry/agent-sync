@@ -16,7 +16,7 @@ import (
 )
 
 // backupsDir is where adopt-prefix backup tarballs are written.
-const backupsDir = ".aienv/state/backups"
+const backupsDir = ".agent-sync/state/backups"
 
 // ConfirmAdopt reports whether the user's typed input authorizes
 // adopting target. Adoption requires typing the exact target name (e.g.
