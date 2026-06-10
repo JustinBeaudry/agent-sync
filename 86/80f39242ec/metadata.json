@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "8680f39242ec",
+  "strategy": "manual-commit",
+  "branch": "refactor/rename-aienvs-to-agent-sync",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/cli/cmd_status.go",
+    "internal/cli/cmd_statusvalidate_test.go",
+    "internal/cli/cmd_sync.go",
+    "internal/cli/cmd_sync_test.go",
+    "internal/cli/cmd_watch.go",
+    "internal/engine/mcp_test.go",
+    "internal/fsroot/safewrite.go",
+    "internal/ledger/load.go",
+    "internal/ledger/roundtrip_test.go",
+    "internal/ledger/types.go",
+    "internal/ledger/write.go",
+    "internal/locks/errors.go",
+    "internal/locks/filelock.go",
+    "internal/locks/filelock_test.go",
+    "internal/locks/flock.go",
+    "internal/locks/flock_test.go",
+    "internal/locks/machineid.go",
+    "internal/report/capability.go",
+    "internal/report/capability_test.go",
+    "internal/sync/adopt.go",
+    "internal/sync/adopt_test.go",
+    "internal/sync/extra_test.go",
+    "internal/sync/recover.go",
+    "internal/sync/recover_test.go",
+    "internal/sync/staging.go",
+    "internal/sync/state_sentinel.go",
+    "internal/sync/swap_test.go",
+    "internal/watch/watch.go",
+    "internal/watch/watch_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/86/80f39242ec/0/metadata.json",
+      "transcript": "/86/80f39242ec/0/full.jsonl",
+      "context": "/86/80f39242ec/0/context.md",
+      "content_hash": "/86/80f39242ec/0/content_hash.txt",
+      "prompt": "/86/80f39242ec/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 16,
+    "cache_creation_tokens": 12541,
+    "cache_read_tokens": 1392575,
+    "output_tokens": 7700,
+    "api_call_count": 8
+  }
+}
