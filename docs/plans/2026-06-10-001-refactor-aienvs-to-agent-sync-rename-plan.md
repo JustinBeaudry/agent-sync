@@ -1,7 +1,7 @@
 ---
 title: "refactor: rename legacy aienvs/aienv identifiers to agent-sync"
 type: refactor
-status: active
+status: completed
 date: 2026-06-10
 plan_depth: deep
 breaking: true
