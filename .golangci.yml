@@ -26,7 +26,7 @@ linters:
   settings:
     gosec:
       excludes:
-        # G304: file inclusion via variable — aienvs deliberately opens
+        # G304: file inclusion via variable — agent-sync deliberately opens
         # user-specified paths; safety is enforced via os.Root containment
         # (see internal/fsroot), not by refusing variables.
         - G304
@@ -54,7 +54,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/aienvs/aienvs
+        - github.com/agent-sync/agent-sync
 
 issues:
   max-issues-per-linter: 0
