@@ -33,12 +33,12 @@ func FuzzMergeJSON(f *testing.F) {
 	f.Add(`{}`)
 	f.Add(`{"mcpServers":[1,2]}`)
 	f.Fuzz(func(t *testing.T, existing string) {
-		out, _, err := mergeJSON([]byte(existing), jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`))
+		out, _, err := mergeJSON([]byte(existing), jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`))
 		if err != nil {
 			return
 		}
 		// Successful merge must be valid JSON the engine can round-trip.
-		if _, _, err := mergeJSON(out, jsonRemove("/mcpServers/aienvs_foo")); err != nil {
+		if _, _, err := mergeJSON(out, jsonRemove("/mcpServers/agentsync_foo")); err != nil {
 			t.Fatalf("engine produced JSON it cannot re-merge: %v", err)
 		}
 	})
@@ -46,7 +46,7 @@ func FuzzMergeJSON(f *testing.F) {
 
 func FuzzMergeTOML(f *testing.F) {
 	f.Add("[general]\nname = \"x\"\n")
-	f.Add("note = \"\"\"\n[mcp_servers.aienvs_foo]\n\"\"\"\n")
+	f.Add("note = \"\"\"\n[mcp_servers.agentsync_foo]\n\"\"\"\n")
 	f.Add("")
 	f.Fuzz(func(t *testing.T, existing string) {
 		out, _, err := mergeTOML([]byte(existing), tomlUpsert("foo", "command = \"node\"\n"))

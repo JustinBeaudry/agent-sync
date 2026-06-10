@@ -13,7 +13,7 @@ import (
 
 const (
 	codexConfigPath = ".codex/config.toml"
-	mcpTOMLPathBase = "mcp_servers.aienvs_"
+	mcpTOMLPathBase = "mcp_servers.agentsync_"
 	agentsMDPath    = "AGENTS.md"
 	sectionIDPrefix = "agent-sync:"
 )
@@ -27,9 +27,9 @@ var markerOpenBytes = []byte("<!-- agent-sync:")
 var bareTOMLKey = regexp.MustCompile(`\A[A-Za-z0-9_-]+\z`)
 
 // emitMCPServerEntry emits one write_tool_owned op into .codex/config.toml as a
-// [mcp_servers.aienvs_<id>] table (toml-path locator). The Content is the raw
+// [mcp_servers.agentsync_<id>] table (toml-path locator). The Content is the raw
 // TOML table body (key = value lines, no header) the string-aware line-splice
-// merge expects; the merge writes the [mcp_servers.aienvs_<id>] header itself.
+// merge expects; the merge writes the [mcp_servers.agentsync_<id>] header itself.
 //
 // The IR body must be a JSON object (an MCP server entry: command/args/env or
 // url/...). It is rendered to TOML with inline tables and inline arrays so the
@@ -54,7 +54,7 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode) error {
 		}
 	}
 	// JSON `null` unmarshals into a nil map with no error — reject it
-	// explicitly rather than render an empty [mcp_servers.aienvs_<id>] table
+	// explicitly rather than render an empty [mcp_servers.agentsync_<id>] table
 	// (which would install unusable Codex MCP config).
 	if entry == nil {
 		return &adapterkit.Error{
@@ -110,7 +110,7 @@ func emitAgentsMD(emitted *emittedOps, node irNode) error {
 // renderTOMLTableBody renders a JSON object as a TOML table body — one
 // `key = value` line per top-level key, sorted for determinism, with nested
 // objects as inline tables and arrays as inline arrays. No table headers, so
-// the result splices cleanly under a [mcp_servers.aienvs_<id>] header.
+// the result splices cleanly under a [mcp_servers.agentsync_<id>] header.
 func renderTOMLTableBody(entry map[string]json.RawMessage) ([]byte, error) {
 	keys := make([]string, 0, len(entry))
 	for k := range entry {

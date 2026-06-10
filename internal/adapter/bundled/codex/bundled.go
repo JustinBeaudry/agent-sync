@@ -6,7 +6,7 @@
 //
 //   - agents-md        -> workspace-root AGENTS.md, managed section via write_tool_owned
 //   - skill            -> .agents/skills/aienvs-<id>/SKILL.md (+assets)
-//   - mcp-server-entry -> .codex/config.toml [mcp_servers.aienvs_<id>] via write_tool_owned (toml-path)
+//   - mcp-server-entry -> .codex/config.toml [mcp_servers.agentsync_<id>] via write_tool_owned (toml-path)
 //   - rule             -> warning, unsupported (no per-tool rule concept)
 //   - command          -> warning, unsupported (custom prompts deprecated + user-home-only)
 //   - plugin-reference -> warning, unsupported (no project plugin registry)

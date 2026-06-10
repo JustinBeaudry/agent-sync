@@ -21,9 +21,9 @@ import (
 //   - Targets:  empty slice (means "all adapters")
 //   - Version:  1
 type Frontmatter struct {
-	Required bool     `yaml:"required" json:"__aienvs_required"`
-	Targets  []string `yaml:"targets"  json:"__aienvs_targets"`
-	Version  int      `yaml:"version"  json:"__aienvs_version"`
+	Required bool     `yaml:"required" json:"__agentsync_required"`
+	Targets  []string `yaml:"targets"  json:"__agentsync_targets"`
+	Version  int      `yaml:"version"  json:"__agentsync_version"`
 }
 
 // defaultFrontmatter returns a fresh Frontmatter with the documented
@@ -42,7 +42,7 @@ func defaultFrontmatter() Frontmatter {
 // after parsing a partial frontmatter block. Normalizes Targets to a
 // non-nil empty slice so the shape is consistent across all extractors
 // (a parsed YAML doc that omits `targets:` and a JSON file with no
-// `__aienvs_targets` key both produce `[]string{}`, never nil).
+// `__agentsync_targets` key both produce `[]string{}`, never nil).
 func (fm *Frontmatter) applyDefaults() {
 	if fm.Version == 0 {
 		fm.Version = 1
@@ -89,7 +89,7 @@ func extractMarkdownFrontmatter(src []byte) (Frontmatter, []byte, error) {
 }
 
 // extractJSONFrontmatter parses a JSON file, peels off any reserved
-// `__aienvs_*` top-level keys, and returns a Frontmatter plus a re-emitted
+// `__agentsync_*` top-level keys, and returns a Frontmatter plus a re-emitted
 // body with those keys stripped. Non-agent-sync keys preserve their original
 // ordering and structure (encoding/json's map ordering is sorted, which
 // is what JSON consumers should already tolerate).
@@ -126,23 +126,23 @@ func extractJSONFrontmatter(src []byte) (Frontmatter, []byte, error) {
 
 	// Reserved keys are best-effort: if the field exists but doesn't
 	// unmarshal cleanly into its target type, return ErrFrontmatterParse.
-	if v, ok := raw["__aienvs_required"]; ok {
+	if v, ok := raw["__agentsync_required"]; ok {
 		if err := json.Unmarshal(v, &fm.Required); err != nil {
-			return Frontmatter{}, nil, fmt.Errorf("%w: __aienvs_required must be bool", ErrFrontmatterParse)
+			return Frontmatter{}, nil, fmt.Errorf("%w: __agentsync_required must be bool", ErrFrontmatterParse)
 		}
-		delete(raw, "__aienvs_required")
+		delete(raw, "__agentsync_required")
 	}
-	if v, ok := raw["__aienvs_targets"]; ok {
+	if v, ok := raw["__agentsync_targets"]; ok {
 		if err := json.Unmarshal(v, &fm.Targets); err != nil {
-			return Frontmatter{}, nil, fmt.Errorf("%w: __aienvs_targets must be []string", ErrFrontmatterParse)
+			return Frontmatter{}, nil, fmt.Errorf("%w: __agentsync_targets must be []string", ErrFrontmatterParse)
 		}
-		delete(raw, "__aienvs_targets")
+		delete(raw, "__agentsync_targets")
 	}
-	if v, ok := raw["__aienvs_version"]; ok {
+	if v, ok := raw["__agentsync_version"]; ok {
 		if err := json.Unmarshal(v, &fm.Version); err != nil {
-			return Frontmatter{}, nil, fmt.Errorf("%w: __aienvs_version must be int", ErrFrontmatterParse)
+			return Frontmatter{}, nil, fmt.Errorf("%w: __agentsync_version must be int", ErrFrontmatterParse)
 		}
-		delete(raw, "__aienvs_version")
+		delete(raw, "__agentsync_version")
 	}
 	fm.applyDefaults()
 

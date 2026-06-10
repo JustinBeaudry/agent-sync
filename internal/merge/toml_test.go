@@ -10,10 +10,10 @@ import (
 )
 
 func tomlUpsert(id, body string) MergeEntry {
-	return MergeEntry{Kind: adapterkit.ToolOwnedKindTOMLPath, Locator: "mcp_servers.aienvs_" + id, Content: []byte(body)}
+	return MergeEntry{Kind: adapterkit.ToolOwnedKindTOMLPath, Locator: "mcp_servers.agentsync_" + id, Content: []byte(body)}
 }
 func tomlRemove(id string) MergeEntry {
-	return MergeEntry{Kind: adapterkit.ToolOwnedKindTOMLPath, Locator: "mcp_servers.aienvs_" + id, Remove: true}
+	return MergeEntry{Kind: adapterkit.ToolOwnedKindTOMLPath, Locator: "mcp_servers.agentsync_" + id, Remove: true}
 }
 
 const userTOML = `# user comment
@@ -37,7 +37,7 @@ func TestMergeTOML_UpsertPreservesUserCommentsAndOrder(t *testing.T) {
 	if !bytes.HasPrefix(out, []byte(userTOML)) {
 		t.Errorf("user content not preserved as a prefix:\n%s", out)
 	}
-	if !strings.Contains(string(out), "[mcp_servers.aienvs_foo]") {
+	if !strings.Contains(string(out), "[mcp_servers.agentsync_foo]") {
 		t.Errorf("agent-sync table not appended:\n%s", out)
 	}
 	if !strings.Contains(string(out), "# user comment") || !strings.Contains(string(out), "# inline comment") {
@@ -81,8 +81,8 @@ func TestMergeTOML_NoOpUpsertIsByteIdentical(t *testing.T) {
 // header (which would splice across the user table and eat bytes).
 func TestMergeTOML_StringAwareLocator(t *testing.T) {
 	t.Parallel()
-	tricky := "[general]\nnote = \"\"\"\n[mcp_servers.aienvs_foo]\nnot a real header\n\"\"\"\n"
-	// Upsert a real aienvs_foo table; the in-string header must be left
+	tricky := "[general]\nnote = \"\"\"\n[mcp_servers.agentsync_foo]\nnot a real header\n\"\"\"\n"
+	// Upsert a real agentsync_foo table; the in-string header must be left
 	// untouched and the real table appended after the user table.
 	out, _, err := mergeTOML([]byte(tricky), tomlUpsert("foo", "command = \"node\"\n"))
 	if err != nil {
@@ -128,7 +128,7 @@ func TestMergeTOML_Errors(t *testing.T) {
 	if _, _, err := mergeTOML([]byte("[broken\nno = "), tomlUpsert("foo", "command = \"node\"\n")); !errors.Is(err, ErrMalformedToolOwnedFile) {
 		t.Errorf("invalid TOML: err=%v want ErrMalformedToolOwnedFile", err)
 	}
-	dup := "[mcp_servers.aienvs_foo]\ncommand = \"a\"\n\n[mcp_servers.aienvs_foo]\ncommand = \"b\"\n"
+	dup := "[mcp_servers.agentsync_foo]\ncommand = \"a\"\n\n[mcp_servers.agentsync_foo]\ncommand = \"b\"\n"
 	if _, _, err := mergeTOML([]byte(dup), tomlUpsert("foo", "command = \"node\"\n")); !errors.Is(err, ErrMalformedToolOwnedFile) {
 		// dup TOML may already fail to parse (duplicate table) — either way it must be ErrMalformedToolOwnedFile.
 		t.Errorf("duplicate agent-sync table: err=%v want ErrMalformedToolOwnedFile", err)

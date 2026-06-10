@@ -41,10 +41,10 @@ func TestApplyToFile_WritesEachKind(t *testing.T) {
 		t.Errorf("AGENTS.md not written: %s", b)
 	}
 	// json at workspace root
-	if _, _, err := ApplyToFile(ctx, root, reg, ".mcp.json", jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`), "claude"); err != nil {
+	if _, _, err := ApplyToFile(ctx, root, reg, ".mcp.json", jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`), "claude"); err != nil {
 		t.Fatalf("json apply: %v", err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(ws, ".mcp.json")); !bytes.Contains(b, []byte("aienvs_foo")) {
+	if b, _ := os.ReadFile(filepath.Join(ws, ".mcp.json")); !bytes.Contains(b, []byte("agentsync_foo")) {
 		t.Errorf(".mcp.json not written: %s", b)
 	}
 }
@@ -53,7 +53,7 @@ func TestApplyToFile_NestedNewTargetCreatesParent(t *testing.T) {
 	t.Parallel()
 	root, reg, ws := applyHarness(t)
 	// .cursor/ does not exist yet; ApplyToFile must MkdirAll it.
-	if _, _, err := ApplyToFile(context.Background(), root, reg, ".cursor/mcp.json", jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`), "cursor"); err != nil {
+	if _, _, err := ApplyToFile(context.Background(), root, reg, ".cursor/mcp.json", jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`), "cursor"); err != nil {
 		t.Fatalf("nested apply: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(ws, ".cursor", "mcp.json")); err != nil {
@@ -68,7 +68,7 @@ func TestApplyToFile_EngineErrorLeavesFileUntouched(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(ws, ".mcp.json"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, _, err := ApplyToFile(context.Background(), root, reg, ".mcp.json", jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`), "claude")
+	_, _, err := ApplyToFile(context.Background(), root, reg, ".mcp.json", jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`), "claude")
 	if !errors.Is(err, ErrMalformedToolOwnedFile) {
 		t.Fatalf("err=%v want ErrMalformedToolOwnedFile", err)
 	}

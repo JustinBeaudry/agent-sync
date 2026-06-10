@@ -286,8 +286,8 @@ func TestEmitMCPServerEntry_HappyPath(t *testing.T) {
 	if mcp.Kind != adapterkit.ToolOwnedKindJSONPointer {
 		t.Errorf("locator kind=%q want %q", mcp.Kind, adapterkit.ToolOwnedKindJSONPointer)
 	}
-	if mcp.Locator != "/mcpServers/aienvs_lsp" {
-		t.Errorf("locator=%q want %q", mcp.Locator, "/mcpServers/aienvs_lsp")
+	if mcp.Locator != "/mcpServers/agentsync_lsp" {
+		t.Errorf("locator=%q want %q", mcp.Locator, "/mcpServers/agentsync_lsp")
 	}
 	if !json.Valid(mcp.Content) {
 		t.Errorf(".mcp.json entry content is not valid JSON: %q", mcp.Content)

@@ -10,7 +10,7 @@ import (
 
 const (
 	mcpJSONPath        = ".mcp.json"
-	mcpJSONPointerBase = "/mcpServers/aienvs_"
+	mcpJSONPointerBase = "/mcpServers/agentsync_"
 	claudeMDPath       = "CLAUDE.md"
 	claudeMDSidecar    = ".aienvs-managed"
 	sectionIDPrefix    = "agent-sync:"
@@ -24,7 +24,7 @@ const (
 var markerOpenBytes = []byte("<!-- agent-sync:")
 
 // emitMCPServerEntry emits one write_tool_owned op into .mcp.json
-// at /mcpServers/aienvs_<id>, plus a sidecar .aienvs-managed marker
+// at /mcpServers/agentsync_<id>, plus a sidecar .aienvs-managed marker
 // (deduplicated per emit) that advertises ownership next to the
 // strict-JSON file.
 //

@@ -29,7 +29,7 @@ const managedHeaderTemplate = "<!-- Managed by agent-sync — do not edit. Sourc
 const jsonSidecarBody = `Managed by agent-sync.
 
 The sibling .mcp.json file contains entries owned by agent-sync under
-the /mcpServers/aienvs_<id> JSON pointers. Other entries are
+the /mcpServers/agentsync_<id> JSON pointers. Other entries are
 preserved across syncs.
 
 To remove aienvs-managed entries: agent-sync unmanage claude

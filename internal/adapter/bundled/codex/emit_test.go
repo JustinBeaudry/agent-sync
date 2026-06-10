@@ -128,8 +128,8 @@ func TestEmitMCP_RendersValidTOMLBody(t *testing.T) {
 	if op.Kind != adapterkit.ToolOwnedKindTOMLPath {
 		t.Errorf("mcp op kind=%q want toml-path", op.Kind)
 	}
-	if op.Locator != "mcp_servers.aienvs_lsp" {
-		t.Errorf("mcp locator=%q want mcp_servers.aienvs_lsp", op.Locator)
+	if op.Locator != "mcp_servers.agentsync_lsp" {
+		t.Errorf("mcp locator=%q want mcp_servers.agentsync_lsp", op.Locator)
 	}
 	body := string(op.Content)
 	// Body is the table body (no header). Keys sorted: args, command, env.
@@ -145,7 +145,7 @@ func TestEmitMCP_RendersValidTOMLBody(t *testing.T) {
 	// The body must parse as valid TOML once placed under a table header
 	// (this is what the string-aware line-splice merge validates).
 	var m map[string]any
-	if err := toml.Unmarshal([]byte("[mcp_servers.aienvs_lsp]\n"+body), &m); err != nil {
+	if err := toml.Unmarshal([]byte("[mcp_servers.agentsync_lsp]\n"+body), &m); err != nil {
 		t.Fatalf("rendered toml body does not parse under a header: %v\nbody:\n%s", err, body)
 	}
 }

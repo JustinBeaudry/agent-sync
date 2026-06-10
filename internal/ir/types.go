@@ -78,7 +78,7 @@ type Node struct {
 	Provenance Provenance
 
 	// Body is the post-frontmatter content for markdown kinds, or the full
-	// (post-`__aienvs_*`-strip) file content for JSON/TOML kinds.
+	// (post-`__agentsync_*`-strip) file content for JSON/TOML kinds.
 	Body []byte
 }
 
