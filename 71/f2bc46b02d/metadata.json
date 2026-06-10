@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "71f2bc46b02d",
+  "strategy": "manual-commit",
+  "branch": "refactor/rename-aienvs-to-agent-sync",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "testdata/manifest/valid-pinned.yaml"
+  ],
+  "sessions": [
+    {
+      "metadata": "/71/f2bc46b02d/0/metadata.json",
+      "transcript": "/71/f2bc46b02d/0/full.jsonl",
+      "context": "/71/f2bc46b02d/0/context.md",
+      "content_hash": "/71/f2bc46b02d/0/content_hash.txt",
+      "prompt": "/71/f2bc46b02d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 404,
+    "cache_creation_tokens": 10182,
+    "cache_read_tokens": 1810171,
+    "output_tokens": 5324,
+    "api_call_count": 11
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "71f2bc46b02d",
+  "session_id": "8ef41bcb-d9bc-4fa4-ae16-a19811bb0b18",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-10T19:47:12.224291Z",
+  "branch": "refactor/rename-aienvs-to-agent-sync",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "testdata/manifest/valid-pinned.yaml"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f1701a5007f9",
+  "checkpoint_transcript_start": 185,
+  "transcript_lines_at_start": 185,
+  "token_usage": {
+    "input_tokens": 404,
+    "cache_creation_tokens": 10182,
+    "cache_read_tokens": 1810171,
+    "output_tokens": 5324,
+    "api_call_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-10T19:47:11.947157Z",
+    "agent_lines": 1,
+    "human_added": 41,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 42,
+    "agent_percentage": 2.380952380952381
+  }
+}
