@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path"
 	"sort"
+	"strings"
 
 	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
@@ -36,11 +37,11 @@ func Recover(root *fsroot.Root, parentRel string) ([]RecoveryEvent, error) {
 	var events []RecoveryEvent
 	for _, gen := range gens {
 		genRel := path.Join(stagingRoot, gen)
-		ev, err := reconcileGen(root, genRel, gen)
+		evs, err := reconcileGen(root, genRel, gen)
 		if err != nil {
 			return events, err
 		}
-		events = append(events, ev)
+		events = append(events, evs...)
 	}
 
 	if err := prune(root, stagingRoot, gens); err != nil {
@@ -49,10 +50,56 @@ func Recover(root *fsroot.Root, parentRel string) ([]RecoveryEvent, error) {
 	return events, nil
 }
 
-// reconcileGen applies the recovery state table to one generation dir.
-func reconcileGen(root *fsroot.Root, genRel, gen string) (RecoveryEvent, error) {
+// reconcileGen reconciles every per-leaf sentinel in one generation dir. A
+// shared-subdir sync stages several leaves into one generation dir, each with
+// its own ".state-<leaf>" sentinel; an owned-subdir gen dir has exactly one.
+func reconcileGen(root *fsroot.Root, genRel, gen string) ([]RecoveryEvent, error) {
+	sentinels, err := listSentinels(root, genRel)
+	if err != nil {
+		return nil, err
+	}
+	if len(sentinels) == 0 {
+		return []RecoveryEvent{{Gen: gen, Action: "no sentinel; left as-is (forensic generation)"}}, nil
+	}
+	var events []RecoveryEvent
+	for _, name := range sentinels {
+		ev, err := reconcileSentinel(root, path.Join(genRel, name), gen)
+		if err != nil {
+			return events, err
+		}
+		events = append(events, ev)
+	}
+	return events, nil
+}
+
+// listSentinels returns the ".state-<leaf>" sentinel file names in a generation
+// dir, sorted. A missing dir yields an empty list, not an error.
+func listSentinels(root *fsroot.Root, genRel string) ([]string, error) {
+	d, err := root.Inner().Open(genRel)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("sync: open generation %s: %w", genRel, err)
+	}
+	defer func() { _ = d.Close() }()
+	entries, err := d.ReadDir(-1)
+	if err != nil {
+		return nil, fmt.Errorf("sync: read generation %s: %w", genRel, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), sentinelPrefix) {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// reconcileSentinel applies the recovery state table to one leaf's sentinel.
+func reconcileSentinel(root *fsroot.Root, sentinelRel, gen string) (RecoveryEvent, error) {
 	ev := RecoveryEvent{Gen: gen}
-	sentinelRel := path.Join(genRel, ".state")
 
 	s, err := readSentinel(root, sentinelRel)
 	if err != nil {
@@ -76,10 +123,12 @@ func reconcileGen(root *fsroot.Root, genRel, gen string) (RecoveryEvent, error) 
 			ev.Action = "impossible state (intend + .old present); requires operator intervention"
 			return ev, nil
 		}
-		// Crash before step 1: discard the staging generation.
-		if err := root.Inner().RemoveAll(genRel); err != nil {
-			return ev, fmt.Errorf("sync: recover discard %s: %w", genRel, err)
+		// Crash before step 1: discard only this leaf's staging + sentinel
+		// (other leaves share the generation dir; never RemoveAll genRel).
+		if err := root.Inner().RemoveAll(s.StagingLeafRel); err != nil {
+			return ev, fmt.Errorf("sync: recover discard %s: %w", s.StagingLeafRel, err)
 		}
+		_ = root.Inner().Remove(sentinelRel)
 		ev.Action = "crash before step1; discarded staging"
 		return ev, nil
 

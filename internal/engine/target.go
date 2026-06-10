@@ -147,6 +147,9 @@ func sharedSubdirs(outputs []contract.DeclaredOutput) []string {
 			shared = append(shared, o.Path)
 		}
 	}
+	// Longest-first so leafUnder's linear scan picks the most-specific prefix
+	// when shared prefixes nest — same invariant ownedSubdirs relies on.
+	sort.Slice(shared, func(i, j int) bool { return len(shared[i]) > len(shared[j]) })
 	return shared
 }
 
@@ -160,14 +163,16 @@ func leafUnder(shared []string, p string) string {
 			continue
 		}
 		rest := strings.TrimPrefix(p, sp+"/")
-		seg := rest
 		if i := strings.IndexByte(rest, '/'); i >= 0 {
-			seg = rest[:i]
+			rest = rest[:i] // first path segment below the shared parent
 		}
-		if seg == "" {
+		// A managed leaf must be a real child-dir name. Reject empty / dot /
+		// parent segments — defense-in-depth; the runtime declared-outputs gate
+		// already path.Cleans and rejects traversal before ops reach here.
+		if rest == "" || rest == "." || rest == ".." {
 			return ""
 		}
-		return sp + "/" + seg
+		return sp + "/" + rest
 	}
 	return ""
 }

@@ -40,7 +40,7 @@ func TestRecover_ImpossibleStateIsLoggedNotActed(t *testing.T) {
 	m := Meta{Timestamp: "20260608T020001Z", SHA: "imp0001"}
 	s := stageGen(t, root, ws, "PARTIAL", m)
 	s.Status = StatusIntend
-	if err := writeSentinel(root, sentinelRelFor(m), s); err != nil {
+	if err := writeSentinel(root, testSentinelRel(m), s); err != nil {
 		t.Fatalf("seed sentinel: %v", err)
 	}
 	// Create the impossible companion: a leftover prefix.old alongside intend.
@@ -73,7 +73,7 @@ func TestRecover_UnreadableSentinelRequiresIntervention(t *testing.T) {
 	if err := os.MkdirAll(genDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(genDir, ".state"), []byte("{not json"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(genDir, sentinelPrefix+testLeaf), []byte("{not json"), 0o600); err != nil {
 		t.Fatalf("seed bad sentinel: %v", err)
 	}
 	events, err := Recover(root, testParent)
@@ -84,7 +84,7 @@ func TestRecover_UnreadableSentinelRequiresIntervention(t *testing.T) {
 		t.Errorf("expected unreadable-sentinel event, got %+v", events)
 	}
 	// Staging left intact.
-	if _, e := os.Stat(filepath.Join(genDir, ".state")); e != nil {
+	if _, e := os.Stat(filepath.Join(genDir, sentinelPrefix+testLeaf)); e != nil {
 		t.Errorf("staging should be untouched: %v", e)
 	}
 }

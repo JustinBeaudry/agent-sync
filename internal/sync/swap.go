@@ -11,6 +11,17 @@ import (
 // step 1 of the swap.
 const oldSuffix = ".old"
 
+// sentinelPrefix names the per-leaf recovery sentinel files inside a
+// generation dir: ".state-<leaf base>". A generation dir may hold several
+// (one per staged leaf for shared-subdir syncs).
+const sentinelPrefix = ".state-"
+
+// sentinelRelFor returns the per-leaf sentinel path for a staged leaf:
+// <gen-dir>/.state-<leaf base>.
+func sentinelRelFor(stagingLeafRel string) string {
+	return path.Join(path.Dir(stagingLeafRel), sentinelPrefix+path.Base(stagingLeafRel))
+}
+
 // renameStep performs one rename, scoped to the workspace os.Root. It
 // is a package var so tests can inject a crash at a chosen step.
 var renameStep = func(root *fsroot.Root, oldRel, newRel string) error {
@@ -32,7 +43,14 @@ func Swap(root *fsroot.Root, s Sentinel) error {
 		return fmt.Errorf("sync: swap requires PrefixRel and StagingLeafRel")
 	}
 	prefixOld := s.PrefixRel + oldSuffix
-	sentinelRel := path.Join(path.Dir(s.StagingLeafRel), ".state")
+	// One sentinel PER staged leaf, not per generation dir. Shared-subdir
+	// syncs stage several leaves (e.g. .agents/skills/aienvs-A, aienvs-B) into
+	// the same generation dir; a single per-gen-dir .state would let one
+	// leaf's swap overwrite another's recovery record, orphaning a .old dir
+	// and wedging future syncs with ErrStale. Keying the sentinel by the leaf
+	// base keeps each swap unit's recovery state independent. (Owned-subdir
+	// gen dirs hold exactly one leaf, so this is just a rename for them.)
+	sentinelRel := sentinelRelFor(s.StagingLeafRel)
 
 	// Defensive pre-flight: a leftover prefix.old means a prior swap did
 	// not finish; refuse rather than stomp it.
