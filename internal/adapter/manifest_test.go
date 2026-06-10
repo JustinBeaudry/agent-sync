@@ -14,7 +14,7 @@ func TestLoadAdapterManifest_MinimalRoundTrips(t *testing.T) {
 version: 0.1.0
 contract_version: aienvs/v1
 command:
-  - aienvs-adapter-claude
+  - agent-sync-adapter-claude
 `
 	m, err := LoadAdapterManifestBytes([]byte(src))
 	if err != nil {
@@ -26,7 +26,7 @@ command:
 	if m.ContractVersion != "aienvs/v1" {
 		t.Errorf("contract_version: want aienvs/v1, got %q", m.ContractVersion)
 	}
-	if len(m.Command) != 1 || m.Command[0] != "aienvs-adapter-claude" {
+	if len(m.Command) != 1 || m.Command[0] != "agent-sync-adapter-claude" {
 		t.Errorf("command: %v", m.Command)
 	}
 }
@@ -38,7 +38,7 @@ func TestLoadAdapterManifest_FullManifestRoundTrips(t *testing.T) {
 version: 1.2.3
 contract_version: aienvs/v1
 command:
-  - aienvs-adapter-cursor
+  - agent-sync-adapter-cursor
   - --strict
 reserved_prefix: .cursor
 `
@@ -68,7 +68,7 @@ func TestSyntheticAdapterManifest_DefaultsFromBinaryName(t *testing.T) {
 	if m.ContractVersion != "aienvs/v1" {
 		t.Errorf("contract_version: %q", m.ContractVersion)
 	}
-	if len(m.Command) != 1 || m.Command[0] != "aienvs-adapter-foo" {
+	if len(m.Command) != 1 || m.Command[0] != "agent-sync-adapter-foo" {
 		t.Errorf("command: %v", m.Command)
 	}
 }
@@ -80,8 +80,8 @@ func TestSyntheticAdapterManifest_PinsResolvedBinaryPath(t *testing.T) {
 	// run.
 	t.Parallel()
 
-	m := SyntheticAdapterManifest("foo", "/opt/aienvs/bin/aienvs-adapter-foo")
-	if len(m.Command) != 1 || m.Command[0] != "/opt/aienvs/bin/aienvs-adapter-foo" {
+	m := SyntheticAdapterManifest("foo", "/opt/aienvs/bin/agent-sync-adapter-foo")
+	if len(m.Command) != 1 || m.Command[0] != "/opt/aienvs/bin/agent-sync-adapter-foo" {
 		t.Errorf("command should be the resolved absolute path, got %v", m.Command)
 	}
 }
@@ -104,7 +104,7 @@ func TestLoadAdapterManifest_MissingContractVersion(t *testing.T) {
 
 	src := `name: foo
 command:
-  - aienvs-adapter-foo
+  - agent-sync-adapter-foo
 `
 	_, err := LoadAdapterManifestBytes([]byte(src))
 	if !errors.Is(err, ErrAdapterManifestMissingContractVersion) {
@@ -118,7 +118,7 @@ func TestLoadAdapterManifest_UnsupportedContractVersion(t *testing.T) {
 	src := `name: foo
 contract_version: aienvs/v0
 command:
-  - aienvs-adapter-foo
+  - agent-sync-adapter-foo
 `
 	_, err := LoadAdapterManifestBytes([]byte(src))
 	if !errors.Is(err, ErrAdapterContractVersionUnsupported) {
@@ -168,7 +168,7 @@ func TestLoadAdapterManifest_ReservedPrefixNormalized(t *testing.T) {
 
 	src := `name: foo
 contract_version: aienvs/v1
-command: [aienvs-adapter-foo]
+command: [agent-sync-adapter-foo]
 reserved_prefix: .foo/
 `
 	m, err := LoadAdapterManifestBytes([]byte(src))
@@ -203,7 +203,7 @@ func TestLoadAdapterManifest_ReservedPrefixRejectedShapes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			src := "name: foo\ncontract_version: aienvs/v1\ncommand: [aienvs-adapter-foo]\nreserved_prefix: " + strconv.Quote(tc.v) + "\n"
+			src := "name: foo\ncontract_version: aienvs/v1\ncommand: [agent-sync-adapter-foo]\nreserved_prefix: " + strconv.Quote(tc.v) + "\n"
 			_, err := LoadAdapterManifestBytes([]byte(src))
 			if !errors.Is(err, ErrAdapterManifestInvalidReservedPrefix) {
 				t.Fatalf("v=%q: want ErrAdapterManifestInvalidReservedPrefix, got %v", tc.v, err)
@@ -250,7 +250,7 @@ func TestLoadAdapterManifest_AcceptsXPrefixedExtensions(t *testing.T) {
 
 	src := `name: foo
 contract_version: aienvs/v1
-command: [aienvs-adapter-foo]
+command: [agent-sync-adapter-foo]
 x-future-field: experiment
 `
 	if _, err := LoadAdapterManifestBytes([]byte(src)); err != nil {
@@ -264,7 +264,7 @@ func TestLoadAdapterManifest_RejectsUnknownNonXFields(t *testing.T) {
 
 	src := `name: foo
 contract_version: aienvs/v1
-command: [aienvs-adapter-foo]
+command: [agent-sync-adapter-foo]
 totally_made_up: yes
 `
 	_, err := LoadAdapterManifestBytes([]byte(src))

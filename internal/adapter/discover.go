@@ -15,10 +15,10 @@ import (
 )
 
 // adapterBinaryPrefix is the magic filename prefix that PATH discovery
-// looks for. A binary named aienvs-adapter-<name> on PATH (with an
+// looks for. A binary named agent-sync-adapter-<name> on PATH (with an
 // optional .exe suffix on Windows) registers as an adapter named
 // <name>. Mirrors the kubectl plugin convention.
-const adapterBinaryPrefix = "aienvs-adapter-"
+const adapterBinaryPrefix = "agent-sync-adapter-"
 
 // Source describes how an adapter ended up in the registry. Determines
 // precedence: workspace manifest > PATH > bundled.
@@ -103,7 +103,7 @@ type DiscoverOptions struct {
 	// and take precedence over PATH and Bundled.
 	Workspace *manifest.Manifest
 
-	// PATH is the list of directories to search for aienvs-adapter-<name>
+	// PATH is the list of directories to search for agent-sync-adapter-<name>
 	// binaries. When nil, no PATH lookup is performed. Callers that want
 	// the OS PATH should pass strings.Split(os.Getenv("PATH"), ...).
 	PATH []string
@@ -170,7 +170,7 @@ func DiscoverAdapters(ctx context.Context, opts DiscoverOptions) (*Registry, err
 				continue
 			}
 			// Pin the manifest's command to the absolute path discovered
-			// in this directory. Storing just "aienvs-adapter-<name>"
+			// in this directory. Storing just "agent-sync-adapter-<name>"
 			// would force a second $PATH resolution at spawn time, which
 			// can race against the discovery scan (a different directory
 			// earlier on PATH might shadow the binary we just validated).
@@ -249,8 +249,8 @@ func manifestFromDecl(d *manifest.AdapterDecl) (*AdapterManifest, error) {
 
 // adapterNameFromBinary returns the adapter name encoded in a PATH
 // binary filename, or false if the filename doesn't match the
-// aienvs-adapter-<name> shape. Empty-suffix binaries
-// (aienvs-adapter- alone) are rejected. Windows .exe suffix is stripped.
+// agent-sync-adapter-<name> shape. Empty-suffix binaries
+// (agent-sync-adapter- alone) are rejected. Windows .exe suffix is stripped.
 func adapterNameFromBinary(filename string) (string, bool) {
 	name := filename
 	if runtime.GOOS == "windows" {

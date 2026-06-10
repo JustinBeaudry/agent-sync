@@ -4,7 +4,7 @@
 // (write_file, write_tool_owned, mkdir, delete, warning) for Cursor's
 // actual on-disk layout:
 //
-//   - rule    -> .cursor/rules/aienvs/<id>.mdc
+//   - rule    -> .cursor/rules/agent-sync/<id>.mdc
 //   - mcp-server-entry -> .cursor/mcp.json via write_tool_owned
 //   - agents-md -> AGENTS.md (workspace root) via write_tool_owned
 //   - skill            -> warning, unsupported (Cursor has no skills concept)
@@ -52,7 +52,7 @@ func Bundled() *adapter.BundledAdapter {
 			// internal/adapter/discover.go) but never executed for
 			// SourceBundled — the runtime takes the Run path. The
 			// placeholder name is recorded for diagnostics only.
-			Command: []string{"aienvs-adapter-cursor-bundled"},
+			Command: []string{"agent-sync-adapter-cursor-bundled"},
 		},
 		Run: run,
 	}

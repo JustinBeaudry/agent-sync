@@ -23,7 +23,7 @@ func TestMustGit_RunsInHermeticEnv(t *testing.T) {
 	// A committed file round-trips through the pinned test identity.
 	MustGit(t, dir, "commit", "--allow-empty", "--quiet", "-m", "empty")
 	author := MustGit(t, dir, "log", "-1", "--format=%an")
-	if author != "aienvs-test" {
-		t.Fatalf("author = %q, want aienvs-test (hermetic env not applied)", author)
+	if author != "agent-sync-test" {
+		t.Fatalf("author = %q, want agent-sync-test (hermetic env not applied)", author)
 	}
 }

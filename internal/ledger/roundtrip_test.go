@@ -45,8 +45,8 @@ func sampleLedger() Ledger {
 		SchemaVersion: SchemaVersionCurrent,
 		Target:        "claude",
 		Entries: []Entry{
-			{Path: ".claude/rules/aienvs/b.md", SHA256: "bbb", Size: 2, EmittedAt: ts},
-			{Path: ".claude/rules/aienvs/a.md", SHA256: "aaa", Size: 1, EmittedAt: ts},
+			{Path: ".claude/rules/agent-sync/b.md", SHA256: "bbb", Size: 2, EmittedAt: ts},
+			{Path: ".claude/rules/agent-sync/a.md", SHA256: "aaa", Size: 1, EmittedAt: ts},
 			{Path: ".mcp.json", SHA256: "ccc", Size: 3, EmittedAt: ts},
 		},
 	}
@@ -66,7 +66,7 @@ func TestWriteLoad_RoundTripSortedByPath(t *testing.T) {
 	if got.SchemaVersion != SchemaVersionCurrent || got.Target != "claude" {
 		t.Errorf("header mismatch: %+v", got)
 	}
-	wantOrder := []string{".claude/rules/aienvs/a.md", ".claude/rules/aienvs/b.md", ".mcp.json"}
+	wantOrder := []string{".claude/rules/agent-sync/a.md", ".claude/rules/agent-sync/b.md", ".mcp.json"}
 	if len(got.Entries) != len(wantOrder) {
 		t.Fatalf("entry count=%d want %d", len(got.Entries), len(wantOrder))
 	}

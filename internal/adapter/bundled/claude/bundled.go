@@ -4,9 +4,9 @@
 // (write_file, write_tool_owned, mkdir, delete, warning) for Claude
 // Code's actual on-disk layout:
 //
-//   - rule    -> .claude/rules/aienvs/<id>.md
-//   - command -> .claude/commands/aienvs/<id>.md
-//   - skill   -> .claude/skills/aienvs-<id>/SKILL.md plus assets
+//   - rule    -> .claude/rules/agent-sync/<id>.md
+//   - command -> .claude/commands/agent-sync/<id>.md
+//   - skill   -> .claude/skills/agent-sync-<id>/SKILL.md plus assets
 //   - mcp-server-entry -> .mcp.json (workspace root) via write_tool_owned
 //   - agents-md (companion overlay) -> CLAUDE.md (workspace root)
 //   - plugin-reference -> warning, unsupported by design
@@ -46,7 +46,7 @@ func Bundled() *adapter.BundledAdapter {
 			// internal/adapter/discover.go) but never executed for
 			// SourceBundled — the runtime takes the Run path. The
 			// placeholder name is recorded for diagnostics only.
-			Command: []string{"aienvs-adapter-claude-bundled"},
+			Command: []string{"agent-sync-adapter-claude-bundled"},
 		},
 		Run: run,
 	}

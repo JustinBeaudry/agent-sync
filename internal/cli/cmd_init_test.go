@@ -108,7 +108,7 @@ func TestInit_ThenSync(t *testing.T) {
 	if _, errOut, err := runSync(t, ws); err != nil {
 		t.Fatalf("sync after init: %v\n%s", err, errOut)
 	}
-	if _, statErr := os.Stat(filepath.Join(ws, ".claude", "rules", "aienvs", "no-fri.md")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(ws, ".claude", "rules", "agent-sync", "no-fri.md")); statErr != nil {
 		t.Fatalf("expected synced rule file: %v", statErr)
 	}
 }

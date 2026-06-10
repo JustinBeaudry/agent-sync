@@ -9,7 +9,7 @@ import (
 func TestMarshalJSON_StableSchema(t *testing.T) {
 	t.Parallel()
 	s := Summarize("/ws", "deadbeef", "2026-06-08T00:00:00Z", ModeAtomic, []TargetReport{
-		{Target: "claude", Status: StatusOK, Counts: Counts{Written: 3}, DurationMs: 12, Paths: []string{".claude/rules/aienvs/a.mdc"}},
+		{Target: "claude", Status: StatusOK, Counts: Counts{Written: 3}, DurationMs: 12, Paths: []string{".claude/rules/agent-sync/a.mdc"}},
 	})
 	data, err := MarshalJSON(s)
 	if err != nil {

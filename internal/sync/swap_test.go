@@ -11,8 +11,8 @@ import (
 
 const (
 	testParent = ".claude/rules"
-	testLeaf   = "aienvs"
-	testPrefix = ".claude/rules/aienvs"
+	testLeaf   = "agent-sync"
+	testPrefix = ".claude/rules/agent-sync"
 )
 
 func newWS(t *testing.T) (*fsroot.Root, string) {

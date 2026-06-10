@@ -67,7 +67,7 @@ func TestSync_FirstSyncWritesRuleFileAndLedger(t *testing.T) {
 	}
 
 	// The rule file landed on disk via the swap.
-	ruleFile := filepath.Join(ws, ".claude", "rules", "aienvs", "no-fri.md")
+	ruleFile := filepath.Join(ws, ".claude", "rules", "agent-sync", "no-fri.md")
 	data, err := os.ReadFile(ruleFile)
 	if err != nil {
 		t.Fatalf("expected rule file at %s: %v", ruleFile, err)
@@ -88,7 +88,7 @@ func TestSync_FirstSyncWritesRuleFileAndLedger(t *testing.T) {
 	}
 	found := false
 	for _, e := range led.Entries {
-		if e.Path == ".claude/rules/aienvs/no-fri.md" {
+		if e.Path == ".claude/rules/agent-sync/no-fri.md" {
 			found = true
 			if e.SHA256 == "" {
 				t.Fatal("ledger entry missing sha256")
@@ -136,7 +136,7 @@ func TestSync_RemovedNodeOrphansItsFile(t *testing.T) {
 	if _, err := Sync(context.Background(), req); err != nil {
 		t.Fatalf("first Sync: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(ws, ".claude/rules/aienvs/use-go.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(ws, ".claude/rules/agent-sync/use-go.md")); err != nil {
 		t.Fatalf("use-go.md should exist after first sync: %v", err)
 	}
 
@@ -152,10 +152,10 @@ func TestSync_RemovedNodeOrphansItsFile(t *testing.T) {
 	if _, err := Sync(context.Background(), req); err != nil {
 		t.Fatalf("second Sync: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(ws, ".claude/rules/aienvs/use-go.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(ws, ".claude/rules/agent-sync/use-go.md")); !os.IsNotExist(err) {
 		t.Fatalf("use-go.md should be gone after removal, stat err = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(ws, ".claude/rules/aienvs/no-fri.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(ws, ".claude/rules/agent-sync/no-fri.md")); err != nil {
 		t.Fatalf("no-fri.md should remain: %v", err)
 	}
 }

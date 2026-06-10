@@ -2,7 +2,7 @@
 // `agent-sync sync --post-merge` after pulls/checkouts. Wrappers are POSIX
 // `#!/bin/sh` scripts with absolute paths baked in (so GUI git clients
 // with a minimal PATH still work) and a marker comment so uninstall only
-// ever removes aienvs-generated hooks.
+// ever removes agent-sync-generated hooks.
 package hooks
 
 import (
@@ -13,9 +13,9 @@ import (
 	"strings"
 )
 
-// marker identifies an aienvs-generated hook wrapper. Uninstall and
+// marker identifies an agent-sync-generated hook wrapper. Uninstall and
 // reinstall key off this exact line.
-const marker = "# aienvs-managed-hook v1"
+const marker = "# agent-sync-managed-hook v1"
 
 // ManagedHooks are the git hooks agent-sync installs.
 var ManagedHooks = []string{"post-merge", "post-checkout"}
@@ -31,9 +31,9 @@ var (
 
 // Options configures installation.
 type Options struct {
-	// AienvsPath is the absolute path to the agent-sync binary baked into the
+	// AgentSyncPath is the absolute path to the agent-sync binary baked into the
 	// wrapper. Required.
-	AienvsPath string
+	AgentSyncPath string
 	// WorkspacePath is the absolute workspace path passed to sync. Required.
 	WorkspacePath string
 	// Replace backs up and overwrites an existing foreign hook.
@@ -100,8 +100,8 @@ func resolveGitDir(repoRoot string) (string, error) {
 
 // Install writes the managed hook wrappers into repoRoot's hooks dir.
 func Install(repoRoot string, opts Options) (Result, error) {
-	if opts.AienvsPath == "" || opts.WorkspacePath == "" {
-		return Result{}, errors.New("hooks: AienvsPath and WorkspacePath are required")
+	if opts.AgentSyncPath == "" || opts.WorkspacePath == "" {
+		return Result{}, errors.New("hooks: AgentSyncPath and WorkspacePath are required")
 	}
 	if opts.Replace && opts.Append {
 		return Result{}, errors.New("hooks: --replace and --append are mutually exclusive")
@@ -123,13 +123,13 @@ func Install(repoRoot string, opts Options) (Result, error) {
 		path := filepath.Join(dir, name)
 		existing, readErr := os.ReadFile(path) //nolint:gosec // path is the repo's own hooks dir
 		switch {
-		case readErr == nil && isAienvsHook(existing):
+		case readErr == nil && isAgentSyncHook(existing):
 			// Our own hook — overwrite cleanly.
 		case readErr == nil && len(existing) > 0:
 			// Foreign hook present.
 			switch {
 			case opts.Replace:
-				backup := path + ".aienvs-backup"
+				backup := path + ".agent-sync-backup"
 				//nolint:gosec // G703: backup path derives from a constant hook name (ManagedHooks) under the repo's own hooks dir
 				if werr := os.WriteFile(backup, existing, 0o600); werr != nil {
 					return res, fmt.Errorf("hooks: back up %s: %w", name, werr)
@@ -163,16 +163,16 @@ func wrapperScript(opts Options) string {
 		"#!/bin/sh",
 		marker,
 		"set -eu",
-		fmt.Sprintf("exec %q sync --post-merge --workspace %q", opts.AienvsPath, opts.WorkspacePath),
+		fmt.Sprintf("exec %q sync --post-merge --workspace %q", opts.AgentSyncPath, opts.WorkspacePath),
 		"",
 	}, "\n")
 }
 
 // predecessorSuffix names the sidecar that holds an --append predecessor.
-const predecessorSuffix = ".aienvs-predecessor"
+const predecessorSuffix = ".agent-sync-predecessor"
 
 // writeAppendWrapper preserves the foreign predecessor as an executable
-// sidecar (<hook>.aienvs-predecessor) and writes a wrapper that runs it as
+// sidecar (<hook>.agent-sync-predecessor) and writes a wrapper that runs it as
 // a SUBPROCESS before agent-sync. Running it as a subprocess (not inlining)
 // means the predecessor's own `exit N` ends only that subprocess — the
 // wrapper inspects its status and still runs agent-sync. A non-zero
@@ -190,13 +190,13 @@ func writeAppendWrapper(path string, predecessor []byte, opts Options) error {
 		"# Run the preserved predecessor hook as a subprocess so its exit",
 		"# does not skip agent-sync; a non-zero status still vetoes the hook.",
 		fmt.Sprintf("if [ -x %q ]; then %q \"$@\" || exit $?; fi", sidecar, sidecar),
-		fmt.Sprintf("exec %q sync --post-merge --workspace %q", opts.AienvsPath, opts.WorkspacePath),
+		fmt.Sprintf("exec %q sync --post-merge --workspace %q", opts.AgentSyncPath, opts.WorkspacePath),
 		"",
 	}, "\n")
 	return os.WriteFile(path, []byte(body), 0o755) //nolint:gosec // hooks must be executable
 }
 
-func isAienvsHook(content []byte) bool {
+func isAgentSyncHook(content []byte) bool {
 	return strings.Contains(string(content), marker)
 }
 

@@ -44,7 +44,7 @@ func Swap(root *fsroot.Root, s Sentinel) error {
 	}
 	prefixOld := s.PrefixRel + oldSuffix
 	// One sentinel PER staged leaf, not per generation dir. Shared-subdir
-	// syncs stage several leaves (e.g. .agents/skills/aienvs-A, aienvs-B) into
+	// syncs stage several leaves (e.g. .agents/skills/agent-sync-A, agent-sync-B) into
 	// the same generation dir; a single per-gen-dir .state would let one
 	// leaf's swap overwrite another's recovery record, orphaning a .old dir
 	// and wedging future syncs with ErrStale. Keying the sentinel by the leaf

@@ -13,13 +13,13 @@ import (
 	"github.com/agent-sync/agent-sync/internal/manifest"
 )
 
-// makeFakeAdapterBinary creates a file named aienvs-adapter-<name> in
+// makeFakeAdapterBinary creates a file named agent-sync-adapter-<name> in
 // dir and returns its absolute path. The file is empty but executable
 // on Unix; Windows uses a .exe suffix that discovery's PATH lookup
 // must handle. The file's contents do not matter for discovery tests.
 func makeFakeAdapterBinary(t *testing.T, dir, name string) string {
 	t.Helper()
-	binName := "aienvs-adapter-" + name
+	binName := "agent-sync-adapter-" + name
 	if runtime.GOOS == "windows" {
 		binName += ".exe"
 	}
@@ -35,7 +35,7 @@ func TestDiscover_ExplicitWorkspaceManifestWins(t *testing.T) {
 
 	m := &manifest.Manifest{
 		Adapters: []manifest.AdapterDecl{
-			{Name: "claude", Command: []string{"aienvs-adapter-claude"}, ReservedPrefix: ".claude"},
+			{Name: "claude", Command: []string{"agent-sync-adapter-claude"}, ReservedPrefix: ".claude"},
 		},
 	}
 	r, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
@@ -195,12 +195,12 @@ func TestDiscover_NonexistentPATHEntrySkipped(t *testing.T) {
 }
 
 func TestDiscover_EmptyAdapterNameOnPATHIgnored(t *testing.T) {
-	// A binary literally named "aienvs-adapter-" (with empty suffix)
+	// A binary literally named "agent-sync-adapter-" (with empty suffix)
 	// must not register as an adapter named "".
 	t.Parallel()
 
 	dir := t.TempDir()
-	emptyName := "aienvs-adapter-"
+	emptyName := "agent-sync-adapter-"
 	if runtime.GOOS == "windows" {
 		emptyName += ".exe"
 	}
@@ -251,7 +251,7 @@ func TestDiscover_RegistryNamesSortedDeterministically(t *testing.T) {
 func TestDiscover_PATHAdapterManifestPinsAbsolutePath(t *testing.T) {
 	// SEC/TOCTOU: once discovery has located a PATH adapter binary, the
 	// manifest's Command must reference that exact file by absolute path.
-	// Storing only "aienvs-adapter-<name>" would force a second $PATH
+	// Storing only "agent-sync-adapter-<name>" would force a second $PATH
 	// resolution at spawn time, which can pick up a different binary if
 	// PATH (or the directory contents) changed since discovery.
 	t.Parallel()

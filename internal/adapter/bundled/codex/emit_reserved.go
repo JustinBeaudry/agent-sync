@@ -16,21 +16,21 @@ const (
 	// .agents/skills (validated June 2026), a convention shared with other
 	// agents (e.g. pi), so one emitted skill tree serves multiple tools.
 	skillsParent   = ".agents/skills"
-	skillPrefix    = "aienvs-"
+	skillPrefix    = "agent-sync-"
 	skillEntryFile = "SKILL.md"
 )
 
 // emitSkill maps one skill node to:
-//   - mkdir(.agents/skills/aienvs-<id>)
-//   - write_file(.agents/skills/aienvs-<id>/SKILL.md)
-//   - write_file(.agents/skills/aienvs-<id>/<asset.RelPath>) for each asset
+//   - mkdir(.agents/skills/agent-sync-<id>)
+//   - write_file(.agents/skills/agent-sync-<id>/SKILL.md)
+//   - write_file(.agents/skills/agent-sync-<id>/<asset.RelPath>) for each asset
 //
 // Asset RelPaths are validated to stay inside the skill's own folder: the
 // runtime's declared-outputs gate accepts any cleaned path inside
 // .agents/skills, so per-skill containment must be enforced here. The skill
 // folder gets no README: a per-skill README would clash with skill-discovery
 // semantics, and the parent .agents/skills can hold user / other-tool skills
-// we don't own (the aienvs- prefix is what isolates ours).
+// we don't own (the agent-sync- prefix is what isolates ours).
 func emitSkill(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {

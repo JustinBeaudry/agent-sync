@@ -299,7 +299,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	bySubdir := map[string]*subdirWork{}
 	var toolOwned []contract.OpWriteToolOwned
 	// fileOutputs are write ops whose path is exactly an owned-output path
-	// (e.g. the .aienvs-managed sidecar): a single managed file, not a
+	// (e.g. the .agent-sync-managed sidecar): a single managed file, not a
 	// directory tree. They are written atomically via StagedWrite, never
 	// staged-and-swapped as a directory (which would nest the file inside a
 	// like-named dir).

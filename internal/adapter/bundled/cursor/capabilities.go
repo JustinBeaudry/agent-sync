@@ -76,14 +76,14 @@ func declaredOutputs() []adapterkit.DeclaredOutput {
 	mcpPointer := "/mcpServers"
 	agentsMDSection := "agent-sync"
 	return []adapterkit.DeclaredOutput{
-		{Path: ".cursor/rules/aienvs", Mode: adapterkit.OutputModeOwnedSubdir},
+		{Path: ".cursor/rules/agent-sync", Mode: adapterkit.OutputModeOwnedSubdir},
 		{Path: ".cursor/mcp.json", Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},
 		{Path: "AGENTS.md", Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &agentsMDSection},
-		// The strict-JSON sidecar marker (.aienvs-managed) is written
+		// The strict-JSON sidecar marker (.agent-sync-managed) is written
 		// next to .cursor/mcp.json under .cursor/. Declared by exact
 		// path (owned-subdir mode authorizes the path; the write_file
 		// op writes it) rather than over-broadly authorizing .cursor/.
-		{Path: ".cursor/.aienvs-managed", Mode: adapterkit.OutputModeOwnedSubdir},
+		{Path: ".cursor/.agent-sync-managed", Mode: adapterkit.OutputModeOwnedSubdir},
 	}
 }
 

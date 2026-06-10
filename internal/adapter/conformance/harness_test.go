@@ -440,7 +440,7 @@ func buildTestdataBinary(srcSubdir, binPrefix string) (string, error) {
 		return "", err
 	}
 	conformanceTestBinaryDirOnce.Do(func() {
-		conformanceTestBinaryDir, conformanceTestBinaryDirErr = os.MkdirTemp("", "aienvs-conformance-test-bin-")
+		conformanceTestBinaryDir, conformanceTestBinaryDirErr = os.MkdirTemp("", "agent-sync-conformance-test-bin-")
 	})
 	if conformanceTestBinaryDirErr != nil {
 		return "", conformanceTestBinaryDirErr

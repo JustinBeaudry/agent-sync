@@ -183,7 +183,7 @@ func Spawn(ctx context.Context, opts SpawnOptions) (sp *Subprocess, cookie strin
 	// Command is sourced from the adapter manifest, which is validated
 	// upstream (LoadAdapterManifestBytes / discover.go). The runtime's
 	// security boundary is "the workspace manifest declares trusted
-	// adapters" — see docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md
+	// adapters" — see docs/plans/2026-04-21-001-feat-agent-sync-workspace-cli-plan.md
 	// Unit 6 (trust). gosec's G204 here would block the runtime from
 	// doing what it exists to do. contextcheck flags procCtx as
 	// non-inherited; that's the deliberate detachment documented above.

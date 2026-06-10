@@ -11,7 +11,7 @@ import (
 const (
 	mcpJSONPath        = ".cursor/mcp.json"
 	mcpJSONPointerBase = "/mcpServers/agentsync_"
-	mcpSidecarPath     = ".cursor/.aienvs-managed"
+	mcpSidecarPath     = ".cursor/.agent-sync-managed"
 	agentsMDPath       = "AGENTS.md"
 	sectionIDPrefix    = "agent-sync:"
 )
@@ -25,7 +25,7 @@ var markerOpenBytes = []byte("<!-- agent-sync:")
 
 // emitMCPServerEntry emits one write_tool_owned op into
 // .cursor/mcp.json at /mcpServers/agentsync_<id>, plus a sidecar
-// .cursor/.aienvs-managed marker (deduplicated per emit) that
+// .cursor/.agent-sync-managed marker (deduplicated per emit) that
 // advertises ownership next to the strict-JSON file.
 //
 // The body is required to parse as a JSON object. A scalar, array,

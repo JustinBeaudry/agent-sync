@@ -80,7 +80,7 @@ func TestSync_LocalPathEndToEnd(t *testing.T) {
 	}
 
 	// The rule file landed in the workspace.
-	ruleFile := filepath.Join(ws, ".claude", "rules", "aienvs", "no-fri.md")
+	ruleFile := filepath.Join(ws, ".claude", "rules", "agent-sync", "no-fri.md")
 	if _, statErr := os.Stat(ruleFile); statErr != nil {
 		t.Fatalf("expected rule file %s: %v", ruleFile, statErr)
 	}

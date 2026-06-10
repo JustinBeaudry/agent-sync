@@ -107,7 +107,7 @@ func runCase(ctx context.Context, binary string, opts RunOptions, tc Case) (resu
 	}
 
 	session, err := a.NewSession(ctx, adapter.SessionOptions{
-		WorkspaceRoot: filepath.Join(os.TempDir(), "aienvs-conformance"),
+		WorkspaceRoot: filepath.Join(os.TempDir(), "agent-sync-conformance"),
 		IRVersion:     "v1",
 		Timeouts:      opts.Timeouts,
 	})

@@ -12,7 +12,7 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// DirName is the fixed aienvs-owned subdirectory inside the chosen
+// DirName is the fixed agent-sync-owned subdirectory inside the chosen
 // cache root. All materialized clones live under <root>/<DirName>/<key>.
 const DirName = "aienvs/repos"
 

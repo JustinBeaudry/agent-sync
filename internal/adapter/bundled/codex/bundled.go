@@ -5,7 +5,7 @@
 // actual on-disk layout (validated June 2026):
 //
 //   - agents-md        -> workspace-root AGENTS.md, managed section via write_tool_owned
-//   - skill            -> .agents/skills/aienvs-<id>/SKILL.md (+assets)
+//   - skill            -> .agents/skills/agent-sync-<id>/SKILL.md (+assets)
 //   - mcp-server-entry -> .codex/config.toml [mcp_servers.agentsync_<id>] via write_tool_owned (toml-path)
 //   - rule             -> warning, unsupported (no per-tool rule concept)
 //   - command          -> warning, unsupported (custom prompts deprecated + user-home-only)
@@ -58,7 +58,7 @@ func Bundled() *adapter.BundledAdapter {
 			// Bundled adapters are spawned in-process via Run; the Command
 			// slice is required by the shared manifest validator but never
 			// executed for SourceBundled. Placeholder recorded for diagnostics.
-			Command: []string{"aienvs-adapter-codex-bundled"},
+			Command: []string{"agent-sync-adapter-codex-bundled"},
 		},
 		Run: run,
 	}

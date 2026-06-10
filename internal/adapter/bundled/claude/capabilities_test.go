@@ -111,12 +111,12 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 
 	got := declaredOutputs()
 	want := map[string]adapterkit.OutputMode{
-		".claude/rules/aienvs":    adapterkit.OutputModeOwnedSubdir,
-		".claude/commands/aienvs": adapterkit.OutputModeOwnedSubdir,
+		".claude/rules/agent-sync":    adapterkit.OutputModeOwnedSubdir,
+		".claude/commands/agent-sync": adapterkit.OutputModeOwnedSubdir,
 		".claude/skills":          adapterkit.OutputModeSharedSubdir,
 		".mcp.json":               adapterkit.OutputModeToolOwnedEntry,
 		"CLAUDE.md":               adapterkit.OutputModeToolOwnedEntry,
-		".aienvs-managed":         adapterkit.OutputModeOwnedSubdir,
+		".agent-sync-managed":         adapterkit.OutputModeOwnedSubdir,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)

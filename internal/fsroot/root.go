@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Root is the aienvs-wrapped [os.Root] handle. It is the sole legitimate
+// Root is the agent-sync-wrapped [os.Root] handle. It is the sole legitimate
 // way for agent-sync code to touch paths inside a user workspace.
 //
 // A Root is safe for concurrent use insofar as [os.Root] is: reads and

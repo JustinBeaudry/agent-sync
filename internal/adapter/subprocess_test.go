@@ -99,7 +99,7 @@ func buildTestdataBinary(srcSubdir, binPrefix string) (string, error) {
 		return "", err
 	}
 	testBinaryDirOnce.Do(func() {
-		testBinaryDir, testBinaryDirErr = os.MkdirTemp("", "aienvs-test-bin-")
+		testBinaryDir, testBinaryDirErr = os.MkdirTemp("", "agent-sync-test-bin-")
 	})
 	if testBinaryDirErr != nil {
 		return "", testBinaryDirErr

@@ -16,9 +16,9 @@ func TestLeafUnder(t *testing.T) {
 		p    string
 		want string
 	}{
-		{"file under leaf", ".agents/skills/aienvs-x/SKILL.md", ".agents/skills/aienvs-x"},
-		{"leaf dir itself", ".agents/skills/aienvs-x", ".agents/skills/aienvs-x"},
-		{"deep nested keeps first segment", ".agents/skills/aienvs-x/a/b/c.txt", ".agents/skills/aienvs-x"},
+		{"file under leaf", ".agents/skills/agent-sync-x/SKILL.md", ".agents/skills/agent-sync-x"},
+		{"leaf dir itself", ".agents/skills/agent-sync-x", ".agents/skills/agent-sync-x"},
+		{"deep nested keeps first segment", ".agents/skills/agent-sync-x/a/b/c.txt", ".agents/skills/agent-sync-x"},
 		{"exact parent, no child", ".agents/skills", ""},
 		{"trailing slash, empty segment", ".agents/skills/", ""},
 		{"parent traversal segment rejected", ".agents/skills/../evil", ""},
@@ -50,32 +50,32 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 	led := func(p string) ledger.Entry { return ledger.Entry{Path: p} }
 
 	t.Run("owned passes through; no shared leaves without shared prefixes", func(t *testing.T) {
-		got := effectiveOwnedPrefixes([]string{".claude/rules/aienvs"}, nil,
-			[]contract.Op{op(".claude/rules/aienvs/x.md")}, nil)
-		if !reflect.DeepEqual(got, []string{".claude/rules/aienvs"}) {
+		got := effectiveOwnedPrefixes([]string{".claude/rules/agent-sync"}, nil,
+			[]contract.Op{op(".claude/rules/agent-sync/x.md")}, nil)
+		if !reflect.DeepEqual(got, []string{".claude/rules/agent-sync"}) {
 			t.Fatalf("got %v", got)
 		}
 	})
 
 	t.Run("shared leaf derived from this run's ops", func(t *testing.T) {
 		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"},
-			[]contract.Op{op(".agents/skills/aienvs-x/SKILL.md")}, nil)
-		if !reflect.DeepEqual(got, []string{".agents/skills/aienvs-x"}) {
+			[]contract.Op{op(".agents/skills/agent-sync-x/SKILL.md")}, nil)
+		if !reflect.DeepEqual(got, []string{".agents/skills/agent-sync-x"}) {
 			t.Fatalf("got %v", got)
 		}
 	})
 
 	t.Run("shared leaf derived from prior ledger (orphan path)", func(t *testing.T) {
 		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"},
-			nil, []ledger.Entry{led(".agents/skills/aienvs-old/SKILL.md")})
-		if !reflect.DeepEqual(got, []string{".agents/skills/aienvs-old"}) {
+			nil, []ledger.Entry{led(".agents/skills/agent-sync-old/SKILL.md")})
+		if !reflect.DeepEqual(got, []string{".agents/skills/agent-sync-old"}) {
 			t.Fatalf("got %v", got)
 		}
 	})
 
 	t.Run("empty ops and ledger under shared prefix yields only owned", func(t *testing.T) {
-		got := effectiveOwnedPrefixes([]string{".claude/rules/aienvs"}, []string{".agents/skills"}, nil, nil)
-		if !reflect.DeepEqual(got, []string{".claude/rules/aienvs"}) {
+		got := effectiveOwnedPrefixes([]string{".claude/rules/agent-sync"}, []string{".agents/skills"}, nil, nil)
+		if !reflect.DeepEqual(got, []string{".claude/rules/agent-sync"}) {
 			t.Fatalf("got %v", got)
 		}
 	})
@@ -86,10 +86,10 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 		// the ledger here only to prove union behavior: a real foreign leaf is
 		// never in the ledger. We model the union: both leaves appear.
 		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"},
-			[]contract.Op{op(".agents/skills/aienvs-x/SKILL.md")},
-			[]ledger.Entry{led(".agents/skills/aienvs-y/SKILL.md")})
+			[]contract.Op{op(".agents/skills/agent-sync-x/SKILL.md")},
+			[]ledger.Entry{led(".agents/skills/agent-sync-y/SKILL.md")})
 		sort.Strings(got)
-		want := []string{".agents/skills/aienvs-x", ".agents/skills/aienvs-y"}
+		want := []string{".agents/skills/agent-sync-x", ".agents/skills/agent-sync-y"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %v want %v", got, want)
 		}

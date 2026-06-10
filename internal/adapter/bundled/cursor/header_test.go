@@ -41,8 +41,8 @@ func TestJSONSidecarMarker_NamesUnmanageCommand(t *testing.T) {
 func TestReadmeForSubdir_NamesPathAndExit(t *testing.T) {
 	t.Parallel()
 
-	body := string(readmeForSubdir(".cursor/rules/aienvs"))
-	if !strings.Contains(body, ".cursor/rules/aienvs") {
+	body := string(readmeForSubdir(".cursor/rules/agent-sync"))
+	if !strings.Contains(body, ".cursor/rules/agent-sync") {
 		t.Errorf("README must reference the subdir label; got %q", body)
 	}
 	if !strings.Contains(body, "agent-sync unmanage cursor") {

@@ -18,7 +18,7 @@ func gitRepo(t *testing.T) string {
 }
 
 func opts(repo string) Options {
-	return Options{AienvsPath: "/usr/local/bin/aienvs", WorkspacePath: repo}
+	return Options{AgentSyncPath: "/usr/local/bin/aienvs", WorkspacePath: repo}
 }
 
 func TestInstall_FreshRepo(t *testing.T) {
@@ -80,7 +80,7 @@ func TestInstall_ForeignHookRefusedThenReplace(t *testing.T) {
 	if len(res.BackedUp) == 0 {
 		t.Fatal("expected a backup")
 	}
-	backup, _ := os.ReadFile(hookPath + ".aienvs-backup")
+	backup, _ := os.ReadFile(hookPath + ".agent-sync-backup")
 	if !strings.Contains(string(backup), "echo foreign") {
 		t.Fatal("backup does not contain the foreign hook")
 	}
@@ -132,7 +132,7 @@ func TestHooksDir_WorktreeGitFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := opts(repo)
-	o.AienvsPath = "/usr/local/bin/aienvs"
+	o.AgentSyncPath = "/usr/local/bin/aienvs"
 	res, err := Install(repo, o)
 	if err != nil {
 		t.Fatalf("Install in worktree: %v", err)
@@ -161,7 +161,7 @@ func TestReadHooksPath_CaseInsensitive(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := opts(repo)
-	o.AienvsPath = "/usr/local/bin/aienvs"
+	o.AgentSyncPath = "/usr/local/bin/aienvs"
 	if _, err := Install(repo, o); err != nil {
 		t.Fatalf("Install with lowercase hookspath: %v", err)
 	}

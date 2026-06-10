@@ -34,9 +34,9 @@ func MustGit(t *testing.T, dir string, args ...string) string {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=aienvs-test",
+		"GIT_AUTHOR_NAME=agent-sync-test",
 		"GIT_AUTHOR_EMAIL=test@agent-sync.invalid",
-		"GIT_COMMITTER_NAME=aienvs-test",
+		"GIT_COMMITTER_NAME=agent-sync-test",
 		"GIT_COMMITTER_EMAIL=test@agent-sync.invalid",
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",

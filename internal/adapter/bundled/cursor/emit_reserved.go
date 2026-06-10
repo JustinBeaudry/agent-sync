@@ -7,14 +7,14 @@ import (
 )
 
 const (
-	rulesSubdir = ".cursor/rules/aienvs"
+	rulesSubdir = ".cursor/rules/agent-sync"
 	mdcExt      = ".mdc"
 )
 
 // emitRule maps one rule node to:
 //   - mkdir(.cursor/rules/agent-sync)               (deduped per-emit)
-//   - write_file(.cursor/rules/aienvs/README.md) (deduped per-emit)
-//   - write_file(.cursor/rules/aienvs/<id>.mdc)
+//   - write_file(.cursor/rules/agent-sync/README.md) (deduped per-emit)
+//   - write_file(.cursor/rules/agent-sync/<id>.mdc)
 //
 // Unlike the claude adapter, there is no `paths:` frontmatter ward:
 // that warning exists for a Claude Code activation bug with no Cursor

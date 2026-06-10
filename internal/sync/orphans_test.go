@@ -20,10 +20,10 @@ func led(paths ...string) ledger.Ledger {
 
 func TestOrphans_DiffOnly(t *testing.T) {
 	t.Parallel()
-	old := led(".claude/rules/aienvs/a.md", ".claude/rules/aienvs/b.md", ".claude/rules/aienvs/c.md")
-	next := led(".claude/rules/aienvs/a.md", ".claude/rules/aienvs/c.md")
+	old := led(".claude/rules/agent-sync/a.md", ".claude/rules/agent-sync/b.md", ".claude/rules/agent-sync/c.md")
+	next := led(".claude/rules/agent-sync/a.md", ".claude/rules/agent-sync/c.md")
 	got := Orphans(old, next)
-	want := []string{".claude/rules/aienvs/b.md"}
+	want := []string{".claude/rules/agent-sync/b.md"}
 	if !slices.Equal(got, want) {
 		t.Errorf("Orphans = %v want %v", got, want)
 	}

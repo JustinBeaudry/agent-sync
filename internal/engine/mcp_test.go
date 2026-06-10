@@ -11,9 +11,9 @@ import (
 )
 
 // TestSync_MCPServerEntryWritesSidecarAsFile is the regression test for the
-// exact-prefix bug: the claude adapter declares ".aienvs-managed" as an
+// exact-prefix bug: the claude adapter declares ".agent-sync-managed" as an
 // owned-subdir output but emits it as a single file. A naive
-// stage-and-swap-as-directory turns it into ".aienvs-managed/.aienvs-managed".
+// stage-and-swap-as-directory turns it into ".agent-sync-managed/.agent-sync-managed".
 // This asserts the sidecar lands as a regular file and the tool-owned
 // .mcp.json merge happened.
 func TestSync_MCPServerEntryWritesSidecarAsFile(t *testing.T) {
@@ -36,13 +36,13 @@ func TestSync_MCPServerEntryWritesSidecarAsFile(t *testing.T) {
 	}
 
 	// The sidecar must be a regular file, never a directory.
-	sidecar := filepath.Join(ws, ".aienvs-managed")
+	sidecar := filepath.Join(ws, ".agent-sync-managed")
 	info, err := os.Stat(sidecar)
 	if err != nil {
-		t.Fatalf("expected .aienvs-managed sidecar: %v", err)
+		t.Fatalf("expected .agent-sync-managed sidecar: %v", err)
 	}
 	if info.IsDir() {
-		t.Fatal(".aienvs-managed is a directory; exact-prefix bug regressed")
+		t.Fatal(".agent-sync-managed is a directory; exact-prefix bug regressed")
 	}
 
 	// The tool-owned .mcp.json must exist and carry the merged entry.

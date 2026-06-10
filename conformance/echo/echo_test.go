@@ -132,7 +132,7 @@ func buildReferenceEchoBinary() (string, error) {
 		return "", err
 	}
 	echoBinaryCacheDirOnce.Do(func() {
-		echoBinaryCacheDir, echoBinaryCacheDirErr = os.MkdirTemp("", "aienvs-conformance-echo-bin-")
+		echoBinaryCacheDir, echoBinaryCacheDirErr = os.MkdirTemp("", "agent-sync-conformance-echo-bin-")
 	})
 	if echoBinaryCacheDirErr != nil {
 		return "", echoBinaryCacheDirErr

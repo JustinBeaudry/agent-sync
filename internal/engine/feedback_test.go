@@ -45,7 +45,7 @@ func TestSync_ExpectDeletionsGuardAbortsBeforeMutation(t *testing.T) {
 		t.Fatalf("expected target failed on deletion-count mismatch, got %q", summary.Targets[0].Status)
 	}
 	// The guard fired before mutation: use-go.md must still be present.
-	if _, statErr := os.Stat(filepath.Join(ws, ".claude/rules/aienvs/use-go.md")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(ws, ".claude/rules/agent-sync/use-go.md")); statErr != nil {
 		t.Fatalf("use-go.md must be intact when guard aborts: %v", statErr)
 	}
 }
@@ -88,7 +88,7 @@ func TestSync_ExpectDeletionsMatchProceeds(t *testing.T) {
 	if summary.Outcome.ExitCode != 0 {
 		t.Fatalf("expected success with matching deletion count, got %+v", summary.Outcome)
 	}
-	if _, statErr := os.Stat(filepath.Join(ws, ".claude/rules/aienvs/use-go.md")); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(ws, ".claude/rules/agent-sync/use-go.md")); !os.IsNotExist(statErr) {
 		t.Fatalf("use-go.md should be deleted, stat err = %v", statErr)
 	}
 }

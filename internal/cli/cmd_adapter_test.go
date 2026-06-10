@@ -288,7 +288,7 @@ func buildRepoBinary(srcDir, prefix string) (string, error) {
 		return "", err
 	}
 	adapterBinaryCacheDirOnce.Do(func() {
-		adapterBinaryCacheDir, adapterBinaryCacheDirErr = os.MkdirTemp("", "aienvs-cli-test-bin-")
+		adapterBinaryCacheDir, adapterBinaryCacheDirErr = os.MkdirTemp("", "agent-sync-cli-test-bin-")
 	})
 	if adapterBinaryCacheDirErr != nil {
 		return "", adapterBinaryCacheDirErr

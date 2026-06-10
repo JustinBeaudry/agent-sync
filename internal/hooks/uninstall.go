@@ -11,7 +11,7 @@ import (
 // Uninstall removes the managed hook wrappers from repoRoot. Only files
 // carrying the agent-sync marker are removed; foreign hooks are left
 // untouched. The predecessor preserved by a prior install is restored:
-// a `<hook>.aienvs-backup` (from --replace) or `<hook>.aienvs-predecessor`
+// a `<hook>.agent-sync-backup` (from --replace) or `<hook>.agent-sync-predecessor`
 // (from --append). Returns the hook names removed.
 func Uninstall(repoRoot string) ([]string, error) {
 	dir, err := hooksDir(repoRoot)
@@ -30,7 +30,7 @@ func Uninstall(repoRoot string) ([]string, error) {
 			// "absent" — that could leave a hook half-uninstalled silently.
 			return removed, fmt.Errorf("hooks: read %s: %w", name, readErr)
 		}
-		if !isAienvsHook(content) {
+		if !isAgentSyncHook(content) {
 			continue // foreign hook — never touch
 		}
 		if rmErr := os.Remove(path); rmErr != nil {
@@ -54,7 +54,7 @@ func Uninstall(repoRoot string) ([]string, error) {
 // or --append sidecar) back to path, removing the sidecar. Returns true
 // when something was restored.
 func restorePredecessor(path string) (bool, error) {
-	for _, sidecar := range []string{path + ".aienvs-backup", path + predecessorSuffix} {
+	for _, sidecar := range []string{path + ".agent-sync-backup", path + predecessorSuffix} {
 		data, berr := os.ReadFile(sidecar) //nolint:gosec // repo's own hooks dir
 		if berr != nil {
 			continue

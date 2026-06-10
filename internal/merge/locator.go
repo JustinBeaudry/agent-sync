@@ -9,7 +9,7 @@ import (
 )
 
 // agentsyncKeyPrefix is the key/table-name prefix that marks an entry as
-// aienvs-owned. The id follows it (e.g. agentsync_foo -> id "foo").
+// agent-sync-owned. The id follows it (e.g. agentsync_foo -> id "foo").
 const agentsyncKeyPrefix = "agentsync_"
 
 // MergeEntry is one merge operation against a tool-owned file. Op is

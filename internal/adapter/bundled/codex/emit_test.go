@@ -61,13 +61,13 @@ func TestEmitSkill_HappyPath(t *testing.T) {
 
 	res, ops := emitFixture(t, "skill-only.json")
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/aienvs-coder"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/aienvs-coder/SKILL.md"},
+		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
 	}
-	skillOp := findWriteFile(t, ops, ".agents/skills/aienvs-coder/SKILL.md")
+	skillOp := findWriteFile(t, ops, ".agents/skills/agent-sync-coder/SKILL.md")
 	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("SKILL.md missing managed header; got %q", skillOp.Content)
 	}
@@ -82,10 +82,10 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	res, _ := emitFixture(t, "skill-with-assets.json")
 	// Assets sorted by rel_path: examples/usage.md before templates/foo.txt.
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/aienvs-coder"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/aienvs-coder/SKILL.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/aienvs-coder/examples/usage.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/aienvs-coder/templates/foo.txt"},
+		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/examples/usage.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/templates/foo.txt"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
@@ -177,8 +177,8 @@ func TestEmitMixed_EmitsAllSupported(t *testing.T) {
 
 	res, _ := emitFixture(t, "mixed-everything.json")
 	wantPaths := map[string]bool{
-		".agents/skills/aienvs-coder":          false,
-		".agents/skills/aienvs-coder/SKILL.md": false,
+		".agents/skills/agent-sync-coder":          false,
+		".agents/skills/agent-sync-coder/SKILL.md": false,
 		".codex/config.toml":                   false,
 		"AGENTS.md":                            false,
 	}

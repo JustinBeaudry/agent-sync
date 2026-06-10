@@ -99,8 +99,8 @@ func TestWrapManagedSection_HandlesEmptyBody(t *testing.T) {
 func TestReadmeForSubdir_NamesPathAndExit(t *testing.T) {
 	t.Parallel()
 
-	body := string(readmeForSubdir(".claude/rules/aienvs"))
-	if !strings.Contains(body, ".claude/rules/aienvs") {
+	body := string(readmeForSubdir(".claude/rules/agent-sync"))
+	if !strings.Contains(body, ".claude/rules/agent-sync") {
 		t.Errorf("README must reference the subdir label; got %q", body)
 	}
 	if !strings.Contains(body, "agent-sync unmanage claude") {
