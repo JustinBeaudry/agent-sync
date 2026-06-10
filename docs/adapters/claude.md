@@ -3,7 +3,7 @@ title: agent-sync `claude` adapter — concept→destination reference
 status: active
 date: 2026-04-27
 adapter: claude
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 ---
 
 # `claude` adapter
@@ -17,12 +17,12 @@ the per-kind support declaration is in
 The adapter owns:
 
 - The **`.claude/` reserved subtree** for rules, commands, and skills
-  (under per-subsystem `aienvs/` namespaces or `aienvs-*` folder
+  (under per-subsystem `agent-sync/` namespaces or `agent-sync-*` folder
   prefixes).
 - A **managed section** of the workspace-root `CLAUDE.md` for the
   `agents-md` companion overlay.
 - A **per-entry slice** of the workspace-root `.mcp.json` for
-  `mcp-server-entry` IR nodes (under `/mcpServers/aienvs_<id>` JSON
+  `mcp-server-entry` IR nodes (under `/mcpServers/agentsync_<id>` JSON
   pointers).
 
 The adapter does **not** own:
@@ -31,18 +31,18 @@ The adapter does **not** own:
   the project level — see "Why no AGENTS.md?" below).
 - Anything outside the paths in the table.
 - User-authored files inside the same parent directories — orphan
-  detection is scoped to aienvs-emitted paths only (Unit 14 of the
+  detection is scoped to agent-sync-emitted paths only (Unit 14 of the
   master plan).
 
 ## Concept → destination
 
 | IR kind | Status | Destination | Locator | Notes |
 |---|---|---|---|---|
-| `agents-md` (claude overlay) | supported | workspace-root `CLAUDE.md` | section `aienvs:<id>` | Section markers `<!-- aienvs:begin id=<id> -->` … `<!-- aienvs:end id=<id> -->`. User content outside the section is preserved. |
-| `rule` | supported | `.claude/rules/aienvs/<id>.md` | n/a | Managed-file header prepended. Bodies opening with `paths:` frontmatter trigger a degradation warning (see [Bug ward](#bug-ward-paths-frontmatter)). |
-| `skill` | supported | `.claude/skills/aienvs-<id>/SKILL.md` plus assets | n/a | Folder name MUST equal skill name; the `aienvs-` prefix gives ownership isolation while honoring [Claude's skill-discovery constraint](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills). |
-| `command` | supported | `.claude/commands/aienvs/<id>.md` | n/a | Available as `/aienvs:<id>` slash command without colliding with user commands. |
-| `mcp-server-entry` | supported | workspace-root `.mcp.json` | json-pointer `/mcpServers/aienvs_<id>` | A sidecar `.aienvs-managed` file is written alongside `.mcp.json` because JSON has no comment syntax. |
+| `agents-md` (claude overlay) | supported | workspace-root `CLAUDE.md` | section `agent-sync:<id>` | Section markers `<!-- agent-sync:begin id=<id> -->` … `<!-- agent-sync:end id=<id> -->`. User content outside the section is preserved. |
+| `rule` | supported | `.claude/rules/agent-sync/<id>.md` | n/a | Managed-file header prepended. Bodies opening with `paths:` frontmatter trigger a degradation warning (see [Bug ward](#bug-ward-paths-frontmatter)). |
+| `skill` | supported | `.claude/skills/agent-sync-<id>/SKILL.md` plus assets | n/a | Folder name MUST equal skill name; the `agent-sync-` prefix gives ownership isolation while honoring [Claude's skill-discovery constraint](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills). |
+| `command` | supported | `.claude/commands/agent-sync/<id>.md` | n/a | Available as `/agent-sync:<id>` slash command without colliding with user commands. |
+| `mcp-server-entry` | supported | workspace-root `.mcp.json` | json-pointer `/mcpServers/agentsync_<id>` | A sidecar `.agent-sync-managed` file is written alongside `.mcp.json` because JSON has no comment syntax. |
 | `plugin-reference` | unsupported | n/a | n/a | Claude Code does not load project-level plugin registries. Targeting `plugin-reference` at `claude` surfaces a degradation warning and emits no files. |
 
 ## Path-verification notes
@@ -54,7 +54,7 @@ be updated together.
 
 - **Rules / commands** — Claude Code reads project-local rules and
   commands from `.claude/rules/` and `.claude/commands/`
-  (subdirectory recursion supported). The `aienvs/` subfolder is a
+  (subdirectory recursion supported). The `agent-sync/` subfolder is a
   free-namespacing convention; nothing in Claude Code requires it.
 - **Skills** — `.claude/skills/<name>/SKILL.md` is the required
   shape per
@@ -63,7 +63,7 @@ be updated together.
   `SKILL.md`'s frontmatter. The adapter preserves the IR body
   verbatim apart from the managed header, so the IR content **must**
   include whatever Claude-required frontmatter is needed — including
-  a `name:` value that matches the emitted `aienvs-<id>` folder
+  a `name:` value that matches the emitted `agent-sync-<id>` folder
   name. The adapter does not inject or rewrite frontmatter; that is
   the canonical-repo author's responsibility.
 - **`.mcp.json`** — Workspace-root project-local MCP config per
@@ -104,7 +104,7 @@ against the IR (full frontmatter exposure is a v1.x change).
 - `.mcp.json` is also touched by the `cursor` adapter (under its own
   pointer base) and possibly future adapters. The merge step is
   ledger-driven (Unit 12a); each adapter's entries live under a
-  distinct pointer prefix (`/mcpServers/aienvs_<id>` here vs.
+  distinct pointer prefix (`/mcpServers/agentsync_<id>` here vs.
   `/mcpServers/<other-prefix>_<id>` elsewhere) and are independently
   removable.
 - `CLAUDE.md` is a Claude-only file — no other adapter writes to it.

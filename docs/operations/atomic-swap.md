@@ -1,6 +1,6 @@
 # Atomic swap — operations & recovery
 
-`agent-sync` updates a reserved-subdirectory target (e.g. `.claude/rules/aienvs/`)
+`agent-sync` updates a reserved-subdirectory target (e.g. `.claude/rules/agent-sync/`)
 **atomically**: a sync either fully lands its new generation or leaves
 the previous one byte-intact. This is done with a two-rename swap under
 the single workspace `os.Root`, a persisted sentinel, and a startup
@@ -9,8 +9,8 @@ pre-sync-or-post-sync state — never a torn tree.
 
 ## How a swap works
 
-For a target prefix `<workspace>/<parent>/aienvs/` the new generation is
-staged at `<parent>/.aienv-staging/<timestamp>-<sha>/aienvs/`, then
+For a target prefix `<workspace>/<parent>/agent-sync/` the new generation is
+staged at `<parent>/.agent-sync-staging/<timestamp>-<sha>/agent-sync/`, then
 promoted:
 
 1. Write sentinel `.state = intend`.
@@ -28,7 +28,7 @@ holds open.
 
 Run `agent-sync sync --recover` (or it runs automatically at sync start) to
 reconcile any half-completed swap. The reconciler scans
-`<parent>/.aienv-staging/*/.state`:
+`<parent>/.agent-sync-staging/*/.state`:
 
 | Sentinel | On-disk shape | Action |
 |----------|---------------|--------|
@@ -76,5 +76,5 @@ the path open.
 
 Third-party AV occasionally locks files mid-rename, surfacing as
 recurring `ErrLocked`. If needed, add a narrow exclusion for the
-**`.aienv-staging/`** scratch directory only — never exclude the live
+**`.agent-sync-staging/`** scratch directory only — never exclude the live
 reserved prefix. Windows Defender is generally fine without exclusions.

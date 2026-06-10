@@ -13,13 +13,13 @@ beyond integrity-of-delivery.
 
 ## 1. System overview
 
-`agent-sync` takes a per-workspace manifest (`.aienv.yaml`) that pins a canonical
+`agent-sync` takes a per-workspace manifest (`.agent-sync.yaml`) that pins a canonical
 Git repo by commit SHA, materializes that commit, compiles it through per-tool
 adapters into declarative ops, and atomically swaps the result into each tool's
-reserved subdirectory (e.g. `.claude/rules/aienvs/`).
+reserved subdirectory (e.g. `.claude/rules/agent-sync/`).
 
 ```
-.aienv.yaml ──► resolve/pin ──► git materialize ──► adapter compile ──► stage ──► atomic swap
+.agent-sync.yaml ──► resolve/pin ──► git materialize ──► adapter compile ──► stage ──► atomic swap
    (pin)          (SHA)          (subprocess)        (in-proc/subproc)   (fsroot)   (two-rename)
                      │                                                       │
                   trust store                                            ledger

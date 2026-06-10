@@ -1,7 +1,7 @@
 ---
 title: agent-sync Adapter Protocol v1
 status: frozen
-version: aienvs/v1
+version: agent-sync/v1
 date: 2026-04-26
 owner: internal/adapter
 ---
@@ -9,7 +9,7 @@ owner: internal/adapter
 # agent-sync Adapter Protocol v1
 
 This document is the authoritative wire-format specification for
-`aienvs/v1` adapters. It defines the bytes sent over stdio, the JSON-RPC
+`agent-sync/v1` adapters. It defines the bytes sent over stdio, the JSON-RPC
 message shapes, the lifecycle ordering rules, the magic-cookie
 handshake, the capability declaration rules, the declared-output safety
 gate, and the closed v1 error taxonomy.
@@ -47,7 +47,7 @@ checks; adapters own only protocol responses and declarative output.
 
 The lifecycle is fixed:
 
-1. Runtime spawns the adapter and sets `AIENVS_ADAPTER_COOKIE`.
+1. Runtime spawns the adapter and sets `AGENT_SYNC_ADAPTER_COOKIE`.
 2. Runtime sends `initialize`.
 3. Adapter replies with `initialize` result, echoing the cookie and
    declaring capabilities and outputs.
@@ -69,7 +69,7 @@ Required header:
 
 Optional recognized header:
 
-- `Content-Type: application/aienvs-v1+json; charset=utf-8`
+- `Content-Type: application/agent-sync-v1+json; charset=utf-8`
 
 Rules:
 
@@ -78,7 +78,7 @@ Rules:
 - `Content-Type` is optional on read and always emitted on write by the
   reference implementation.
 - If `Content-Type` is present, the media type MUST be
-  `application/aienvs-v1+json`.
+  `application/agent-sync-v1+json`.
 - If `charset` is present, it MUST be `utf-8` case-insensitively.
 - Unknown headers are ignored.
 - Header lines longer than 8 KiB are invalid.
@@ -89,7 +89,7 @@ Canonical frame shape:
 
 ```text
 Content-Length: 83\r
-Content-Type: application/aienvs-v1+json; charset=utf-8\r
+Content-Type: application/agent-sync-v1+json; charset=utf-8\r
 \r
 {"jsonrpc":"2.0","id":1,"method":"shutdown","params":{}}
 ```
@@ -201,7 +201,7 @@ Method summary:
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `client` | string | yes | runtime identity, currently `agent-sync` |
-| `protocol_versions` | `[]string` | yes | ordered offered versions, v1 currently offers `["aienvs/v1"]` |
+| `protocol_versions` | `[]string` | yes | ordered offered versions, v1 currently offers `["agent-sync/v1"]` |
 | `cookie` | string | yes | magic cookie the adapter MUST echo back |
 | `workspace_root` | string | yes | absolute workspace path |
 | `reserved_prefix` | string | yes | workspace-relative prefix the adapter owns |
@@ -230,7 +230,7 @@ Lifecycle requirements:
 ## 5. Capabilities
 
 Capabilities are the additive extension surface for v1. Envelope and
-framing changes require `aienvs/v2`; capability fields can grow
+framing changes require `agent-sync/v2`; capability fields can grow
 additively inside the existing result object.
 
 Shape:
@@ -425,7 +425,7 @@ These fields are runtime diagnostics, not additional wire fields.
 
 ## 9. Magic Cookie
 
-The runtime sets `AIENVS_ADAPTER_COOKIE` in the adapter process
+The runtime sets `AGENT_SYNC_ADAPTER_COOKIE` in the adapter process
 environment. The adapter MUST read it and MUST echo the exact value in
 its `initialize` result.
 
@@ -474,16 +474,16 @@ overrides are reserved for future work.
 
 Versioning rules:
 
-- `aienvs/v1` framing and envelope rules are frozen.
+- `agent-sync/v1` framing and envelope rules are frozen.
 - The runtime performs an exact-string match on `protocol_version`
-  against `aienvs/v1`. Any other value, including `aienvs/v1.1` or
-  `aienvs/v1.0.0`, is rejected with `adapter-protocol-mismatch`.
+  against `agent-sync/v1`. Any other value, including `agent-sync/v1.1` or
+  `agent-sync/v1.0.0`, is rejected with `adapter-protocol-mismatch`.
 - There is no minor-version negotiation in v1; capabilities grow
   additively under `Capabilities{}` instead. Counter-propose
   negotiation is reserved for Unit 8b.
 - Additive growth happens under `capabilities`.
 - Adding or renaming an envelope field is a breaking change.
-- `aienvs/v2` is reserved for envelope-level or framing-level breaks.
+- `agent-sync/v2` is reserved for envelope-level or framing-level breaks.
 
 ## 13. Reserved for Unit 8b
 
@@ -500,27 +500,27 @@ Not part of v1:
 The following examples are spec-locked. Each directive fence names the
 matching corpus fixture under `internal/adapter/conformance/corpus/`.
 Canonical examples in this spec are tagged with an
-`aienvs:fixture-name` directive immediately preceding the JSON code
+`agent-sync:fixture-name` directive immediately preceding the JSON code
 fence. The directive links a spec example to a corresponding corpus
 fixture in `internal/adapter/conformance/corpus/`. The spec-locked test
 in `internal/adapter/conformance/spec_locked_test.go` parses these
 directives and asserts that the example payload exactly matches the
 fixture's payload; drift in either direction fails CI.
 
-```aienvs:fixture-name
+```agent-sync:fixture-name
 spec-example-handshake
 ```
 ```json
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"client":"aienvs","protocol_versions":["aienvs/v1"],"cookie":"0123456789abcdef0123456789abcdef","workspace_root":"/tmp/aienvs-conformance","reserved_prefix":".echo","ir_version":"v1"}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"client":"agent-sync","protocol_versions":["agent-sync/v1"],"cookie":"0123456789abcdef0123456789abcdef","workspace_root":"/tmp/agent-sync-conformance","reserved_prefix":".echo","ir_version":"v1"}}
 ```
 
 Canonical initialize result:
 
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"server":"echo/0.1","protocol_version":"aienvs/v1","capabilities":{"concept_kinds":{"agents-md":"supported","rule":"supported","skill":"supported","command":"supported","plugin-reference":"supported","mcp-server-entry":"supported"},"write_tool_owned":true},"declared_outputs":[{"path":".echo","mode":"owned-subdir"}],"cookie":"0123456789abcdef0123456789abcdef"}}
+{"jsonrpc":"2.0","id":1,"result":{"server":"echo/0.1","protocol_version":"agent-sync/v1","capabilities":{"concept_kinds":{"agents-md":"supported","rule":"supported","skill":"supported","command":"supported","plugin-reference":"supported","mcp-server-entry":"supported"},"write_tool_owned":true},"declared_outputs":[{"path":".echo","mode":"owned-subdir"}],"cookie":"0123456789abcdef0123456789abcdef"}}
 ```
 
-```aienvs:fixture-name
+```agent-sync:fixture-name
 spec-example-emit
 ```
 ```json
@@ -533,7 +533,7 @@ Canonical emit result:
 {"jsonrpc":"2.0","id":2,"result":{"ops_performed":[{"op":"mkdir","path":".echo"},{"op":"write_file","path":".echo/spec-emit.md"}]}}
 ```
 
-```aienvs:fixture-name
+```agent-sync:fixture-name
 spec-example-error-response
 ```
 ```json
@@ -558,7 +558,7 @@ The JSON output schema is:
 
 ```json
 {
-  "version": "aienvs/v1",
+  "version": "agent-sync/v1",
   "cases": [
     {
       "name": "string",

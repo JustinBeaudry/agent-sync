@@ -17,9 +17,9 @@ content channel rather than letting adapters write files themselves.
 
 ```jsonc
 {
-  "ops_performed": [ { "op": "write_file", "path": ".claude/rules/aienvs/r.md" } ],
+  "ops_performed": [ { "op": "write_file", "path": ".claude/rules/agent-sync/r.md" } ],
   "ops": [
-    { "op": "write_file", "path": ".claude/rules/aienvs/r.md",
+    { "op": "write_file", "path": ".claude/rules/agent-sync/r.md",
       "mode": 420, "encoding": "utf8", "content": "..." }
   ]
 }
@@ -36,7 +36,7 @@ content channel rather than letting adapters write files themselves.
 ## Compatibility
 
 This is additive under the **"freeze the wire frame, grow capabilities"** policy,
-so it does **not** bump the protocol version string (`aienvs/v1`):
+so it does **not** bump the protocol version string (`agent-sync/v1`):
 
 - A producer that omits `ops` decodes to `Ops == nil` (legacy behavior; the CLI
   simply has no content to write for that adapter).

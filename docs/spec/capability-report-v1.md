@@ -1,6 +1,6 @@
 # Capability report — v1
 
-Persisted at `.aienv/state/capability-report.json` during staging
+Persisted at `.agent-sync/state/capability-report.json` during staging
 (before the swap), so it survives an atomic rollback (decision #21).
 `agent-sync validate` computes the same shape in memory without writing.
 Built by `internal/report`.

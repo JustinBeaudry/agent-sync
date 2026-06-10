@@ -10,14 +10,14 @@ owner: internal/manifest
 The manifest is the single file that binds a workspace directory to its
 canonical agent-config source. Exactly one manifest lives per workspace;
 running `agent-sync sync` resolves the workspace by walking up from cwd (or
-honoring `--workspace <path>`) and reading the file at `<root>/.aienv.yaml`.
+honoring `--workspace <path>`) and reading the file at `<root>/.agent-sync.yaml`.
 
 This document is **authoritative** for the v1 schema. `internal/manifest`
-is the only package that may parse or write `.aienv.yaml`.
+is the only package that may parse or write `.agent-sync.yaml`.
 
 ## File name and location
 
-- Name: **`.aienv.yaml`** (literal, lowercase, singular).
+- Name: **`.agent-sync.yaml`** (literal, lowercase, singular).
 - Location: workspace root (the directory the user chose when running
   `agent-sync init`). Discovery semantics are in `internal/workspace`
   (unit 3).
@@ -77,7 +77,7 @@ cache:
 # yet in the v1 schema. Will be added by Unit 20.
 adapters:
   - name: claude
-    source: github.com/example/aienvs-adapter-claude
+    source: github.com/example/agent-sync-adapter-claude
 
 # trust: reserved; not yet in the v1 schema. Fields `require_attestation`
 # and `allow_new_shas_until` will be added by Unit 5/6.

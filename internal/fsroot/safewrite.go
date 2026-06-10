@@ -110,7 +110,7 @@ func (r *Root) fsyncParent(dir string) error {
 
 // uniqueTempName returns a deterministic-format but cryptographically
 // unique temp file name for a staged write. The leading "." keeps the
-// temp file out of default shell globs; the "aienv-stage" token lets
+// temp file out of default shell globs; the "agent-sync-stage" token lets
 // agent-sync identify its own orphaned temp files during crash recovery.
 func uniqueTempName(base string) (string, error) {
 	var randBuf [8]byte

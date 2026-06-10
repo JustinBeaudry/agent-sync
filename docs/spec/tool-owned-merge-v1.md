@@ -20,8 +20,8 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
   whitespace (space, tab, `\n`, `\r`). Deliberately **not**
   `strings.TrimSpace` (which strips `\f`/`\v`); a file containing such
   control junk is not blank and must parse or be refused.
-- **Aienvs entries are keyed by the `aienvs_` prefix** (`aienvs_<id>`
-  for JSON/TOML keys, `aienvs:<id>` for markdown locators). The `<id>`
+- **Aienvs entries are keyed by the `agentsync_` prefix** (`agentsync_<id>`
+  for JSON/TOML keys, `agent-sync:<id>` for markdown locators). The `<id>`
   is extracted by exact-prefix strip (never by splitting on the last
   separator — ids may contain `_`/`-`).
 - **Op is explicit.** `MergeEntry.Remove` (a boolean) selects
@@ -40,7 +40,7 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
 
 - **Engine:** `tidwall/sjson` for the surgical set/delete by path;
   `encoding/json` validity check before any write.
-- **Locator:** JSON pointer `/mcpServers/aienvs_<id>`, converted to an
+- **Locator:** JSON pointer `/mcpServers/agentsync_<id>`, converted to an
   sjson dot-path (with `.`/`*`/`?`/`\` escaping per segment).
 - **Preserved byte-identical:** all user keys and their values, key
   order, indentation style, and trailing-newline convention. Proven by
@@ -48,7 +48,7 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
   whole-file-byte-identical tests (incl. a minified input).
 - **Rejected (`ErrMalformedToolOwnedFile`):** invalid JSON; a parent
   under the pointer that is not an object (e.g. `mcpServers` is an
-  array/scalar); a pre-existing duplicate `aienvs_<id>` key under the
+  array/scalar); a pre-existing duplicate `agentsync_<id>` key under the
   parent (ledger drift); entry content that is not a valid JSON value.
 - **Remove of the last agent-sync entry keeps the now-empty parent**
   (`"mcpServers": {}`); the parent is not pruned (pruning a key agent-sync
@@ -62,7 +62,7 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
   re-rendered. Only the agent-sync table's line span is inserted / replaced
   / removed; `go-toml/v2` is used only to **validate** the input parses
   and to validate the rendered agent-sync table fragment.
-- **Locator:** `mcp_servers.aienvs_<id>` → table `[mcp_servers.aienvs_<id>]`.
+- **Locator:** `mcp_servers.agentsync_<id>` → table `[mcp_servers.agentsync_<id>]`.
 - **String-aware span location (load-bearing):** the line scanner
   tracks TOML multiline-string state (`"""`, `'''`), so a header-shaped
   line *inside* a user's multiline string is never mistaken for a table
@@ -83,19 +83,19 @@ emit `write_tool_owned` ops with these locator kinds; the sync engine
 - **Engine:** a line-based marker parser. Markers are recognized only at
   **column 0**. Both newline styles are tolerated; the file's dominant
   newline is detected and preserved.
-- **Marker grammar (write):** `<!-- aienvs:begin id=<id>[ source=<src>] -->`
-  / `<!-- aienvs:end id=<id> -->`. **Read is liberal:** the id-only form
+- **Marker grammar (write):** `<!-- agent-sync:begin id=<id>[ source=<src>] -->`
+  / `<!-- agent-sync:end id=<id> -->`. **Read is liberal:** the id-only form
   the adapters emit today (no `source=`) is accepted, as is the
   `source=`-bearing form.
 - **The engine owns the markers; callers pass the INNER body.** A
-  `body` that itself contains `<!-- aienvs:` is a programmer/contract
+  `body` that itself contains `<!-- agent-sync:` is a programmer/contract
   error (prevents a double-wrap when a caller passes pre-wrapped adapter
   content). This is **not** a data-loss sentinel — it is a loud
   contract failure surfaced in tests.
 - **Upsert:** replace the content between a well-formed `begin/end` pair
   for the id; user text outside is byte-identical. If absent, append a
   new section at EOF (a new/blank file gets a top-of-file
-  "Partially managed by aienvs" header).
+  "Partially managed by agent-sync" header).
 - **Recovery — refuse, don't guess (`ErrMalformedManagedSection`, names
   the line):** begin without end; end without begin; nested begin;
   mismatched end id; duplicate id.

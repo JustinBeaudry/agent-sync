@@ -38,7 +38,7 @@ func TestStagedWrite_HappyPath(t *testing.T) {
 		t.Fatalf("readdir: %v", err)
 	}
 	for _, e := range entries {
-		if strings.Contains(e.Name(), "aienv-stage") {
+		if strings.Contains(e.Name(), "agent-sync-stage") {
 			t.Errorf("orphaned temp after success: %q", e.Name())
 		}
 	}

@@ -43,7 +43,7 @@ failed, skipped, rolled-back, blocked.
       "status": "ok",
       "counts": { "written": 3, "deleted": 0, "unchanged": 0, "warnings": 0 },
       "duration_ms": 12,
-      "paths": [".claude/rules/aienvs/a.mdc"],
+      "paths": [".claude/rules/agent-sync/a.mdc"],
       "error": "<present only when failed/blocked>"
     }
   ],

@@ -17,13 +17,13 @@ into each tool's own conventions.
 
 ## What agent-sync does
 
-1. **One manifest per workspace.** A `.aienv.yaml` pins the workspace to a
+1. **One manifest per workspace.** A `.agent-sync.yaml` pins the workspace to a
    canonical Git repo (pinned by commit SHA by default) and declares which
    target tools receive configuration.
 2. **Explicit `sync`.** `agent-sync sync` materializes the pinned content,
    compiles it via per-tool adapters, stages the output, and atomically
    swaps it into each tool's reserved subdirectory (e.g.
-   `.claude/rules/aienvs/`, `.cursor/rules/aienvs/`, `.codex/skills/aienvs-<id>/`).
+   `.claude/rules/agent-sync/`, `.cursor/rules/agent-sync/`, `.codex/skills/agent-sync-<id>/`).
 3. **Safe by default.** Pinning, offline-strict, TOFU on `(URL, SHA)`
    pairs, reserved-prefix ownership with a ledger, and atomic swap with
    rollback — designed to fail closed.

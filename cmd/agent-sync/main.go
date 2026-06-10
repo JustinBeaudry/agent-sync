@@ -2,7 +2,7 @@
 //
 // agent-sync keeps AI-agent configuration for multiple tools in sync from a
 // single Git-backed manifest. See the repository README and
-// docs/plans/2026-04-21-001-feat-agent-sync-workspace-cli-plan.md for the
+// docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md for the
 // architecture.
 package main
 

@@ -9,8 +9,8 @@ Scope:
 - [`trust.jsonl`](#trustjsonl) — per-user append-only history.
 - [`pending.jsonl`](#pendingjsonl) — per-user queue of SHAs observed during
   sync that the user has not yet reviewed.
-- [`trusted_sha:`](#trusted_sha-in-aienvyaml) — committed project pin in
-  `.aienv.yaml`.
+- [`trusted_sha:`](#trusted_sha-in-agent-syncyaml) — committed project pin in
+  `.agent-sync.yaml`.
 - [Three error classes](#error-classes) — `RevokedTrustAnchor`,
   `TrustDecisionRequired`, `FirstUseDenied`.
 - [Canonical URL form](#canonical-url-form) — the key under which records are
@@ -39,9 +39,9 @@ canonicalizer (which strips `userinfo` so cache keys cannot be poisoned).
 
 ## `trust.jsonl`
 
-Path: `$XDG_DATA_HOME/aienvs/trust.jsonl` (resolved via `adrg/xdg`; on macOS
-this is `~/Library/Application Support/aienvs/trust.jsonl`, on Linux
-`~/.local/share/aienvs/trust.jsonl`, on Windows
+Path: `$XDG_DATA_HOME/agent-sync/trust.jsonl` (resolved via `adrg/xdg`; on macOS
+this is `~/Library/Application Support/agent-sync/trust.jsonl`, on Linux
+`~/.local/share/agent-sync/trust.jsonl`, on Windows
 `%LOCALAPPDATA%\agent-sync\trust.jsonl`).
 
 File mode: `0600`. Parent directory mode: `0700`.
@@ -147,9 +147,9 @@ folding the pre-compaction file. This is a test invariant.
 
 ## `pending.jsonl`
 
-Path: `$XDG_STATE_HOME/aienvs/pending.jsonl` (Linux
-`~/.local/state/aienvs/pending.jsonl`; macOS falls through to
-`~/Library/Application Support/aienvs/pending.jsonl` since XDG_STATE_HOME is
+Path: `$XDG_STATE_HOME/agent-sync/pending.jsonl` (Linux
+`~/.local/state/agent-sync/pending.jsonl`; macOS falls through to
+`~/Library/Application Support/agent-sync/pending.jsonl` since XDG_STATE_HOME is
 not standardized on macOS — `adrg/xdg` handles the mapping).
 
 File mode: `0600`. Parent directory mode: `0700`.
@@ -186,7 +186,7 @@ stderr reminder. The user drains the queue out-of-band via
 Pending is a queue, not a log; no history is preserved after promotion.
 Audit history lives in `trust.jsonl` (the `promote` op).
 
-## `trusted_sha:` in `.aienv.yaml`
+## `trusted_sha:` in `.agent-sync.yaml`
 
 Top-level field on the manifest (see `internal/manifest/schema.go`).
 

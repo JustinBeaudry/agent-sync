@@ -451,9 +451,28 @@ in the repo.
 the grep below plus a human read of README/AGENTS for naming consistency.
 **Verification:**
 `grep -rni "aienv" . --exclude-dir=.git` returns ONLY:
-(a) the two dated filenames under `docs/brainstorms/` and `docs/plans/`, and
-(b) links/path-references to those two files. Any other hit is a miss — fix it.
-Full gate green one final time.
+(a) dated historical artifacts under `docs/plans/`, `docs/brainstorms/`,
+`docs/handoffs/`, and `docs/solutions/` — point-in-time records that preserve
+the name as written at the time (rewriting them falsifies history); and
+(b) intentional links/path-references to the two historical `aienvs`-named files
+(`feat-aienvs-workspace-cli-plan.md`, `aienvs-agent-workspace-requirements.md`)
+from live docs and the `cmd/agent-sync/main.go` header comment.
+Any other hit is a miss — fix it. Full gate green one final time.
+
+> **Execution note (divergence from as-planned allowlist):** the original plan
+> assumed only two historical files carried the name. The repo actually has a
+> large dated-doc history (`docs/{plans,brainstorms,handoffs,solutions}/`). The
+> "leave historical filenames" decision was extended to historical *content* in
+> those dirs (same principle — don't rewrite history); all *live* reference docs
+> (`README`, `AGENTS`, `CLAUDE`, `docs/adapters/`, `docs/spec/`,
+> `docs/operations/`, `docs/threat-model.md`, `conformance/echo/README.md`) were
+> updated. Scope also expanded within the on-disk/wire buckets to cover
+> identifiers of the same classes discovered during execution: the full
+> `AIENVS_*` env-var family (not just `AIENVS_ACCESSIBLE`), the adapter contract
+> version `aienvs/v1` → `agent-sync/v1` (incl. the `pkg/adapterkit` SDK), the
+> `rules/`/`commands/` owned-subdirs, hook backup markers, the XDG trust-store
+> dir, the JSON-RPC client name, contract schemas, the conformance corpus, and a
+> bare `aienv-stage` temp-token in `internal/fsroot`.
 
 ---
 

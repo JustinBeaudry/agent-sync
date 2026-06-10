@@ -116,8 +116,8 @@ reserved for forward-compat experimentation and are tolerated but ignored.
 ### Frontmatter on non-markdown nodes
 
 `mcp-server-entry` (JSON) carries metadata in the body of the file via
-reserved top-level keys `__aienvs_required`, `__aienvs_targets`,
-`__aienvs_version` (so the file stays valid JSON). These keys are stripped
+reserved top-level keys `__agentsync_required`, `__agentsync_targets`,
+`__agentsync_version` (so the file stays valid JSON). These keys are stripped
 from the body the adapter receives.
 
 `plugin-reference` (TOML) is decoded with default metadata (`required:
@@ -151,7 +151,7 @@ type Provenance struct {
 ```
 
 `Body` is byte-identical to the on-disk content with the frontmatter
-block removed (for markdown) or with the reserved `__aienvs_*` keys
+block removed (for markdown) or with the reserved `__agentsync_*` keys
 stripped (for JSON / TOML).
 
 Skills with assets surface the assets as auxiliary blobs hung off the

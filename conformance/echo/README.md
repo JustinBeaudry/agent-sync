@@ -1,6 +1,6 @@
 # Reference Echo Adapter
 
-`conformance/echo/` is the canonical Go example for an `aienvs/v1`
+`conformance/echo/` is the canonical Go example for an `agent-sync/v1`
 adapter built with [`pkg/adapterkit`](../../pkg/adapterkit/).
 
 What it demonstrates:
