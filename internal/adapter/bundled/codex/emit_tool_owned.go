@@ -53,6 +53,15 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode) error {
 			Message: fmt.Sprintf("codex: mcp-server-entry %q body must be a JSON object (got non-object)", node.ID),
 		}
 	}
+	// JSON `null` unmarshals into a nil map with no error — reject it
+	// explicitly rather than render an empty [mcp_servers.aienvs_<id>] table
+	// (which would install unusable Codex MCP config).
+	if entry == nil {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("codex: mcp-server-entry %q body must be a JSON object (got null)", node.ID),
+		}
+	}
 
 	tomlBody, err := renderTOMLTableBody(entry)
 	if err != nil {
