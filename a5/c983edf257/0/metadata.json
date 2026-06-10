@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "a5c983edf257",
+  "session_id": "8ef41bcb-d9bc-4fa4-ae16-a19811bb0b18",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-10T20:02:37.252188Z",
+  "branch": "refactor/rename-aienvs-to-agent-sync",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/spec/trust-store-v1.md",
+    "docs/plans/2026-06-10-001-refactor-aienvs-to-agent-sync-rename-plan.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f1701a5007f9",
+  "checkpoint_transcript_start": 381,
+  "transcript_lines_at_start": 381,
+  "token_usage": {
+    "input_tokens": 1186,
+    "cache_creation_tokens": 27627,
+    "cache_read_tokens": 4847725,
+    "output_tokens": 19070,
+    "api_call_count": 20
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-10T20:02:36.88643Z",
+    "agent_lines": 31,
+    "human_added": 88,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 119,
+    "agent_percentage": 26.05042016806723
+  }
+}
