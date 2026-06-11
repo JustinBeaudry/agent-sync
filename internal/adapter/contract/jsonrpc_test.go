@@ -14,13 +14,13 @@ func TestRequest_MarshalsCanonicalShape(t *testing.T) {
 	req := Request{
 		ID:     NewIntID(7),
 		Method: "initialize",
-		Params: json.RawMessage(`{"client":"aienvs/0.1"}`),
+		Params: json.RawMessage(`{"client":"agent-sync/0.1"}`),
 	}
 	got, err := json.Marshal(req)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	want := `{"jsonrpc":"2.0","id":7,"method":"initialize","params":{"client":"aienvs/0.1"}}`
+	want := `{"jsonrpc":"2.0","id":7,"method":"initialize","params":{"client":"agent-sync/0.1"}}`
 	if string(got) != want {
 		t.Fatalf("marshal mismatch:\nwant %s\ngot  %s", want, got)
 	}

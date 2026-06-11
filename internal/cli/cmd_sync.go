@@ -15,7 +15,7 @@ import (
 
 // hookSkippedMarker records that a git-hook-driven sync yielded to an
 // in-progress manual sync (so it never breaks `git pull`).
-const hookSkippedMarker = ".aienv/state/hook-skipped"
+const hookSkippedMarker = ".agent-sync/state/hook-skipped"
 
 func newSyncCommand(deps RootDeps) *cobra.Command {
 	var (

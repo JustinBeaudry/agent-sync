@@ -22,7 +22,7 @@ import (
 // never mistaken for a table header.
 //
 // Content is the raw TOML table body (key = value lines, no header);
-// the engine renders the `[mcp_servers.aienvs_<id>]` header + a managed
+// the engine renders the `[mcp_servers.agentsync_<id>]` header + a managed
 // comment + Content, and validates the whole renders as parseable TOML
 // before splicing.
 func mergeTOML(existing []byte, e MergeEntry) (result []byte, sliceHash string, err error) {
@@ -44,7 +44,7 @@ func mergeTOML(existing []byte, e MergeEntry) (result []byte, sliceHash string, 
 		}
 	}
 
-	header := "[mcp_servers." + aienvsKeyPrefix + id + "]"
+	header := "[mcp_servers." + agentsyncKeyPrefix + id + "]"
 	spans := tomlTableSpans(work)
 
 	// Reject a pre-existing duplicate agent-sync table.
@@ -71,7 +71,7 @@ func mergeTOML(existing []byte, e MergeEntry) (result []byte, sliceHash string, 
 	}
 
 	// Upsert: render and validate the agent-sync table.
-	rendered := renderAienvsTable(header, e.Content)
+	rendered := renderAgentsyncTable(header, e.Content)
 	if verr := validateTOMLFragment(rendered); verr != nil {
 		return nil, "", fmt.Errorf("%w: agent-sync table body is not valid TOML: %s", ErrMalformedToolOwnedFile, verr.Error())
 	}
@@ -103,7 +103,7 @@ func mergeTOML(existing []byte, e MergeEntry) (result []byte, sliceHash string, 
 }
 
 type tomlSpan struct {
-	header     string // trimmed header line, e.g. "[mcp_servers.aienvs_foo]"
+	header     string // trimmed header line, e.g. "[mcp_servers.agentsync_foo]"
 	start, end int    // [start,end) line indices, start = header line
 }
 
@@ -160,7 +160,7 @@ func opensMultiline(line string) string {
 	return ""
 }
 
-func renderAienvsTable(header string, body []byte) string {
+func renderAgentsyncTable(header string, body []byte) string {
 	var b strings.Builder
 	b.WriteString(header)
 	b.WriteString("\n")

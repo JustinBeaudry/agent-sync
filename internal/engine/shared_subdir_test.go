@@ -70,10 +70,10 @@ func TestSync_SharedSubdir_PreservesForeignSkill(t *testing.T) {
 	}
 	done1()
 
-	// The agent-sync skill landed under its aienvs- leaf...
-	aienvsSkill := filepath.Join(ws, ".claude", "skills", "aienvs-greeter", "SKILL.md")
-	if _, err := os.Stat(aienvsSkill); err != nil {
-		t.Fatalf("expected agent-sync skill at %s: %v", aienvsSkill, err)
+	// The agent-sync skill landed under its agent-sync- leaf...
+	agentSyncSkill := filepath.Join(ws, ".claude", "skills", "agent-sync-greeter", "SKILL.md")
+	if _, err := os.Stat(agentSyncSkill); err != nil {
+		t.Fatalf("expected agent-sync skill at %s: %v", agentSyncSkill, err)
 	}
 	// ...and the foreign skill is byte-identical after the swap.
 	assertFileBytes(t, foreign, foreignBody, "after sync 1 (add)")
@@ -89,7 +89,7 @@ func TestSync_SharedSubdir_PreservesForeignSkill(t *testing.T) {
 	done2()
 
 	// The agent-sync skill file is gone (orphan-removed)...
-	if _, err := os.Stat(aienvsSkill); !os.IsNotExist(err) {
+	if _, err := os.Stat(agentSyncSkill); !os.IsNotExist(err) {
 		t.Fatalf("agent-sync skill should be orphan-removed; stat err = %v", err)
 	}
 	// ...and the foreign skill STILL survives.
@@ -134,8 +134,8 @@ func TestSync_SharedSubdir_CodexPreservesForeignSkill(t *testing.T) {
 	if summary.Outcome.ExitCode != 0 {
 		t.Fatalf("exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
 	}
-	if _, err := os.Stat(filepath.Join(ws, ".agents", "skills", "aienvs-greeter", "SKILL.md")); err != nil {
-		t.Fatalf("expected agent-sync skill under .agents/skills/aienvs-greeter: %v", err)
+	if _, err := os.Stat(filepath.Join(ws, ".agents", "skills", "agent-sync-greeter", "SKILL.md")); err != nil {
+		t.Fatalf("expected agent-sync skill under .agents/skills/agent-sync-greeter: %v", err)
 	}
 	assertFileBytes(t, foreign, foreignBody, "after codex sync")
 }
@@ -171,7 +171,7 @@ func TestSync_SharedSubdir_UpdatePreservesForeignSkill(t *testing.T) {
 	}
 	done2()
 
-	skill := filepath.Join(ws, ".claude", "skills", "aienvs-greeter", "SKILL.md")
+	skill := filepath.Join(ws, ".claude", "skills", "agent-sync-greeter", "SKILL.md")
 	body, err := os.ReadFile(skill)
 	if err != nil {
 		t.Fatalf("read updated skill: %v", err)

@@ -3,8 +3,8 @@
 //
 // It owns:
 //
-//   - The per-user append-only history at $XDG_DATA_HOME/aienvs/trust.jsonl.
-//   - The per-user pending queue at $XDG_STATE_HOME/aienvs/pending.jsonl.
+//   - The per-user append-only history at $XDG_DATA_HOME/agent-sync/trust.jsonl.
+//   - The per-user pending queue at $XDG_STATE_HOME/agent-sync/pending.jsonl.
 //   - The pure decision engine that maps (url, resolvedSHA, manifestTrustedSHA,
 //     state, flags) to a trust Decision.
 //   - The minimal interactive prompts used by the trust CLI when running
@@ -12,7 +12,7 @@
 //
 // It does not own:
 //
-//   - The committed project pin (`trusted_sha:` in .aienv.yaml). That field
+//   - The committed project pin (`trusted_sha:` in .agent-sync.yaml). That field
 //     lives on the manifest schema; this package reads it as an input.
 //   - The sync pipeline. Sync calls Decide() and acts on the returned
 //     Decision; it does not import prompt.go.

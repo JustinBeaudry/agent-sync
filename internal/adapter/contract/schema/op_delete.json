@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aienvs.dev/schema/v1/op_delete.json",
-  "title": "aienvs/v1 delete op",
+  "$id": "https://agent-sync.dev/schema/v1/op_delete.json",
+  "title": "agent-sync/v1 delete op",
   "type": "object",
   "properties": {
     "op": {"const": "delete"},

@@ -32,7 +32,7 @@ const userMCP = `{
 
 func TestMergeJSON_UpsertPreservesUserServers(t *testing.T) {
 	t.Parallel()
-	out, hash, err := mergeJSON([]byte(userMCP), jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node","args":["server.js"]}`))
+	out, hash, err := mergeJSON([]byte(userMCP), jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node","args":["server.js"]}`))
 	if err != nil {
 		t.Fatalf("mergeJSON: %v", err)
 	}
@@ -40,8 +40,8 @@ func TestMergeJSON_UpsertPreservesUserServers(t *testing.T) {
 		t.Error("upsert should return a non-empty slice hash")
 	}
 	// agent-sync entry present and correct.
-	if gjson.GetBytes(out, "mcpServers.aienvs_foo.command").String() != "node" {
-		t.Errorf("aienvs_foo not set correctly: %s", out)
+	if gjson.GetBytes(out, "mcpServers.agentsync_foo.command").String() != "node" {
+		t.Errorf("agentsync_foo not set correctly: %s", out)
 	}
 	// User servers byte-identical at the value level.
 	for _, k := range []string{"userA", "userB"} {
@@ -61,11 +61,11 @@ func TestMergeJSON_UpsertThenRemoveIsIdentity(t *testing.T) {
 	t.Parallel()
 	// The strongest no-corruption proof: insert then delete the agent-sync
 	// key must restore the original bytes exactly.
-	withFoo, _, err := mergeJSON([]byte(userMCP), jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`))
+	withFoo, _, err := mergeJSON([]byte(userMCP), jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`))
 	if err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	back, _, err := mergeJSON(withFoo, jsonRemove("/mcpServers/aienvs_foo"))
+	back, _, err := mergeJSON(withFoo, jsonRemove("/mcpServers/agentsync_foo"))
 	if err != nil {
 		t.Fatalf("remove: %v", err)
 	}
@@ -76,11 +76,11 @@ func TestMergeJSON_UpsertThenRemoveIsIdentity(t *testing.T) {
 
 func TestMergeJSON_NoOpUpsertIsByteIdentical(t *testing.T) {
 	t.Parallel()
-	once, _, err := mergeJSON([]byte(userMCP), jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`))
+	once, _, err := mergeJSON([]byte(userMCP), jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`))
 	if err != nil {
 		t.Fatalf("upsert 1: %v", err)
 	}
-	twice, _, err := mergeJSON(once, jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`))
+	twice, _, err := mergeJSON(once, jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`))
 	if err != nil {
 		t.Fatalf("upsert 2: %v", err)
 	}
@@ -91,11 +91,11 @@ func TestMergeJSON_NoOpUpsertIsByteIdentical(t *testing.T) {
 
 func TestMergeJSON_NewFile(t *testing.T) {
 	t.Parallel()
-	out, _, err := mergeJSON(nil, jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`))
+	out, _, err := mergeJSON(nil, jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`))
 	if err != nil {
 		t.Fatalf("mergeJSON new file: %v", err)
 	}
-	if gjson.GetBytes(out, "mcpServers.aienvs_foo.command").String() != "node" {
+	if gjson.GetBytes(out, "mcpServers.agentsync_foo.command").String() != "node" {
 		t.Errorf("new-file merge wrong: %s", out)
 	}
 }
@@ -103,7 +103,7 @@ func TestMergeJSON_NewFile(t *testing.T) {
 func TestMergeJSON_MinifiedUserContentPreserved(t *testing.T) {
 	t.Parallel()
 	min := `{"mcpServers":{"userA":{"command":"nodeA"}}}`
-	out, _, err := mergeJSON([]byte(min), jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`))
+	out, _, err := mergeJSON([]byte(min), jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`))
 	if err != nil {
 		t.Fatalf("mergeJSON: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestMergeJSON_MinifiedUserContentPreserved(t *testing.T) {
 		t.Errorf("minified user server not preserved: %s", out)
 	}
 	// Round-trip identity on a minified file too.
-	back, _, err := mergeJSON(out, jsonRemove("/mcpServers/aienvs_foo"))
+	back, _, err := mergeJSON(out, jsonRemove("/mcpServers/agentsync_foo"))
 	if err != nil {
 		t.Fatalf("remove: %v", err)
 	}
@@ -122,8 +122,8 @@ func TestMergeJSON_MinifiedUserContentPreserved(t *testing.T) {
 
 func TestMergeJSON_EmptyParentKeptAfterRemove(t *testing.T) {
 	t.Parallel()
-	in := `{"mcpServers":{"aienvs_foo":{"command":"node"}}}`
-	out, _, err := mergeJSON([]byte(in), jsonRemove("/mcpServers/aienvs_foo"))
+	in := `{"mcpServers":{"agentsync_foo":{"command":"node"}}}`
+	out, _, err := mergeJSON([]byte(in), jsonRemove("/mcpServers/agentsync_foo"))
 	if err != nil {
 		t.Fatalf("remove: %v", err)
 	}
@@ -143,10 +143,10 @@ func TestMergeJSON_Errors(t *testing.T) {
 		base  string
 		entry MergeEntry
 	}{
-		{"invalid json", `{not json`, jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`)},
-		{"non-object parent", `{"mcpServers":[1,2,3]}`, jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`)},
-		{"invalid content value", `{}`, jsonUpsert("/mcpServers/aienvs_foo", `{not json`)},
-		{"duplicate key", `{"mcpServers":{"aienvs_foo":1,"aienvs_foo":2}}`, jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`)},
+		{"invalid json", `{not json`, jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`)},
+		{"non-object parent", `{"mcpServers":[1,2,3]}`, jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`)},
+		{"invalid content value", `{}`, jsonUpsert("/mcpServers/agentsync_foo", `{not json`)},
+		{"duplicate key", `{"mcpServers":{"agentsync_foo":1,"agentsync_foo":2}}`, jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

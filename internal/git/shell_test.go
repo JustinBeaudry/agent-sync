@@ -22,7 +22,7 @@ func TestDetectGit_HappyPath(t *testing.T) {
 
 func TestDetectGit_OverrideMissing(t *testing.T) {
 	withDetectReset(t)
-	t.Setenv("AIENVS_GIT_EXECUTABLE", "/nonexistent/binary/that/does/not/exist")
+	t.Setenv("AGENT_SYNC_GIT_EXECUTABLE", "/nonexistent/binary/that/does/not/exist")
 
 	err := DetectGit()
 	if err == nil {
@@ -34,14 +34,14 @@ func TestDetectGit_OverrideMissing(t *testing.T) {
 }
 
 // TestDetectGit_OverrideDirectory confirms that the override is validated
-// as runnable, not merely existent. Pointing AIENVS_GIT_EXECUTABLE at a
+// as runnable, not merely existent. Pointing AGENT_SYNC_GIT_EXECUTABLE at a
 // directory must fail at detection time with ErrGitNotFound rather than
 // deferring the failure to exec time. Under an `os.Stat` implementation
 // this would erroneously succeed (directories stat fine); exec.LookPath
 // refuses non-executables on Unix and PATHEXT-mismatches on Windows.
 func TestDetectGit_OverrideDirectory(t *testing.T) {
 	withDetectReset(t)
-	t.Setenv("AIENVS_GIT_EXECUTABLE", t.TempDir())
+	t.Setenv("AGENT_SYNC_GIT_EXECUTABLE", t.TempDir())
 
 	err := DetectGit()
 	if err == nil {

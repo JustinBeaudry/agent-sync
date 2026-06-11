@@ -21,7 +21,7 @@ import (
 // pattern: a per-spawn random value the adapter must echo on
 // `initialize`. Lets the adapter detect when it was invoked outside
 // the CLI handshake (e.g., a human running it in a shell).
-const CookieEnvVar = "AIENVS_ADAPTER_COOKIE"
+const CookieEnvVar = "AGENT_SYNC_ADAPTER_COOKIE"
 
 // stderrRingBytes is the bounded size of the in-memory stderr
 // ring buffer attached to a subprocess. 64 KiB is generous for the
@@ -114,7 +114,7 @@ type SpawnOptions struct {
 	Manifest AdapterManifest
 
 	// ExtraEnv appends to the child's environment. The runtime auto-sets
-	// AIENVS_ADAPTER_COOKIE; ExtraEnv values do not override it.
+	// AGENT_SYNC_ADAPTER_COOKIE; ExtraEnv values do not override it.
 	ExtraEnv []string
 
 	// Timeouts controls handshake / emit / shutdown bounds. Zero values

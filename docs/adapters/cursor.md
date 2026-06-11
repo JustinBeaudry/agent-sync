@@ -3,7 +3,7 @@ title: agent-sync `cursor` adapter — concept→destination reference
 status: active
 date: 2026-06-08
 adapter: cursor
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 ---
 
 # `cursor` adapter
@@ -16,11 +16,11 @@ the per-kind support declaration is in
 
 The adapter owns:
 
-- The **`.cursor/rules/aienvs/` reserved subtree** for rules, emitted
+- The **`.cursor/rules/agent-sync/` reserved subtree** for rules, emitted
   as `.mdc` files.
 - A **per-entry slice** of `.cursor/mcp.json` for `mcp-server-entry`
-  IR nodes (under `/mcpServers/aienvs_<id>` JSON pointers), plus a
-  `.cursor/.aienvs-managed` sidecar marker.
+  IR nodes (under `/mcpServers/agentsync_<id>` JSON pointers), plus a
+  `.cursor/.agent-sync-managed` sidecar marker.
 - A **managed section** of the workspace-root `AGENTS.md` for
   `agents-md` IR nodes.
 
@@ -32,19 +32,19 @@ The adapter does **not** own:
 - The legacy `.cursorrules` file — it is never written, migrated, or
   mutated (see "Legacy `.cursorrules`" below).
 - The whole of `AGENTS.md` — the adapter writes exactly one
-  aienvs-marked section; user content and other adapters' sections
+  agent-sync-marked section; user content and other adapters' sections
   are preserved by the ledger-driven merge (Unit 12a).
 - Anything outside the paths in the table; user-authored files inside
   the same parent directories — orphan detection is scoped to
-  aienvs-emitted paths only (Unit 14 of the master plan).
+  agent-sync-emitted paths only (Unit 14 of the master plan).
 
 ## Concept → destination
 
 | IR kind | Status | Destination | Locator | Notes |
 |---|---|---|---|---|
-| `agents-md` | supported | workspace-root `AGENTS.md` | section `aienvs:<id>` | Section markers `<!-- aienvs:begin id=<id> -->` … `<!-- aienvs:end id=<id> -->`. User content outside the section is preserved. Cursor reads `AGENTS.md` directly (no companion file). |
-| `rule` | supported | `.cursor/rules/aienvs/<id>.mdc` | n/a | Managed-file header prepended. v1 emits frontmatter-less `.mdc` (the IR strips frontmatter at decode); the rule behaves as a manual / agent-requested rule until IR frontmatter exposure lands. No `paths:` ward — that is a Claude Code bug with no Cursor equivalent. |
-| `mcp-server-entry` | supported | `.cursor/mcp.json` | json-pointer `/mcpServers/aienvs_<id>` | A sidecar `.cursor/.aienvs-managed` file is written alongside `.cursor/mcp.json` because JSON has no comment syntax. |
+| `agents-md` | supported | workspace-root `AGENTS.md` | section `agent-sync:<id>` | Section markers `<!-- agent-sync:begin id=<id> -->` … `<!-- agent-sync:end id=<id> -->`. User content outside the section is preserved. Cursor reads `AGENTS.md` directly (no companion file). |
+| `rule` | supported | `.cursor/rules/agent-sync/<id>.mdc` | n/a | Managed-file header prepended. v1 emits frontmatter-less `.mdc` (the IR strips frontmatter at decode); the rule behaves as a manual / agent-requested rule until IR frontmatter exposure lands. No `paths:` ward — that is a Claude Code bug with no Cursor equivalent. |
+| `mcp-server-entry` | supported | `.cursor/mcp.json` | json-pointer `/mcpServers/agentsync_<id>` | A sidecar `.cursor/.agent-sync-managed` file is written alongside `.cursor/mcp.json` because JSON has no comment syntax. |
 | `skill` | unsupported | n/a | n/a | Cursor has no folder-per-skill / `SKILL.md` concept. Targeting `skill` at `cursor` surfaces a degradation warning and emits no files. |
 | `command` | unsupported | n/a | n/a | Cursor has no project-level custom slash-command concept. Targeting `command` at `cursor` surfaces a degradation warning and emits no files. |
 | `plugin-reference` | unsupported | n/a | n/a | Cursor does not load project-level plugin registries. Targeting `plugin-reference` at `cursor` surfaces a degradation warning and emits no files. |
@@ -57,7 +57,7 @@ these paths, the adapter and this table need to be updated together.
 
 - **Rules** — Cursor reads project rules from `.cursor/rules/` as
   `.mdc` (Markdown-with-frontmatter) files and supports nested
-  subdirectories, which is what makes `.cursor/rules/aienvs/<id>.mdc`
+  subdirectories, which is what makes `.cursor/rules/agent-sync/<id>.mdc`
   a valid owned subdirectory. See
   [Cursor rules](https://docs.cursor.com/context/rules).
 - **`.cursor/mcp.json`** — Project-scoped MCP servers live in a flat
@@ -111,8 +111,8 @@ read project-level `AGENTS.md`.
 ## Multi-adapter ownership notes
 
 - `AGENTS.md` is shared by `cursor`, `codex`, and `pi`. The
-  section-marker scheme (`<!-- aienvs:begin id=<id> -->` …
-  `<!-- aienvs:end id=<id> -->`) is identical across those adapters so
+  section-marker scheme (`<!-- agent-sync:begin id=<id> -->` …
+  `<!-- agent-sync:end id=<id> -->`) is identical across those adapters so
   their sections coexist. The ledger-driven merge (Unit 12a) combines
   them with user content; the per-external-file lock (Unit 12)
   serializes concurrent writers. This adapter emits exactly one
@@ -120,7 +120,7 @@ read project-level `AGENTS.md`.
 - `.cursor/mcp.json` is a Cursor-only file — it is not the same file
   as Claude's workspace-root `.mcp.json`. Each tool's MCP config lives
   under its own path.
-- `.cursor/rules/aienvs/` is a Cursor-only reserved subtree.
+- `.cursor/rules/agent-sync/` is a Cursor-only reserved subtree.
 
 ## Exit path
 

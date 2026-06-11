@@ -207,11 +207,11 @@ func TestFileLock_SymlinkedLeafRefused(t *testing.T) {
 func TestFileLock_SymlinkedFilelocksDirRefused(t *testing.T) {
 	t.Parallel()
 	root := openRoot(t)
-	// Pre-create .aienv/state (real), then symlink filelocks outside.
-	if err := os.MkdirAll(filepath.Join(root.Path(), ".aienv", "state"), 0o755); err != nil {
+	// Pre-create .agent-sync/state (real), then symlink filelocks outside.
+	if err := os.MkdirAll(filepath.Join(root.Path(), ".agent-sync", "state"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.Symlink(t.TempDir(), filepath.Join(root.Path(), ".aienv", "state", "filelocks")); err != nil {
+	if err := os.Symlink(t.TempDir(), filepath.Join(root.Path(), ".agent-sync", "state", "filelocks")); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
 	if _, err := NewFileLockRegistry(root); !errors.Is(err, ErrUnsafeStatePrefix) {

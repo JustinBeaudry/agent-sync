@@ -78,15 +78,15 @@ func TestEmitRule_HappyPath(t *testing.T) {
 	res, ops := emitFixture(t, "rule-only.json")
 
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".claude/rules/aienvs"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/aienvs/README.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/aienvs/no-fri.md"},
+		{Op: adapterkit.OpKindMkdir, Path: ".claude/rules/agent-sync"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/agent-sync/README.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/agent-sync/no-fri.md"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
 	}
 
-	ruleOp := findWriteFile(t, ops, ".claude/rules/aienvs/no-fri.md")
+	ruleOp := findWriteFile(t, ops, ".claude/rules/agent-sync/no-fri.md")
 	if !strings.HasPrefix(string(ruleOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("rule content missing managed header; got %q", ruleOp.Content)
 	}
@@ -100,7 +100,7 @@ func TestEmitRule_HappyPath(t *testing.T) {
 		t.Errorf("rule content missing body; got %q", ruleOp.Content)
 	}
 
-	readmeOp := findWriteFile(t, ops, ".claude/rules/aienvs/README.md")
+	readmeOp := findWriteFile(t, ops, ".claude/rules/agent-sync/README.md")
 	if !strings.Contains(string(readmeOp.Content), "agent-sync unmanage claude") {
 		t.Errorf("README content missing exit path; got %q", readmeOp.Content)
 	}
@@ -139,15 +139,15 @@ func TestEmitCommand_HappyPath(t *testing.T) {
 	res, ops := emitFixture(t, "command-only.json")
 
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".claude/commands/aienvs"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/commands/aienvs/README.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/commands/aienvs/deploy.md"},
+		{Op: adapterkit.OpKindMkdir, Path: ".claude/commands/agent-sync"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/commands/agent-sync/README.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/commands/agent-sync/deploy.md"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
 	}
 
-	cmdOp := findWriteFile(t, ops, ".claude/commands/aienvs/deploy.md")
+	cmdOp := findWriteFile(t, ops, ".claude/commands/agent-sync/deploy.md")
 	if !strings.HasPrefix(string(cmdOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("command content missing managed header; got %q", cmdOp.Content)
 	}
@@ -162,21 +162,21 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	res, ops := emitFixture(t, "skill-with-assets.json")
 
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/aienvs-coder"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/aienvs-coder/SKILL.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/aienvs-coder/examples/usage.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/aienvs-coder/templates/foo.txt"},
+		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/examples/usage.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/templates/foo.txt"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
 	}
 
-	skillOp := findWriteFile(t, ops, ".claude/skills/aienvs-coder/SKILL.md")
+	skillOp := findWriteFile(t, ops, ".claude/skills/agent-sync-coder/SKILL.md")
 	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("skill SKILL.md missing managed header; got %q", skillOp.Content)
 	}
 
-	tmplOp := findWriteFile(t, ops, ".claude/skills/aienvs-coder/templates/foo.txt")
+	tmplOp := findWriteFile(t, ops, ".claude/skills/agent-sync-coder/templates/foo.txt")
 	if string(tmplOp.Content) != "template body" {
 		t.Errorf("template asset content=%q want %q", tmplOp.Content, "template body")
 	}
@@ -191,7 +191,7 @@ func TestEmitSkill_NoREADMEAtSkillsParent(t *testing.T) {
 		if op.Path == ".claude/skills/README.md" {
 			t.Errorf("skill emission must not create %q", op.Path)
 		}
-		if op.Path == ".claude/skills/aienvs-coder/README.md" {
+		if op.Path == ".claude/skills/agent-sync-coder/README.md" {
 			t.Errorf("per-skill README would clash with skill-discovery semantics; got %q", op.Path)
 		}
 	}
@@ -206,8 +206,8 @@ func TestEmitSkill_ZeroAssetsEmitsOnlySKILLMd(t *testing.T) {
 	}
 	got := emitted.records()
 	want := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/aienvs-empty"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/aienvs-empty/SKILL.md"},
+		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/agent-sync-empty"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-empty/SKILL.md"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("zero-asset skill ops mismatch:\n got: %+v\nwant: %+v", got, want)
@@ -221,7 +221,7 @@ func TestEmitSkill_RejectsAssetRelPathTraversal(t *testing.T) {
 		name    string
 		relPath string
 	}{
-		{"sibling skill", "../aienvs-victim/SKILL.md"},
+		{"sibling skill", "../agent-sync-victim/SKILL.md"},
 		{"workspace escape", "../../../etc/passwd"},
 		{"absolute path", "/etc/passwd"},
 		{"backslash", "subdir\\foo.txt"},
@@ -273,7 +273,7 @@ func TestEmitMCPServerEntry_HappyPath(t *testing.T) {
 
 	wantRecords := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindWriteToolOwned, Path: ".mcp.json"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".aienvs-managed"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agent-sync-managed"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
@@ -286,8 +286,8 @@ func TestEmitMCPServerEntry_HappyPath(t *testing.T) {
 	if mcp.Kind != adapterkit.ToolOwnedKindJSONPointer {
 		t.Errorf("locator kind=%q want %q", mcp.Kind, adapterkit.ToolOwnedKindJSONPointer)
 	}
-	if mcp.Locator != "/mcpServers/aienvs_lsp" {
-		t.Errorf("locator=%q want %q", mcp.Locator, "/mcpServers/aienvs_lsp")
+	if mcp.Locator != "/mcpServers/agentsync_lsp" {
+		t.Errorf("locator=%q want %q", mcp.Locator, "/mcpServers/agentsync_lsp")
 	}
 	if !json.Valid(mcp.Content) {
 		t.Errorf(".mcp.json entry content is not valid JSON: %q", mcp.Content)
@@ -381,7 +381,7 @@ func TestEmitMCPServerEntry_DedupsSidecarAcrossMultipleNodes(t *testing.T) {
 	sidecarCount := 0
 	mcpEntries := 0
 	for _, op := range got {
-		if op.Path == ".aienvs-managed" {
+		if op.Path == ".agent-sync-managed" {
 			sidecarCount++
 		}
 		if op.Path == ".mcp.json" {
@@ -389,7 +389,7 @@ func TestEmitMCPServerEntry_DedupsSidecarAcrossMultipleNodes(t *testing.T) {
 		}
 	}
 	if sidecarCount != 1 {
-		t.Errorf(".aienvs-managed sidecar must be emitted exactly once per emit; got %d", sidecarCount)
+		t.Errorf(".agent-sync-managed sidecar must be emitted exactly once per emit; got %d", sidecarCount)
 	}
 	if mcpEntries != 2 {
 		t.Errorf("each mcp-server-entry must produce its own write_tool_owned op; got %d", mcpEntries)
@@ -415,14 +415,14 @@ func TestEmitAgentsMD_WrapsBodyInSection(t *testing.T) {
 	if md.Kind != adapterkit.ToolOwnedKindMarkdownSection {
 		t.Errorf("locator kind=%q want %q", md.Kind, adapterkit.ToolOwnedKindMarkdownSection)
 	}
-	if md.Locator != "aienvs:claude" {
-		t.Errorf("locator=%q want %q", md.Locator, "aienvs:claude")
+	if md.Locator != "agent-sync:claude" {
+		t.Errorf("locator=%q want %q", md.Locator, "agent-sync:claude")
 	}
 	body := string(md.Content)
-	if !strings.Contains(body, "<!-- aienvs:begin id=claude -->") {
+	if !strings.Contains(body, "<!-- agent-sync:begin id=claude -->") {
 		t.Errorf("CLAUDE.md content missing begin marker; got %q", body)
 	}
-	if !strings.Contains(body, "<!-- aienvs:end id=claude -->") {
+	if !strings.Contains(body, "<!-- agent-sync:end id=claude -->") {
 		t.Errorf("CLAUDE.md content missing end marker; got %q", body)
 	}
 	if !strings.Contains(body, "## Build commands") {
@@ -437,9 +437,9 @@ func TestEmitAgentsMD_RejectsBodyContainingMarkerSyntax(t *testing.T) {
 		name string
 		body string
 	}{
-		{"injected end marker", `"legitimate\n<!-- aienvs:end id=other -->\nINJECTED"`},
-		{"injected begin marker", `"<!-- aienvs:begin id=victim --> hostile"`},
-		{"raw marker prefix", `"<!-- aienvs:anything"`},
+		{"injected end marker", `"legitimate\n<!-- agent-sync:end id=other -->\nINJECTED"`},
+		{"injected begin marker", `"<!-- agent-sync:begin id=victim --> hostile"`},
+		{"raw marker prefix", `"<!-- agent-sync:anything"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -551,10 +551,10 @@ func TestEmit_DeduplicatesREADMEPerSubdir(t *testing.T) {
 	}
 	got := emitted.records()
 	want := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".claude/rules/aienvs"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/aienvs/README.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/aienvs/first.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/aienvs/second.md"},
+		{Op: adapterkit.OpKindMkdir, Path: ".claude/rules/agent-sync"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/agent-sync/README.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/agent-sync/first.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".claude/rules/agent-sync/second.md"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", got, want)
@@ -580,12 +580,12 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 	}
 
 	expectPaths := []string{
-		".claude/rules/aienvs/house-style.md",
-		".claude/commands/aienvs/deploy.md",
-		".claude/skills/aienvs-coder/SKILL.md",
+		".claude/rules/agent-sync/house-style.md",
+		".claude/commands/agent-sync/deploy.md",
+		".claude/skills/agent-sync-coder/SKILL.md",
 		".mcp.json",
 		"CLAUDE.md",
-		".aienvs-managed",
+		".agent-sync-managed",
 	}
 	for _, want := range expectPaths {
 		if !containsPath(res.OpsPerformed, want) {

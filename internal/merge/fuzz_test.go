@@ -11,15 +11,15 @@ import (
 
 func FuzzMergeMarkdown(f *testing.F) {
 	f.Add("# doc\n\nhello\n")
-	f.Add("<!-- aienvs:begin id=foo -->\nold\n<!-- aienvs:end id=foo -->\n")
-	f.Add("  <!-- aienvs:begin id=other -->\nuser\n")
+	f.Add("<!-- agent-sync:begin id=foo -->\nold\n<!-- agent-sync:end id=foo -->\n")
+	f.Add("  <!-- agent-sync:begin id=other -->\nuser\n")
 	f.Fuzz(func(t *testing.T, existing string) {
 		out, _, _, err := mergeMarkdown([]byte(existing), mdUpsert("foo", "BODY\n"))
 		if err != nil {
 			return // refusal is fine; corruption/panic is not
 		}
 		// A successful upsert must yield a re-parseable file containing foo.
-		if !strings.Contains(string(out), "aienvs:begin id=foo") {
+		if !strings.Contains(string(out), "agent-sync:begin id=foo") {
 			t.Fatalf("upsert succeeded but foo section absent:\n%s", out)
 		}
 		if _, _, _, err := mergeMarkdown(out, mdUpsert("foo", "BODY2\n")); err != nil {
@@ -33,12 +33,12 @@ func FuzzMergeJSON(f *testing.F) {
 	f.Add(`{}`)
 	f.Add(`{"mcpServers":[1,2]}`)
 	f.Fuzz(func(t *testing.T, existing string) {
-		out, _, err := mergeJSON([]byte(existing), jsonUpsert("/mcpServers/aienvs_foo", `{"command":"node"}`))
+		out, _, err := mergeJSON([]byte(existing), jsonUpsert("/mcpServers/agentsync_foo", `{"command":"node"}`))
 		if err != nil {
 			return
 		}
 		// Successful merge must be valid JSON the engine can round-trip.
-		if _, _, err := mergeJSON(out, jsonRemove("/mcpServers/aienvs_foo")); err != nil {
+		if _, _, err := mergeJSON(out, jsonRemove("/mcpServers/agentsync_foo")); err != nil {
 			t.Fatalf("engine produced JSON it cannot re-merge: %v", err)
 		}
 	})
@@ -46,7 +46,7 @@ func FuzzMergeJSON(f *testing.F) {
 
 func FuzzMergeTOML(f *testing.F) {
 	f.Add("[general]\nname = \"x\"\n")
-	f.Add("note = \"\"\"\n[mcp_servers.aienvs_foo]\n\"\"\"\n")
+	f.Add("note = \"\"\"\n[mcp_servers.agentsync_foo]\n\"\"\"\n")
 	f.Add("")
 	f.Fuzz(func(t *testing.T, existing string) {
 		out, _, err := mergeTOML([]byte(existing), tomlUpsert("foo", "command = \"node\"\n"))

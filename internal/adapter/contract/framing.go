@@ -1,5 +1,5 @@
 // Package contract owns the on-the-wire types and parsers for the
-// aienvs/v1 adapter protocol. Anything that touches bytes flowing between
+// agent-sync/v1 adapter protocol. Anything that touches bytes flowing between
 // the CLI and an adapter belongs here; anything above the wire (process
 // management, lifecycle orchestration) lives in higher-level packages.
 //
@@ -22,7 +22,7 @@ import (
 
 // MediaType is the Content-Type value WriteFrame emits and ReadFrame
 // accepts. Adapters MUST use UTF-8 JSON; charset overrides are rejected.
-const MediaType = "application/aienvs-v1+json"
+const MediaType = "application/agent-sync-v1+json"
 
 // DefaultMaxFrameBytes caps a single frame body. Adapters can negotiate
 // per-op caps via capabilities, but a transport-level ceiling guards
@@ -61,7 +61,7 @@ var (
 	ErrMalformedHeader = errors.New("contract: malformed frame header")
 
 	// ErrUnsupportedMediaType is returned when Content-Type is present
-	// and names a media type other than application/aienvs-v1+json.
+	// and names a media type other than application/agent-sync-v1+json.
 	ErrUnsupportedMediaType = errors.New("contract: unsupported Content-Type")
 
 	// ErrUnsupportedCharset is returned when Content-Type's charset
@@ -91,7 +91,7 @@ var (
 // MIME parser:
 //
 //	Content-Length: <n>\r\n
-//	Content-Type: application/aienvs-v1+json; charset=utf-8\r\n
+//	Content-Type: application/agent-sync-v1+json; charset=utf-8\r\n
 //	\r\n
 //	<n bytes of payload>
 func WriteFrame(w io.Writer, payload []byte) error {

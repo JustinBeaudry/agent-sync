@@ -1,6 +1,6 @@
 name: claude
 version: "0.1"
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 reserved_prefix: .claude
 
 # concept_kinds is the authoritative per-IR-kind support declaration
@@ -13,34 +13,34 @@ concept_kinds:
     status: supported
     note: |
       Companion overlay: written into <workspace>/CLAUDE.md as a
-      managed section between aienvs:begin / aienvs:end markers.
+      managed section between agent-sync:begin / agent-sync:end markers.
       Project-level AGENTS.md is intentionally not written by the
       claude adapter — see docs/adapters/claude.md.
   rule:
     status: supported
     note: |
-      Emitted at .claude/rules/aienvs/<id>.md with the managed-file
+      Emitted at .claude/rules/agent-sync/<id>.md with the managed-file
       header. Bodies starting with `paths:` frontmatter trigger a
       degradation warning (Claude Code activation behavior is
       inconsistent with that frontmatter as of 2026-04).
   skill:
     status: supported
     note: |
-      Emitted at .claude/skills/aienvs-<id>/SKILL.md plus assets.
-      The aienvs- prefix on the skill folder gives ownership
+      Emitted at .claude/skills/agent-sync-<id>/SKILL.md plus assets.
+      The agent-sync- prefix on the skill folder gives ownership
       isolation while honoring Claude's
       skill-folder-name == skill-name constraint.
   command:
     status: supported
     note: |
-      Emitted at .claude/commands/aienvs/<id>.md. The aienvs/
-      subfolder gives free /aienvs:<id> slash-command namespacing.
+      Emitted at .claude/commands/agent-sync/<id>.md. The agent-sync/
+      subfolder gives free /agent-sync:<id> slash-command namespacing.
   mcp-server-entry:
     status: supported
     note: |
       Merged into <workspace>/.mcp.json under
-      /mcpServers/aienvs_<id> via the write_tool_owned op. A
-      sidecar .aienvs-managed marker is written next to the
+      /mcpServers/agentsync_<id> via the write_tool_owned op. A
+      sidecar .agent-sync-managed marker is written next to the
       strict-JSON file because JSON has no comment syntax.
   plugin-reference:
     status: unsupported

@@ -1,6 +1,6 @@
 name: cursor
 version: "0.1"
-contract_version: aienvs/v1
+contract_version: agent-sync/v1
 reserved_prefix: .cursor
 
 # concept_kinds is the authoritative per-IR-kind support declaration
@@ -13,13 +13,13 @@ concept_kinds:
     status: supported
     note: |
       Section-merged into the workspace-root AGENTS.md as a managed
-      section between aienvs:begin / aienvs:end markers. Cursor reads
+      section between agent-sync:begin / agent-sync:end markers. Cursor reads
       AGENTS.md at the project root. Unlike claude, this writes the
       namesake file directly rather than a CLAUDE.md companion.
   rule:
     status: supported
     note: |
-      Emitted at .cursor/rules/aienvs/<id>.mdc with the managed-file
+      Emitted at .cursor/rules/agent-sync/<id>.mdc with the managed-file
       header. v1 rules are frontmatter-less .mdc files (the IR strips
       frontmatter at decode); they behave as manual / agent-requested
       rules until IR frontmatter exposure lands. No paths: ward — that
@@ -27,8 +27,8 @@ concept_kinds:
   mcp-server-entry:
     status: supported
     note: |
-      Merged into .cursor/mcp.json under /mcpServers/aienvs_<id> via
-      the write_tool_owned op. A sidecar .cursor/.aienvs-managed
+      Merged into .cursor/mcp.json under /mcpServers/agentsync_<id> via
+      the write_tool_owned op. A sidecar .cursor/.agent-sync-managed
       marker is written next to the strict-JSON file because JSON has
       no comment syntax.
   skill:

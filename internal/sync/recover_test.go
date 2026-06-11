@@ -9,7 +9,7 @@ import (
 )
 
 func testSentinelRel(m Meta) string {
-	leafRel := path.Join(testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, testLeaf)
+	leafRel := path.Join(testParent, ".agent-sync-staging", m.Timestamp+"-"+m.SHA, testLeaf)
 	return sentinelRelFor(leafRel)
 }
 
@@ -62,7 +62,7 @@ func TestRecover_Step2DoneCleansOld(t *testing.T) {
 	if _, err := Stage(root, testParent, testLeaf, m); err != nil {
 		t.Fatalf("stage: %v", err)
 	}
-	s := Sentinel{Status: StatusStep2Done, PrefixRel: testPrefix, StagingLeafRel: path.Join(testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, testLeaf), SHA: m.SHA, StartedAt: m.Timestamp}
+	s := Sentinel{Status: StatusStep2Done, PrefixRel: testPrefix, StagingLeafRel: path.Join(testParent, ".agent-sync-staging", m.Timestamp+"-"+m.SHA, testLeaf), SHA: m.SHA, StartedAt: m.Timestamp}
 	if err := writeSentinel(root, testSentinelRel(m), s); err != nil {
 		t.Fatalf("seed sentinel: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestRecover_IdempotentOnCleanTree(t *testing.T) {
 func TestRecover_PrunesToLastThree(t *testing.T) {
 	t.Parallel()
 	root, ws := newWS(t)
-	stagingRoot := filepath.Join(ws, testParent, ".aienv-staging")
+	stagingRoot := filepath.Join(ws, testParent, ".agent-sync-staging")
 	gens := []string{"g1", "g2", "g3", "g4", "g5"}
 	for _, g := range gens {
 		if err := os.MkdirAll(filepath.Join(stagingRoot, g), 0o755); err != nil {
@@ -154,7 +154,7 @@ func TestRecover_PrunesToLastThree(t *testing.T) {
 func TestCleanScratch(t *testing.T) {
 	t.Parallel()
 	root, ws := newWS(t)
-	stagingRoot := filepath.Join(ws, testParent, ".aienv-staging")
+	stagingRoot := filepath.Join(ws, testParent, ".agent-sync-staging")
 	if err := os.MkdirAll(filepath.Join(stagingRoot, "g1"), 0o755); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -169,10 +169,10 @@ func TestCleanScratch(t *testing.T) {
 func TestSentinel_RoundTripAndStrictDecode(t *testing.T) {
 	t.Parallel()
 	root, _ := newWS(t)
-	if err := os.MkdirAll(filepath.Join(root.Path(), testParent, ".aienv-staging", "g"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root.Path(), testParent, ".agent-sync-staging", "g"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	rel := path.Join(testParent, ".aienv-staging", "g", ".state")
+	rel := path.Join(testParent, ".agent-sync-staging", "g", ".state")
 	in := Sentinel{Status: StatusStep1Done, Workspace: root.Path(), Target: "claude", SHA: "x", StartedAt: "t", PrefixRel: testPrefix, StagingLeafRel: testPrefix}
 	if err := writeSentinel(root, rel, in); err != nil {
 		t.Fatalf("write: %v", err)
@@ -185,11 +185,11 @@ func TestSentinel_RoundTripAndStrictDecode(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
 	// Unknown status rejected.
-	bad := filepath.Join(root.Path(), testParent, ".aienv-staging", "g", "bad.state")
+	bad := filepath.Join(root.Path(), testParent, ".agent-sync-staging", "g", "bad.state")
 	if err := os.WriteFile(bad, []byte(`{"status":"bogus"}`), 0o600); err != nil {
 		t.Fatalf("seed bad: %v", err)
 	}
-	if _, err := readSentinel(root, path.Join(testParent, ".aienv-staging", "g", "bad.state")); err == nil {
+	if _, err := readSentinel(root, path.Join(testParent, ".agent-sync-staging", "g", "bad.state")); err == nil {
 		t.Error("expected error for unknown status")
 	}
 }

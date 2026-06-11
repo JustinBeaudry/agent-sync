@@ -11,8 +11,8 @@ import (
 
 const (
 	testParent = ".claude/rules"
-	testLeaf   = "aienvs"
-	testPrefix = ".claude/rules/aienvs"
+	testLeaf   = "agent-sync"
+	testPrefix = ".claude/rules/agent-sync"
 )
 
 func newWS(t *testing.T) (*fsroot.Root, string) {
@@ -86,7 +86,7 @@ func TestSwap_HappyPath(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ws, testPrefix+".old")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf(".old not cleaned: %v", err)
 	}
-	sentinelRel := filepath.Join(ws, testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, ".state")
+	sentinelRel := filepath.Join(ws, testParent, ".agent-sync-staging", m.Timestamp+"-"+m.SHA, ".state")
 	if _, err := os.Stat(sentinelRel); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("sentinel not removed: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestSwap_Step2FailureLeavesRecoverableShape(t *testing.T) {
 	if _, e := os.Stat(filepath.Join(ws, s.StagingLeafRel)); e != nil {
 		t.Errorf("staging should be present: %v", e)
 	}
-	sentinelRel := filepath.Join(testParent, ".aienv-staging", m.Timestamp+"-"+m.SHA, sentinelPrefix+testLeaf)
+	sentinelRel := filepath.Join(testParent, ".agent-sync-staging", m.Timestamp+"-"+m.SHA, sentinelPrefix+testLeaf)
 	got, e := readSentinel(root, sentinelRel)
 	if e != nil {
 		t.Fatalf("read sentinel: %v", e)

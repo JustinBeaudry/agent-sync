@@ -62,10 +62,10 @@ func TestBundledAdapter_FullLifecycle(t *testing.T) {
 	want := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindWriteToolOwned, Path: "AGENTS.md"},
 		{Op: adapterkit.OpKindWriteToolOwned, Path: ".cursor/mcp.json"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/.aienvs-managed"},
-		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/aienvs"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/README.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/house-style.mdc"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/.agent-sync-managed"},
+		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/agent-sync"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/README.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/house-style.mdc"},
 		{Op: adapterkit.OpKindWarning, Path: ""},
 	}
 	if !reflect.DeepEqual(emit.OpsPerformed, want) {

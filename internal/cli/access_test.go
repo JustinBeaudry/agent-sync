@@ -37,7 +37,7 @@ func TestResolveAccess(t *testing.T) {
 			want: Access{IsTTY: true, Accessible: true, Output: OutputText},
 		},
 		{
-			name: "AIENVS_ACCESSIBLE is accessible",
+			name: "AGENT_SYNC_ACCESSIBLE is accessible",
 			in:   accessInput{stdinTTY: true, stdoutTTY: true, accessibleEnv: true},
 			want: Access{IsTTY: true, Accessible: true, Output: OutputText},
 		},

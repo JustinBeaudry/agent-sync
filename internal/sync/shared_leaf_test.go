@@ -16,11 +16,11 @@ func TestRecover_MultiLeafSentinelsDoNotCollide(t *testing.T) {
 	root, ws := newWS(t)
 
 	m := Meta{Timestamp: "20260610T010001Z", SHA: "leaf0001"}
-	leafA, err := Stage(root, testParent, "aienvs-a", m)
+	leafA, err := Stage(root, testParent, "agent-sync-a", m)
 	if err != nil {
 		t.Fatalf("stage A: %v", err)
 	}
-	leafB, err := Stage(root, testParent, "aienvs-b", m)
+	leafB, err := Stage(root, testParent, "agent-sync-b", m)
 	if err != nil {
 		t.Fatalf("stage B: %v", err)
 	}
@@ -34,8 +34,8 @@ func TestRecover_MultiLeafSentinelsDoNotCollide(t *testing.T) {
 		t.Fatalf("expected both sentinels in one gen dir; got %q vs %q", relA, relB)
 	}
 
-	prefixA := testParent + "/aienvs-a"
-	prefixB := testParent + "/aienvs-b"
+	prefixA := testParent + "/agent-sync-a"
+	prefixB := testParent + "/agent-sync-b"
 	// Seed: leaf A at step2_done with a lingering .old (cleanup-needed);
 	// leaf B at intend (crash before step1, staging to discard).
 	if err := os.MkdirAll(filepath.Join(ws, prefixA+".old"), 0o755); err != nil {

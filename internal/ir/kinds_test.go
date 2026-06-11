@@ -118,9 +118,9 @@ func TestExtractJSONFrontmatter_AllFields(t *testing.T) {
 	t.Parallel()
 
 	body := []byte(`{
-  "__aienvs_required": true,
-  "__aienvs_targets": ["claude"],
-  "__aienvs_version": 2,
+  "__agentsync_required": true,
+  "__agentsync_targets": ["claude"],
+  "__agentsync_version": 2,
   "command": "linear-server",
   "url": "https://example.com"
 }`)
@@ -131,7 +131,7 @@ func TestExtractJSONFrontmatter_AllFields(t *testing.T) {
 	if !fm.Required || fm.Version != 2 || len(fm.Targets) != 1 || fm.Targets[0] != "claude" {
 		t.Errorf("frontmatter wrong: %+v", fm)
 	}
-	if strings.Contains(string(stripped), "__aienvs_") {
+	if strings.Contains(string(stripped), "__agentsync_") {
 		t.Errorf("stripped body still contains reserved keys: %s", stripped)
 	}
 	if !strings.Contains(string(stripped), "linear-server") {
@@ -169,9 +169,9 @@ func TestExtractJSONFrontmatter_WrongTypes(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string][]byte{
-		"required not bool": []byte(`{"__aienvs_required": "yes"}`),
-		"targets not array": []byte(`{"__aienvs_targets": "claude"}`),
-		"version not int":   []byte(`{"__aienvs_version": "two"}`),
+		"required not bool": []byte(`{"__agentsync_required": "yes"}`),
+		"targets not array": []byte(`{"__agentsync_targets": "claude"}`),
+		"version not int":   []byte(`{"__agentsync_version": "two"}`),
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -284,7 +284,7 @@ func TestExtractMarkdownFrontmatter_BareCRDelimiterRejected(t *testing.T) {
 func TestExtractJSONFrontmatter_DeterministicOutput(t *testing.T) {
 	t.Parallel()
 
-	body := []byte(`{"b": 2, "a": 1, "__aienvs_version": 5, "z": 26}`)
+	body := []byte(`{"b": 2, "a": 1, "__agentsync_version": 5, "z": 26}`)
 	first, _, err := extractJSONFrontmatter(body)
 	if err != nil {
 		t.Fatalf("first: %v", err)

@@ -1,5 +1,5 @@
 // Package workspace resolves and represents a single agent-sync workspace —
-// the directory anchored by a `.aienv.yaml` manifest.
+// the directory anchored by a `.agent-sync.yaml` manifest.
 //
 // Every agent-sync invocation operates on exactly one resolved workspace
 // (plan decision R1). Multi-workspace isolation (plan decision #22) is
@@ -18,7 +18,7 @@ import (
 
 // ManifestName is the literal filename agent-sync looks for when walking up
 // from cwd. The suffix is singular by design — see docs/spec/manifest-v1.md.
-const ManifestName = ".aienv.yaml"
+const ManifestName = ".agent-sync.yaml"
 
 // DefaultMaxHops caps the upward walk. Picked as a safety net against
 // unbounded cycles on pathological filesystems (symlink loops,
@@ -30,7 +30,7 @@ const DefaultMaxHops = 64
 var (
 	// ErrNotFound is returned when no manifest was discovered up to the
 	// walk terminus (filesystem root or Options.StopAt).
-	ErrNotFound = errors.New("no .aienv.yaml workspace found")
+	ErrNotFound = errors.New("no .agent-sync.yaml workspace found")
 
 	// ErrMaxWalkExceeded is returned when discovery exceeds
 	// Options.MaxHops (or DefaultMaxHops) traversals. This is the v1
@@ -56,7 +56,7 @@ var (
 // safely pass Root to fsroot.OpenWorkspaceRoot and use ManifestPath
 // with manifest.LoadFile.
 type Workspace struct {
-	// ManifestPath is the absolute path to the resolved `.aienv.yaml`.
+	// ManifestPath is the absolute path to the resolved `.agent-sync.yaml`.
 	ManifestPath string
 
 	// Root is the absolute path to the directory containing
@@ -74,8 +74,8 @@ type Workspace struct {
 // Options controls discovery. All fields are optional.
 type Options struct {
 	// Workspace, if non-empty, short-circuits discovery. Accepts either
-	// a directory path (expected to contain a `.aienv.yaml`) or the
-	// path to a `.aienv.yaml` file directly.
+	// a directory path (expected to contain a `.agent-sync.yaml`) or the
+	// path to a `.agent-sync.yaml` file directly.
 	Workspace string
 
 	// StopAt, if non-empty, terminates the upward walk at this
@@ -89,11 +89,11 @@ type Options struct {
 	MaxHops int
 }
 
-// OptionsFromEnv reads AIENVS_WORKSPACE_STOP_AT into Options.StopAt.
+// OptionsFromEnv reads AGENT_SYNC_WORKSPACE_STOP_AT into Options.StopAt.
 // Callers (typically the CLI layer) merge these with flag-derived
 // options before calling Find.
 func OptionsFromEnv() Options {
 	return Options{
-		StopAt: os.Getenv("AIENVS_WORKSPACE_STOP_AT"),
+		StopAt: os.Getenv("AGENT_SYNC_WORKSPACE_STOP_AT"),
 	}
 }

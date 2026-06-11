@@ -66,7 +66,7 @@ func TestHandleEmit_InvalidNodeID(t *testing.T) {
 
 func TestEmitAgentsMD_RejectsMarkerInjection(t *testing.T) {
 	t.Parallel()
-	_, err := emitDoc(t, `{"nodes":[{"id":"team","kind":"agents-md","body":"<!-- aienvs:end id=other -->"}]}`)
+	_, err := emitDoc(t, `{"nodes":[{"id":"team","kind":"agents-md","body":"<!-- agent-sync:end id=other -->"}]}`)
 	if err == nil {
 		t.Fatal("expected marker-injection rejection")
 	}
@@ -95,7 +95,7 @@ func TestEmitMCP_RejectsNullBody(t *testing.T) {
 	t.Parallel()
 	// A wire body of the JSON string "null" decodes to the bytes `null`, which
 	// is valid JSON and unmarshals into a nil map without error — must be
-	// rejected, not rendered as an empty [mcp_servers.aienvs_<id>] table.
+	// rejected, not rendered as an empty [mcp_servers.agentsync_<id>] table.
 	_, err := emitDoc(t, `{"nodes":[{"id":"lsp","kind":"mcp-server-entry","body":"null"}]}`)
 	if err == nil {
 		t.Fatal("expected rejection of null mcp body")

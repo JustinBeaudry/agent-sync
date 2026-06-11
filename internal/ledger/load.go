@@ -16,7 +16,7 @@ import (
 // Wire paths are forward-slash regardless of host OS (cross-platform
 // learning); fsroot validates containment.
 func relPath(target string) string {
-	return ".aienv/state/" + target + ".json"
+	return ".agent-sync/state/" + target + ".json"
 }
 
 // Load reads and validates the ledger for target.

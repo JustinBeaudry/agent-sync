@@ -3,7 +3,7 @@
 // drift, remove orphans, and merge tool-owned slices surgically
 // without re-deriving ownership from the filesystem.
 //
-// The ledger lives at .aienv/state/<target>.json, written atomically
+// The ledger lives at .agent-sync/state/<target>.json, written atomically
 // through internal/fsroot. It is schema-versioned from day one
 // (SchemaVersionCurrent) so future shapes have a migration seam
 // (see migrate.go). This package ships the durable state primitive;

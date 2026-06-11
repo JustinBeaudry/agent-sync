@@ -81,8 +81,8 @@ func mergeJSON(existing []byte, e MergeEntry) (result []byte, sliceHash string, 
 	return result, sliceHash, nil
 }
 
-// pointerToSjsonPath converts a JSON pointer (/mcpServers/aienvs_foo)
-// to an sjson dot path (mcpServers.aienvs_foo), escaping sjson-special
+// pointerToSjsonPath converts a JSON pointer (/mcpServers/agentsync_foo)
+// to an sjson dot path (mcpServers.agentsync_foo), escaping sjson-special
 // characters (. * ? \) in each segment so a key that contains them is
 // treated literally.
 func pointerToSjsonPath(pointer string) (string, error) {

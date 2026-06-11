@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	mediaType          = "application/aienvs-v1+json"
+	mediaType          = "application/agent-sync-v1+json"
 	maxHeaderLineBytes = 8 * 1024
 	maxHeaderLines     = 32
 )

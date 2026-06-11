@@ -1,6 +1,6 @@
 package manifest
 
-// Manifest is the v1 schema for `.aienv.yaml`.
+// Manifest is the v1 schema for `.agent-sync.yaml`.
 //
 // NOTE: This is a strict schema. Unknown keys are rejected at load time,
 // except for forward-compat extension keys that start with `x-`.

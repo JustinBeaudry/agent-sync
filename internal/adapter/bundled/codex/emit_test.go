@@ -61,13 +61,13 @@ func TestEmitSkill_HappyPath(t *testing.T) {
 
 	res, ops := emitFixture(t, "skill-only.json")
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/aienvs-coder"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/aienvs-coder/SKILL.md"},
+		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
 	}
-	skillOp := findWriteFile(t, ops, ".agents/skills/aienvs-coder/SKILL.md")
+	skillOp := findWriteFile(t, ops, ".agents/skills/agent-sync-coder/SKILL.md")
 	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("SKILL.md missing managed header; got %q", skillOp.Content)
 	}
@@ -82,10 +82,10 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	res, _ := emitFixture(t, "skill-with-assets.json")
 	// Assets sorted by rel_path: examples/usage.md before templates/foo.txt.
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/aienvs-coder"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/aienvs-coder/SKILL.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/aienvs-coder/examples/usage.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/aienvs-coder/templates/foo.txt"},
+		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/examples/usage.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/templates/foo.txt"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
@@ -103,13 +103,13 @@ func TestEmitAgentsMD_HappyPath(t *testing.T) {
 	if op.Kind != adapterkit.ToolOwnedKindMarkdownSection {
 		t.Errorf("AGENTS.md op kind=%q want markdown-section", op.Kind)
 	}
-	if op.Locator != "aienvs:team" {
-		t.Errorf("AGENTS.md locator=%q want aienvs:team", op.Locator)
+	if op.Locator != "agent-sync:team" {
+		t.Errorf("AGENTS.md locator=%q want agent-sync:team", op.Locator)
 	}
 	content := string(op.Content)
 	// The engine owns the begin/end markers (rendered from the locator during
 	// the merge); the adapter sends the INNER body only.
-	if strings.Contains(content, "<!-- aienvs:") {
+	if strings.Contains(content, "<!-- agent-sync:") {
 		t.Errorf("AGENTS.md content must be inner body without markers; got %q", content)
 	}
 	if !strings.Contains(content, "Use conventional commits.") {
@@ -128,8 +128,8 @@ func TestEmitMCP_RendersValidTOMLBody(t *testing.T) {
 	if op.Kind != adapterkit.ToolOwnedKindTOMLPath {
 		t.Errorf("mcp op kind=%q want toml-path", op.Kind)
 	}
-	if op.Locator != "mcp_servers.aienvs_lsp" {
-		t.Errorf("mcp locator=%q want mcp_servers.aienvs_lsp", op.Locator)
+	if op.Locator != "mcp_servers.agentsync_lsp" {
+		t.Errorf("mcp locator=%q want mcp_servers.agentsync_lsp", op.Locator)
 	}
 	body := string(op.Content)
 	// Body is the table body (no header). Keys sorted: args, command, env.
@@ -145,7 +145,7 @@ func TestEmitMCP_RendersValidTOMLBody(t *testing.T) {
 	// The body must parse as valid TOML once placed under a table header
 	// (this is what the string-aware line-splice merge validates).
 	var m map[string]any
-	if err := toml.Unmarshal([]byte("[mcp_servers.aienvs_lsp]\n"+body), &m); err != nil {
+	if err := toml.Unmarshal([]byte("[mcp_servers.agentsync_lsp]\n"+body), &m); err != nil {
 		t.Fatalf("rendered toml body does not parse under a header: %v\nbody:\n%s", err, body)
 	}
 }
@@ -177,10 +177,10 @@ func TestEmitMixed_EmitsAllSupported(t *testing.T) {
 
 	res, _ := emitFixture(t, "mixed-everything.json")
 	wantPaths := map[string]bool{
-		".agents/skills/aienvs-coder":          false,
-		".agents/skills/aienvs-coder/SKILL.md": false,
-		".codex/config.toml":                   false,
-		"AGENTS.md":                            false,
+		".agents/skills/agent-sync-coder":          false,
+		".agents/skills/agent-sync-coder/SKILL.md": false,
+		".codex/config.toml":                       false,
+		"AGENTS.md":                                false,
 	}
 	for _, r := range res.OpsPerformed {
 		if _, ok := wantPaths[r.Path]; ok {

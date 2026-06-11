@@ -111,7 +111,7 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.E
 	emitted := &emittedOps{}
 
 	// readmeEmitted dedups per-subdir mkdir+README pairs.
-	// sidecarEmitted dedups the .aienvs-managed sidecar (only ever
+	// sidecarEmitted dedups the .agent-sync-managed sidecar (only ever
 	// written next to .mcp.json; one per emit regardless of how many
 	// mcp-server-entry nodes are present).
 	state := emitState{

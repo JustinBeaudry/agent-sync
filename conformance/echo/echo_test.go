@@ -60,7 +60,7 @@ func TestReferenceEchoRequiresCookie(t *testing.T) {
 	cmd.Env = []string{}
 	err := cmd.Run()
 	if err == nil {
-		t.Fatal("Run succeeded without AIENVS_ADAPTER_COOKIE")
+		t.Fatal("Run succeeded without AGENT_SYNC_ADAPTER_COOKIE")
 	}
 
 	var exitErr *exec.ExitError
@@ -132,7 +132,7 @@ func buildReferenceEchoBinary() (string, error) {
 		return "", err
 	}
 	echoBinaryCacheDirOnce.Do(func() {
-		echoBinaryCacheDir, echoBinaryCacheDirErr = os.MkdirTemp("", "aienvs-conformance-echo-bin-")
+		echoBinaryCacheDir, echoBinaryCacheDirErr = os.MkdirTemp("", "agent-sync-conformance-echo-bin-")
 	})
 	if echoBinaryCacheDirErr != nil {
 		return "", echoBinaryCacheDirErr

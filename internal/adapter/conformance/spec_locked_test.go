@@ -97,7 +97,7 @@ func buildReferenceEchoBinaryForSpec() (string, error) {
 		name += ".exe"
 	}
 	conformanceTestBinaryDirOnce.Do(func() {
-		conformanceTestBinaryDir, conformanceTestBinaryDirErr = os.MkdirTemp("", "aienvs-conformance-test-bin-")
+		conformanceTestBinaryDir, conformanceTestBinaryDirErr = os.MkdirTemp("", "agent-sync-conformance-test-bin-")
 	})
 	if conformanceTestBinaryDirErr != nil {
 		return "", conformanceTestBinaryDirErr
@@ -129,7 +129,7 @@ func loadSpecExamples(path string) ([]specExample, error) {
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		switch {
-		case strings.HasPrefix(line, "```aienvs:fixture-name"):
+		case strings.HasPrefix(line, "```agent-sync:fixture-name"):
 			if pendingName != "" {
 				return nil, fmt.Errorf("directive for %q missing json block before next directive", pendingName)
 			}

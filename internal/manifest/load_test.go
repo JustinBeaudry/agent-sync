@@ -303,11 +303,11 @@ canonical:
   url: https://example.com/repo.git
 adapters:
   - name: claude
-    command: [aienvs-adapter-claude]
+    command: [agent-sync-adapter-claude]
     version: "0.1.0"
     reserved_prefix: .claude/
   - name: cursor
-    command: [aienvs-adapter-cursor, --strict]
+    command: [agent-sync-adapter-cursor, --strict]
     reserved_prefix: .cursor
 `
 	m, err := manifest.LoadBytes([]byte(src), manifest.LoadOptions{})
@@ -323,7 +323,7 @@ adapters:
 	if m.Adapters[0].ReservedPrefix != ".claude" {
 		t.Errorf("adapters[0].reserved_prefix should be normalized (no trailing slash), got %q", m.Adapters[0].ReservedPrefix)
 	}
-	if !equalSlices(m.Adapters[1].Command, []string{"aienvs-adapter-cursor", "--strict"}) {
+	if !equalSlices(m.Adapters[1].Command, []string{"agent-sync-adapter-cursor", "--strict"}) {
 		t.Errorf("adapters[1].command: %v", m.Adapters[1].Command)
 	}
 }
@@ -407,7 +407,7 @@ canonical:
   url: https://example.com/repo.git
 adapters:
   - name: foo
-    command: [aienvs-adapter-foo]
+    command: [agent-sync-adapter-foo]
     reserved_prefix: ` + strconvQuote(tc.prefix) + "\n"
 			_, err := manifest.LoadBytes([]byte(src), manifest.LoadOptions{})
 			if err == nil {

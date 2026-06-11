@@ -30,8 +30,8 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Create a workspace manifest (.aienv.yaml)",
-		Long: "Initialize a workspace by writing a .aienv.yaml manifest. Runs an " +
+		Short: "Create a workspace manifest (.agent-sync.yaml)",
+		Long: "Initialize a workspace by writing a .agent-sync.yaml manifest. Runs an " +
 			"interactive wizard on a TTY; with --non-interactive every value " +
 			"must be supplied via flags.",
 		SilenceUsage:  true,
@@ -111,7 +111,7 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				return fmt.Errorf("init: write manifest: %w", err)
 			}
 			// Confirm the written manifest re-loads cleanly; if it doesn't,
-			// remove it (best-effort) so a broken .aienv.yaml is never left
+			// remove it (best-effort) so a broken .agent-sync.yaml is never left
 			// stranding the user.
 			if _, err := manifest.LoadFile(target, manifest.LoadOptions{}); err != nil {
 				_ = os.Remove(target)

@@ -72,15 +72,15 @@ func TestEmitRule_HappyPath(t *testing.T) {
 	res, ops := emitFixture(t, "rule-only.json")
 
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/aienvs"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/README.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/no-fri.mdc"},
+		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/agent-sync"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/README.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/no-fri.mdc"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
 	}
 
-	ruleOp := findWriteFile(t, ops, ".cursor/rules/aienvs/no-fri.mdc")
+	ruleOp := findWriteFile(t, ops, ".cursor/rules/agent-sync/no-fri.mdc")
 	if !strings.HasPrefix(string(ruleOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("rule content missing managed header; got %q", ruleOp.Content)
 	}
@@ -94,7 +94,7 @@ func TestEmitRule_HappyPath(t *testing.T) {
 		t.Errorf("rule content missing body; got %q", ruleOp.Content)
 	}
 
-	readmeOp := findWriteFile(t, ops, ".cursor/rules/aienvs/README.md")
+	readmeOp := findWriteFile(t, ops, ".cursor/rules/agent-sync/README.md")
 	if !strings.Contains(string(readmeOp.Content), "agent-sync unmanage cursor") {
 		t.Errorf("README content missing exit path; got %q", readmeOp.Content)
 	}
@@ -110,9 +110,9 @@ func TestEmitRule_PathsFrontmatterEmitsNoWarning(t *testing.T) {
 	res, ops := emitFixture(t, "rule-with-paths-frontmatter.json")
 
 	wantRecords := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/aienvs"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/README.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/scoped-rule.mdc"},
+		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/agent-sync"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/README.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/scoped-rule.mdc"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch (expected no warning op):\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
@@ -126,7 +126,7 @@ func TestEmitRule_PathsFrontmatterEmitsNoWarning(t *testing.T) {
 	// Pin the cursor-specific invariant: the paths: frontmatter is
 	// passed through to the .mdc body unmodified (not stripped), so a
 	// regression that silently dropped frontmatter would fail here.
-	ruleOp := findWriteFile(t, ops, ".cursor/rules/aienvs/scoped-rule.mdc")
+	ruleOp := findWriteFile(t, ops, ".cursor/rules/agent-sync/scoped-rule.mdc")
 	if !strings.Contains(string(ruleOp.Content), "paths:") {
 		t.Errorf("paths: frontmatter must be preserved in the emitted .mdc; got %q", ruleOp.Content)
 	}
@@ -139,7 +139,7 @@ func TestEmitMCPServerEntry_HappyPath(t *testing.T) {
 
 	wantRecords := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindWriteToolOwned, Path: ".cursor/mcp.json"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/.aienvs-managed"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/.agent-sync-managed"},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
@@ -152,8 +152,8 @@ func TestEmitMCPServerEntry_HappyPath(t *testing.T) {
 	if mcp.Kind != adapterkit.ToolOwnedKindJSONPointer {
 		t.Errorf("locator kind=%q want %q", mcp.Kind, adapterkit.ToolOwnedKindJSONPointer)
 	}
-	if mcp.Locator != "/mcpServers/aienvs_lsp" {
-		t.Errorf("locator=%q want %q", mcp.Locator, "/mcpServers/aienvs_lsp")
+	if mcp.Locator != "/mcpServers/agentsync_lsp" {
+		t.Errorf("locator=%q want %q", mcp.Locator, "/mcpServers/agentsync_lsp")
 	}
 	if !json.Valid(mcp.Content) {
 		t.Errorf(".cursor/mcp.json entry content is not valid JSON: %q", mcp.Content)
@@ -205,7 +205,7 @@ func TestEmitMCPServerEntry_DedupsSidecarAcrossMultipleNodes(t *testing.T) {
 	sidecarCount := 0
 	mcpEntries := 0
 	for _, op := range got {
-		if op.Path == ".cursor/.aienvs-managed" {
+		if op.Path == ".cursor/.agent-sync-managed" {
 			sidecarCount++
 		}
 		if op.Path == ".cursor/mcp.json" {
@@ -213,7 +213,7 @@ func TestEmitMCPServerEntry_DedupsSidecarAcrossMultipleNodes(t *testing.T) {
 		}
 	}
 	if sidecarCount != 1 {
-		t.Errorf(".cursor/.aienvs-managed sidecar must be emitted exactly once per emit; got %d", sidecarCount)
+		t.Errorf(".cursor/.agent-sync-managed sidecar must be emitted exactly once per emit; got %d", sidecarCount)
 	}
 	if mcpEntries != 2 {
 		t.Errorf("each mcp-server-entry must produce its own write_tool_owned op; got %d", mcpEntries)
@@ -239,14 +239,14 @@ func TestEmitAgentsMD_SendsInnerBody(t *testing.T) {
 	if md.Kind != adapterkit.ToolOwnedKindMarkdownSection {
 		t.Errorf("locator kind=%q want %q", md.Kind, adapterkit.ToolOwnedKindMarkdownSection)
 	}
-	if md.Locator != "aienvs:team" {
-		t.Errorf("locator=%q want %q", md.Locator, "aienvs:team")
+	if md.Locator != "agent-sync:team" {
+		t.Errorf("locator=%q want %q", md.Locator, "agent-sync:team")
 	}
 	body := string(md.Content)
 	// The engine owns the begin/end markers (rendered from the locator during
 	// the merge); the adapter sends the INNER body only. Marker-wrapped content
 	// is rejected by the merge.
-	if strings.Contains(body, "<!-- aienvs:") {
+	if strings.Contains(body, "<!-- agent-sync:") {
 		t.Errorf("AGENTS.md content must be inner body without markers; got %q", body)
 	}
 	if !strings.Contains(body, "## Conventions") {
@@ -261,9 +261,9 @@ func TestEmitAgentsMD_RejectsBodyContainingMarkerSyntax(t *testing.T) {
 		name string
 		body string
 	}{
-		{"injected end marker", `"legitimate\n<!-- aienvs:end id=other -->\nINJECTED"`},
-		{"injected begin marker", `"<!-- aienvs:begin id=victim --> hostile"`},
-		{"raw marker prefix", `"<!-- aienvs:anything"`},
+		{"injected end marker", `"legitimate\n<!-- agent-sync:end id=other -->\nINJECTED"`},
+		{"injected begin marker", `"<!-- agent-sync:begin id=victim --> hostile"`},
+		{"raw marker prefix", `"<!-- agent-sync:anything"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -410,10 +410,10 @@ func TestEmit_DeduplicatesREADMEPerSubdir(t *testing.T) {
 	}
 	got := emitted.records()
 	want := []adapterkit.OpRecord{
-		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/aienvs"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/README.md"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/first.mdc"},
-		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/aienvs/second.mdc"},
+		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/agent-sync"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/README.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/first.mdc"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/second.mdc"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", got, want)
@@ -439,9 +439,9 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 	}
 
 	expectPaths := []string{
-		".cursor/rules/aienvs/house-style.mdc",
+		".cursor/rules/agent-sync/house-style.mdc",
 		".cursor/mcp.json",
-		".cursor/.aienvs-managed",
+		".cursor/.agent-sync-managed",
 		"AGENTS.md",
 	}
 	for _, want := range expectPaths {
@@ -508,10 +508,10 @@ func TestEmit_HandleEmit_SkipsOffTargetNodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
-	if !containsPath(res.OpsPerformed, ".cursor/rules/aienvs/mine.mdc") {
+	if !containsPath(res.OpsPerformed, ".cursor/rules/agent-sync/mine.mdc") {
 		t.Errorf("cursor-targeted rule must emit; got %+v", res.OpsPerformed)
 	}
-	if containsPath(res.OpsPerformed, ".cursor/rules/aienvs/theirs.mdc") {
+	if containsPath(res.OpsPerformed, ".cursor/rules/agent-sync/theirs.mdc") {
 		t.Errorf("claude-targeted rule must be skipped; got %+v", res.OpsPerformed)
 	}
 }

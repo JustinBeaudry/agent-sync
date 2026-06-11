@@ -12,8 +12,8 @@ import (
 )
 
 // openRoot opens a fresh fsroot.Root on a temp workspace with NO
-// pre-existing .aienv/ — so the first-sync directory-creation path is
-// actually exercised (a test that pre-created .aienv/state would mask
+// pre-existing .agent-sync/ — so the first-sync directory-creation path is
+// actually exercised (a test that pre-created .agent-sync/state would mask
 // the StagedWrite-doesn't-create-parents gap).
 func openRoot(t *testing.T) *fsroot.Root {
 	t.Helper()
@@ -26,7 +26,7 @@ func openRoot(t *testing.T) *fsroot.Root {
 }
 
 // writeRawLedger writes raw bytes to the ledger path for a target,
-// creating .aienv/state/ first. Used to simulate corrupted / odd
+// creating .agent-sync/state/ first. Used to simulate corrupted / odd
 // on-disk files.
 func writeRawLedger(t *testing.T, root *fsroot.Root, target string, data []byte) {
 	t.Helper()
@@ -45,8 +45,8 @@ func sampleLedger() Ledger {
 		SchemaVersion: SchemaVersionCurrent,
 		Target:        "claude",
 		Entries: []Entry{
-			{Path: ".claude/rules/aienvs/b.md", SHA256: "bbb", Size: 2, EmittedAt: ts},
-			{Path: ".claude/rules/aienvs/a.md", SHA256: "aaa", Size: 1, EmittedAt: ts},
+			{Path: ".claude/rules/agent-sync/b.md", SHA256: "bbb", Size: 2, EmittedAt: ts},
+			{Path: ".claude/rules/agent-sync/a.md", SHA256: "aaa", Size: 1, EmittedAt: ts},
 			{Path: ".mcp.json", SHA256: "ccc", Size: 3, EmittedAt: ts},
 		},
 	}
@@ -66,7 +66,7 @@ func TestWriteLoad_RoundTripSortedByPath(t *testing.T) {
 	if got.SchemaVersion != SchemaVersionCurrent || got.Target != "claude" {
 		t.Errorf("header mismatch: %+v", got)
 	}
-	wantOrder := []string{".claude/rules/aienvs/a.md", ".claude/rules/aienvs/b.md", ".mcp.json"}
+	wantOrder := []string{".claude/rules/agent-sync/a.md", ".claude/rules/agent-sync/b.md", ".mcp.json"}
 	if len(got.Entries) != len(wantOrder) {
 		t.Fatalf("entry count=%d want %d", len(got.Entries), len(wantOrder))
 	}

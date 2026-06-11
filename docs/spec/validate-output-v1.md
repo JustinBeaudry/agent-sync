@@ -24,7 +24,7 @@ without mutating the workspace. It is the CI drift guard.
   "targets": [
     {
       "target": "claude",
-      "would_create": [".claude/rules/aienvs/no-fri.md"],
+      "would_create": [".claude/rules/agent-sync/no-fri.md"],
       "would_update": [],
       "would_delete": [],
       "out_of_band_modified": [],

@@ -7,9 +7,9 @@
 // Locking needs a real OS file descriptor, which os.Root cannot
 // provide, so lock files resolve to absolute paths at the flock
 // boundary (joining the validated workspace root with a constant
-// .aienv/state/ segment). This deviation from the fsroot-only rule is
-// shared with internal/trust and is guarded: the .aienv and
-// .aienv/state path components are checked for symlinks through the
+// .agent-sync/state/ segment). This deviation from the fsroot-only rule is
+// shared with internal/trust and is guarded: the .agent-sync and
+// .agent-sync/state path components are checked for symlinks through the
 // fsroot Root before any lock FD is opened, so a symlinked prefix
 // cannot redirect a lock file outside the workspace.
 package locks
@@ -27,8 +27,8 @@ var (
 	// acquired within the bounded deadline. It names the path and holder.
 	ErrFileLockTimeout = errors.New("locks: timed out acquiring file lock")
 
-	// ErrUnsafeStatePrefix means .aienv or .aienv/state is a symlink /
+	// ErrUnsafeStatePrefix means .agent-sync or .agent-sync/state is a symlink /
 	// reparse point — refused before opening any lock FD so a symlinked
 	// prefix cannot redirect lock files outside the workspace.
-	ErrUnsafeStatePrefix = errors.New("locks: .aienv state-dir path component is a symlink")
+	ErrUnsafeStatePrefix = errors.New("locks: .agent-sync state-dir path component is a symlink")
 )

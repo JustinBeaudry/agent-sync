@@ -62,7 +62,7 @@ func newHooksInstallCommand(_ RootDeps) *cobra.Command {
 			}
 
 			res, err := hooks.Install(ws.Root, hooks.Options{
-				AienvsPath:    self,
+				AgentSyncPath: self,
 				WorkspacePath: ws.Root,
 				Replace:       replace,
 				Append:        appendHook,
@@ -90,7 +90,7 @@ func newHooksInstallCommand(_ RootDeps) *cobra.Command {
 func newHooksUninstallCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:           "uninstall",
-		Short:         "Remove aienvs-managed git hooks",
+		Short:         "Remove agent-sync-managed git hooks",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {

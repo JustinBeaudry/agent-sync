@@ -9,14 +9,14 @@ import (
 )
 
 // gitWorkspace makes a temp dir that is both a git repo and an agent-sync
-// workspace (has .aienv.yaml), so workspace.Find resolves it.
+// workspace (has .agent-sync.yaml), so workspace.Find resolves it.
 func gitWorkspace(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".aienv.yaml"),
+	if err := os.WriteFile(filepath.Join(dir, ".agent-sync.yaml"),
 		[]byte("version: 1\ncanonical:\n  local_path: /x\n  commit: abc\ntargets:\n  - claude\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

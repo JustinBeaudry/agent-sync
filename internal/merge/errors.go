@@ -1,6 +1,6 @@
 // Package merge provides the tool-owned-file merge engines that the
 // write_tool_owned op depends on: surgical insert/update/remove of
-// aienvs-managed entries inside user-owned files (.mcp.json,
+// agent-sync-managed entries inside user-owned files (.mcp.json,
 // .cursor/mcp.json, .codex/config.toml, AGENTS.md, CLAUDE.md) without
 // corrupting user-authored content.
 //

@@ -218,7 +218,7 @@ func TestFind_NotFoundAtFilesystemRoot(t *testing.T) {
 }
 
 func TestFind_ManifestIsDirectoryReturnsError(t *testing.T) {
-	// Create .aienv.yaml as a directory rather than a regular file.
+	// Create .agent-sync.yaml as a directory rather than a regular file.
 	tmp := t.TempDir()
 	manifestDir := filepath.Join(tmp, workspace.ManifestName)
 	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
@@ -259,7 +259,7 @@ func TestFind_StopAtOutsideAncestorChain(t *testing.T) {
 }
 
 func TestOptionsFromEnv(t *testing.T) {
-	t.Setenv("AIENVS_WORKSPACE_STOP_AT", "/tmp/stop-here")
+	t.Setenv("AGENT_SYNC_WORKSPACE_STOP_AT", "/tmp/stop-here")
 	opts := workspace.OptionsFromEnv()
 	if opts.StopAt != "/tmp/stop-here" {
 		t.Errorf("StopAt = %q, want /tmp/stop-here", opts.StopAt)
@@ -300,7 +300,7 @@ func TestFind_LogicalPathPreservedThroughSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink semantics differ on Windows; covered by dedicated windows test in a later unit")
 	}
-	// Layout: real/.aienv.yaml + link -> real. Find cwd via the link.
+	// Layout: real/.agent-sync.yaml + link -> real. Find cwd via the link.
 	// LogicalCwd should show the link path, not the resolved target.
 	tmp := t.TempDir()
 	realDir := filepath.Join(tmp, "real")
@@ -334,7 +334,7 @@ func TestFind_DanglingSymlinkReturnsError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink semantics differ on Windows")
 	}
-	// Create a .aienv.yaml symlink pointing at a nonexistent target.
+	// Create a .agent-sync.yaml symlink pointing at a nonexistent target.
 	// Find must return ErrManifestNotRegular, not silently walk to an ancestor.
 	tmp := t.TempDir()
 	manifestPath := filepath.Join(tmp, workspace.ManifestName)

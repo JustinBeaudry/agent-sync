@@ -12,17 +12,17 @@ import (
 )
 
 const (
-	rulesSubdir    = ".claude/rules/aienvs"
-	commandsSubdir = ".claude/commands/aienvs"
+	rulesSubdir    = ".claude/rules/agent-sync"
+	commandsSubdir = ".claude/commands/agent-sync"
 	skillsParent   = ".claude/skills"
-	skillPrefix    = "aienvs-"
+	skillPrefix    = "agent-sync-"
 	skillEntryFile = "SKILL.md"
 )
 
 // emitRule maps one rule node to:
 //   - mkdir(.claude/rules/agent-sync)            (deduped per-emit)
-//   - write_file(.claude/rules/aienvs/README.md)  (deduped per-emit)
-//   - write_file(.claude/rules/aienvs/<id>.md)
+//   - write_file(.claude/rules/agent-sync/README.md)  (deduped per-emit)
+//   - write_file(.claude/rules/agent-sync/<id>.md)
 //   - warning op when the body opens with `paths:` frontmatter
 //     (Claude Code activation behavior is inconsistent with that
 //     frontmatter as of 2026-04).
@@ -87,13 +87,13 @@ func emitCommand(emitted *emittedOps, node irNode, state *emitState) error {
 }
 
 // emitSkill maps one skill node to:
-//   - mkdir(.claude/skills/aienvs-<id>)
-//   - write_file(.claude/skills/aienvs-<id>/SKILL.md)
-//   - write_file(.claude/skills/aienvs-<id>/<asset.RelPath>) for each asset
+//   - mkdir(.claude/skills/agent-sync-<id>)
+//   - write_file(.claude/skills/agent-sync-<id>/SKILL.md)
+//   - write_file(.claude/skills/agent-sync-<id>/<asset.RelPath>) for each asset
 //
 // Asset RelPaths are validated to stay inside the skill's own folder.
 // Without this check a malicious or buggy IR could escape into a
-// sibling skill folder via `../aienvs-victim/SKILL.md` — the runtime's
+// sibling skill folder via `../agent-sync-victim/SKILL.md` — the runtime's
 // declared-outputs gate accepts any cleaned path inside .claude/skills,
 // so per-skill containment must be enforced here.
 //
@@ -197,7 +197,7 @@ func validateAssetRelPath(skillID, relPath string) error {
 		}
 	}
 	// Reject directory-only paths. path.Clean(".") == "." which would
-	// produce an op path like ".claude/skills/aienvs-x/." pointing at
+	// produce an op path like ".claude/skills/agent-sync-x/." pointing at
 	// the skill directory itself, not a file. Reject before the sync
 	// engine has to handle it.
 	if cleaned == "." {
@@ -223,7 +223,7 @@ func validateAssetRelPath(skillID, relPath string) error {
 //
 // Returns InvalidParams if a node ID has already taken the README
 // path inside this subdir (e.g., a rule node literally named "README"
-// — its emitted path would be .../aienvs/README.md).
+// — its emitted path would be .../agent-sync/README.md).
 func ensureSubdir(emitted *emittedOps, subdir string, state *emitState) error {
 	if state.readmeEmitted[subdir] {
 		return nil

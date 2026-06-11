@@ -53,7 +53,7 @@ func writeWorkspace(t *testing.T, canonicalPath, sha string) string {
 		"trusted_sha: " + sha + "\n" +
 		"targets:\n" +
 		"  - claude\n"
-	if err := os.WriteFile(filepath.Join(ws, ".aienv.yaml"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, ".agent-sync.yaml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return ws
@@ -80,12 +80,12 @@ func TestSync_LocalPathEndToEnd(t *testing.T) {
 	}
 
 	// The rule file landed in the workspace.
-	ruleFile := filepath.Join(ws, ".claude", "rules", "aienvs", "no-fri.md")
+	ruleFile := filepath.Join(ws, ".claude", "rules", "agent-sync", "no-fri.md")
 	if _, statErr := os.Stat(ruleFile); statErr != nil {
 		t.Fatalf("expected rule file %s: %v", ruleFile, statErr)
 	}
 	// The ledger was written.
-	if _, statErr := os.Stat(filepath.Join(ws, ".aienv", "state", "claude.json")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(ws, ".agent-sync", "state", "claude.json")); statErr != nil {
 		t.Fatalf("expected ledger: %v", statErr)
 	}
 	_ = out
@@ -144,7 +144,7 @@ func TestSync_FloatingLocalPathUnsupported(t *testing.T) {
 	ws := t.TempDir()
 	// Manifest with local_path but no commit → floating, unsupported.
 	m := "version: 1\ncanonical:\n  local_path: " + canonical + "\ntargets:\n  - claude\n"
-	if err := os.WriteFile(filepath.Join(ws, ".aienv.yaml"), []byte(m), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, ".agent-sync.yaml"), []byte(m), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err := runSync(t, ws)

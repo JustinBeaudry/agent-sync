@@ -9,7 +9,7 @@ import (
 func TestLoadAdapterManifestFile_Valid(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "adapter.yaml")
-	src := "name: claude\ncontract_version: aienvs/v1\ncommand: [x]\n"
+	src := "name: claude\ncontract_version: agent-sync/v1\ncommand: [x]\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -20,8 +20,8 @@ func TestLoadAdapterManifestFile_Valid(t *testing.T) {
 	if m.Name != "claude" {
 		t.Fatalf("name = %q, want claude", m.Name)
 	}
-	if m.ContractVersion != "aienvs/v1" {
-		t.Fatalf("contract_version = %q, want aienvs/v1", m.ContractVersion)
+	if m.ContractVersion != "agent-sync/v1" {
+		t.Fatalf("contract_version = %q, want agent-sync/v1", m.ContractVersion)
 	}
 	if len(m.Command) != 1 || m.Command[0] != "x" {
 		t.Fatalf("command = %v, want [x]", m.Command)

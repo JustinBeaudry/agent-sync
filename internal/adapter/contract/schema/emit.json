@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aienvs.dev/schema/v1/emit.json",
-  "title": "aienvs/v1 emit method",
+  "$id": "https://agent-sync.dev/schema/v1/emit.json",
+  "title": "agent-sync/v1 emit method",
   "type": "object",
   "$defs": {
     "params": {

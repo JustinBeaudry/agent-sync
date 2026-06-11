@@ -30,7 +30,7 @@ type Config struct {
 	Paths []string
 
 	// IgnorePrefixes are path prefixes whose events are ignored — the
-	// workspace's .aienv/state and reserved output prefixes, so a sync's own
+	// workspace's .agent-sync/state and reserved output prefixes, so a sync's own
 	// writes never retrigger the watcher (self-loop guard).
 	IgnorePrefixes []string
 
@@ -90,7 +90,7 @@ func Run(ctx context.Context, cfg Config) error {
 	// directory, not a WRITE on the original file — so watching the file
 	// alone would miss the most common edit pattern. Events on the parent
 	// for unrelated siblings are filtered by the debounce + the eventual
-	// no-op sync (and by IgnorePrefixes for .aienv/*).
+	// no-op sync (and by IgnorePrefixes for .agent-sync/*).
 	watched := map[string]bool{}
 	addWatch := func(p string) {
 		if p == "" || watched[p] {

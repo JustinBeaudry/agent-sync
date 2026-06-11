@@ -163,7 +163,7 @@ func TestWriteTrustedSHA_OnlyUpdatesTrusted(t *testing.T) {
 
 func TestWriteFile_AtomicRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".aienv.yaml")
+	path := filepath.Join(dir, ".agent-sync.yaml")
 	content := []byte("version: 1\ncanonical:\n  url: https://example.com/x.git\n  ref: main\n")
 	if err := manifest.WriteFile(path, content); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -183,7 +183,7 @@ func TestWriteFile_AtomicRoundTrip(t *testing.T) {
 
 func TestWriteFile_OverwriteAtomic(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".aienv.yaml")
+	path := filepath.Join(dir, ".agent-sync.yaml")
 	if err := manifest.WriteFile(path, []byte("version: 1\ncanonical:\n  url: https://a.example.com/x.git\n")); err != nil {
 		t.Fatalf("first write: %v", err)
 	}

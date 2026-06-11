@@ -206,7 +206,7 @@ func Validate(m *Manifest, opts LoadOptions) error {
 }
 
 // reAdapterName mirrors the IR-id grammar. Adapter names must satisfy
-// it because they appear in PATH lookups (aienvs-adapter-<name>) and
+// it because they appear in PATH lookups (agent-sync-adapter-<name>) and
 // must be safe across filesystems.
 var reAdapterName = regexp.MustCompile(`\A[a-z0-9][a-z0-9_-]{0,63}\z`)
 

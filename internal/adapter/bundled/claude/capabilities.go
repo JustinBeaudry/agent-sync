@@ -72,23 +72,23 @@ func capabilitiesForWire() adapterkit.Capabilities {
 // outputs.
 func declaredOutputs() []adapterkit.DeclaredOutput {
 	mcpPointer := "/mcpServers"
-	claudeMDSection := "aienvs"
+	claudeMDSection := "agent-sync"
 	return []adapterkit.DeclaredOutput{
-		{Path: ".claude/rules/aienvs", Mode: adapterkit.OutputModeOwnedSubdir},
-		{Path: ".claude/commands/aienvs", Mode: adapterkit.OutputModeOwnedSubdir},
-		// .claude/skills holds aienvs-<id> leaf dirs alongside the user's own
+		{Path: ".claude/rules/agent-sync", Mode: adapterkit.OutputModeOwnedSubdir},
+		{Path: ".claude/commands/agent-sync", Mode: adapterkit.OutputModeOwnedSubdir},
+		// .claude/skills holds agent-sync-<id> leaf dirs alongside the user's own
 		// skills. shared-subdir → manage only our leaves, never the parent, so
-		// user skills survive a sync. (.claude/rules/aienvs and
-		// .claude/commands/aienvs are aienvs-exclusive, so they stay
+		// user skills survive a sync. (.claude/rules/agent-sync and
+		// .claude/commands/agent-sync are agent-sync-exclusive, so they stay
 		// owned-subdir and are swapped wholesale.)
 		{Path: ".claude/skills", Mode: adapterkit.OutputModeSharedSubdir},
 		{Path: ".mcp.json", Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},
 		{Path: "CLAUDE.md", Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &claudeMDSection},
-		// The strict-JSON sidecar marker (.aienvs-managed) is written
+		// The strict-JSON sidecar marker (.agent-sync-managed) is written
 		// next to .mcp.json at workspace root. Declared as
 		// owned-subdir on "." would over-broadly authorize the whole
 		// workspace, so we declare the sidecar file by exact path.
-		{Path: ".aienvs-managed", Mode: adapterkit.OutputModeOwnedSubdir},
+		{Path: ".agent-sync-managed", Mode: adapterkit.OutputModeOwnedSubdir},
 	}
 }
 

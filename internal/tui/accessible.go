@@ -8,7 +8,7 @@ import (
 )
 
 // Prompter drives a linear, screen-reader-friendly prompt loop used when
-// accessible mode is active (TERM=dumb or AIENVS_ACCESSIBLE=1) instead of
+// accessible mode is active (TERM=dumb or AGENT_SYNC_ACCESSIBLE=1) instead of
 // the full Bubble Tea TUI. It reads line-by-line from in and writes
 // prompts to out (the caller passes stderr/the TTY, never stdout).
 type Prompter struct {

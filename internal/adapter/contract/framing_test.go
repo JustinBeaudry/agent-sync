@@ -39,7 +39,7 @@ func TestWriteFrame_HeaderShape(t *testing.T) {
 	}
 
 	frame := buf.String()
-	wantPrefix := "Content-Length: 2\r\nContent-Type: application/aienvs-v1+json; charset=utf-8\r\n\r\n"
+	wantPrefix := "Content-Length: 2\r\nContent-Type: application/agent-sync-v1+json; charset=utf-8\r\n\r\n"
 	if !strings.HasPrefix(frame, wantPrefix) {
 		t.Fatalf("frame header mismatch:\nwant prefix %q\ngot         %q", wantPrefix, frame)
 	}
@@ -52,7 +52,7 @@ func TestReadFrame_AcceptsCaseInsensitiveHeaders(t *testing.T) {
 	t.Parallel()
 
 	body := "null"
-	raw := "content-length: 4\r\nCONTENT-TYPE: application/aienvs-v1+json; charset=utf-8\r\n\r\n" + body
+	raw := "content-length: 4\r\nCONTENT-TYPE: application/agent-sync-v1+json; charset=utf-8\r\n\r\n" + body
 
 	got, err := ReadFrame(strings.NewReader(raw), DefaultMaxFrameBytes)
 	if err != nil {
@@ -82,7 +82,7 @@ func TestReadFrame_AcceptsMissingContentTypeForBackwardCompat(t *testing.T) {
 func TestReadFrame_RejectsMissingContentLength(t *testing.T) {
 	t.Parallel()
 
-	raw := "Content-Type: application/aienvs-v1+json; charset=utf-8\r\n\r\nhi"
+	raw := "Content-Type: application/agent-sync-v1+json; charset=utf-8\r\n\r\nhi"
 	_, err := ReadFrame(strings.NewReader(raw), DefaultMaxFrameBytes)
 	if !errors.Is(err, ErrMissingContentLength) {
 		t.Fatalf("want ErrMissingContentLength, got %v", err)
@@ -112,7 +112,7 @@ func TestReadFrame_RejectsNegativeContentLength(t *testing.T) {
 func TestReadFrame_RejectsUnsupportedCharset(t *testing.T) {
 	t.Parallel()
 
-	raw := "Content-Length: 0\r\nContent-Type: application/aienvs-v1+json; charset=utf-16\r\n\r\n"
+	raw := "Content-Length: 0\r\nContent-Type: application/agent-sync-v1+json; charset=utf-16\r\n\r\n"
 	_, err := ReadFrame(strings.NewReader(raw), DefaultMaxFrameBytes)
 	if !errors.Is(err, ErrUnsupportedCharset) {
 		t.Fatalf("want ErrUnsupportedCharset, got %v", err)

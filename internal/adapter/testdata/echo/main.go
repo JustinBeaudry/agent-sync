@@ -13,7 +13,7 @@
 //     under .echo/<id> for each IR node
 //   - shutdown       → returns empty result, exits 0
 //
-// Reads AIENVS_ADAPTER_COOKIE; exits 7 if missing. Writes a single
+// Reads AGENT_SYNC_ADAPTER_COOKIE; exits 7 if missing. Writes a single
 // "echo: started\n" line to stderr so the runtime's stderr ring
 // buffer has something to capture.
 package main
@@ -33,9 +33,9 @@ import (
 var nodeIDPattern = regexp.MustCompile(`\A[a-z0-9][a-z0-9_-]{0,63}\z`)
 
 func main() {
-	cookie := os.Getenv("AIENVS_ADAPTER_COOKIE")
+	cookie := os.Getenv("AGENT_SYNC_ADAPTER_COOKIE")
 	if cookie == "" {
-		fmt.Fprintln(os.Stderr, "echo: AIENVS_ADAPTER_COOKIE not set")
+		fmt.Fprintln(os.Stderr, "echo: AGENT_SYNC_ADAPTER_COOKIE not set")
 		os.Exit(7)
 	}
 	fmt.Fprintln(os.Stderr, "echo: started")
@@ -102,7 +102,7 @@ func handle(req contract.Message, cookie string) contract.Response {
 func initResult(cookie string) json.RawMessage {
 	wire := contract.InitializeResult{
 		Server:          "echo/0.1",
-		ProtocolVersion: "aienvs/v1",
+		ProtocolVersion: "agent-sync/v1",
 		Capabilities: contract.Capabilities{
 			ConceptKinds: map[string]contract.CapabilityLevel{
 				"rule": contract.CapabilitySupported,

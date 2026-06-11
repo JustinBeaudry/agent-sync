@@ -9,7 +9,7 @@ import (
 
 // stagingDirName is the per-parent scratch directory that holds staged
 // generations, a sibling of the live reserved prefix.
-const stagingDirName = ".aienv-staging"
+const stagingDirName = ".agent-sync-staging"
 
 // Meta is the deterministic identity of one staged generation. The
 // caller stamps Timestamp and SHA (the core takes no wall-clock), so
@@ -23,12 +23,12 @@ type Meta struct {
 
 func (m Meta) gen() string { return m.Timestamp + "-" + m.SHA }
 
-// stagingGenRel returns <parentRel>/.aienv-staging/<gen>.
+// stagingGenRel returns <parentRel>/.agent-sync-staging/<gen>.
 func stagingGenRel(parentRel string, m Meta) string {
 	return path.Join(parentRel, stagingDirName, m.gen())
 }
 
-// Stage creates <parentRel>/.aienv-staging/<gen>/<leaf>/ and returns
+// Stage creates <parentRel>/.agent-sync-staging/<gen>/<leaf>/ and returns
 // its workspace-relative path. The caller writes the new generation's
 // contents into the returned dir, then calls Swap to promote it.
 func Stage(root *fsroot.Root, parentRel, leaf string, m Meta) (stagingLeafRel string, err error) {

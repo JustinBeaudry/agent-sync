@@ -39,7 +39,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	e := &testEnv{
 		t:            t,
 		tmp:          tmp,
-		manifestPath: filepath.Join(tmp, ".aienv.yaml"),
+		manifestPath: filepath.Join(tmp, ".agent-sync.yaml"),
 		store:        trust.NewStore(filepath.Join(tmp, "trust.jsonl")),
 		pending:      trust.NewPendingStore(filepath.Join(tmp, "pending.jsonl")),
 	}

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ContractVersionV1 = "aienvs/v1"
+	ContractVersionV1 = "agent-sync/v1"
 
 	MethodInitialize  = "initialize"
 	MethodInitialized = "initialized"
@@ -127,7 +127,7 @@ type InitializeResult struct {
 	Capabilities    Capabilities     `json:"capabilities"`
 	DeclaredOutputs []DeclaredOutput `json:"declared_outputs"`
 	// Echoed magic cookie value; runtime validates against the per-spawn
-	// AIENVS_ADAPTER_COOKIE.
+	// AGENT_SYNC_ADAPTER_COOKIE.
 	Cookie string          `json:"cookie,omitempty"`
 	Meta   json.RawMessage `json:"_meta,omitempty"`
 }

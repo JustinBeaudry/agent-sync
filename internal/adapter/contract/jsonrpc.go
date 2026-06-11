@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-// JSONRPCVersion is the literal string every aienvs/v1 envelope carries
+// JSONRPCVersion is the literal string every agent-sync/v1 envelope carries
 // in its "jsonrpc" field. Validated on parse; emitted on marshal.
 const JSONRPCVersion = "2.0"
 
@@ -168,7 +168,7 @@ func (id *ID) UnmarshalJSON(data []byte) error {
 }
 
 // Request is a JSON-RPC 2.0 request: an ID, a method, and optional
-// params. Carries the reserved _meta field per the aienvs/v1 contract.
+// params. Carries the reserved _meta field per the agent-sync/v1 contract.
 type Request struct {
 	ID     ID
 	Method string
@@ -241,7 +241,7 @@ func (r Response) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// Error is the JSON-RPC 2.0 error object plus the aienvs-specific Data
+// Error is the JSON-RPC 2.0 error object plus the agent-sync-specific Data
 // payload carrying error_class and arbitrary detail.
 type Error struct {
 	Code    int

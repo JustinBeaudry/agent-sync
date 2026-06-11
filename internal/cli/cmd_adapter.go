@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	conformanceVersion       = "aienvs/v1"
+	conformanceVersion       = "agent-sync/v1"
 	defaultCLIConformanceRE  = "^(happy|spec-example)-"
 	reportFormatJSON         = "json"
 	reportFormatText         = "text"
@@ -92,7 +92,7 @@ func newAdapterConformanceTestCmd(deps AdapterDeps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "conformance-test <binary>",
 		Short: "Run the frozen adapter conformance corpus against a binary",
-		Long: "Run the `aienvs/v1` adapter conformance corpus against a binary. " +
+		Long: "Run the `agent-sync/v1` adapter conformance corpus against a binary. " +
 			"By default, runs only positive (`happy-*`) and spec-locked (`spec-example-*`) fixtures. " +
 			"Use --include-adversarial to also run `error-*` fixtures, which require a hostile binary to pass — they will fail against a correct adapter.\n\n" +
 			"Exit codes:\n" +

@@ -10,10 +10,10 @@ import (
 
 const (
 	mcpJSONPath        = ".cursor/mcp.json"
-	mcpJSONPointerBase = "/mcpServers/aienvs_"
-	mcpSidecarPath     = ".cursor/.aienvs-managed"
+	mcpJSONPointerBase = "/mcpServers/agentsync_"
+	mcpSidecarPath     = ".cursor/.agent-sync-managed"
 	agentsMDPath       = "AGENTS.md"
-	sectionIDPrefix    = "aienvs:"
+	sectionIDPrefix    = "agent-sync:"
 )
 
 // markerOpenBytes is the literal HTML-comment opener every agent-sync
@@ -21,11 +21,11 @@ const (
 // when it contains this byte sequence: a hostile body could otherwise
 // inject a fake end-marker followed by a fake begin-marker, splitting
 // the managed section in AGENTS.md and confusing the merge step.
-var markerOpenBytes = []byte("<!-- aienvs:")
+var markerOpenBytes = []byte("<!-- agent-sync:")
 
 // emitMCPServerEntry emits one write_tool_owned op into
-// .cursor/mcp.json at /mcpServers/aienvs_<id>, plus a sidecar
-// .cursor/.aienvs-managed marker (deduplicated per emit) that
+// .cursor/mcp.json at /mcpServers/agentsync_<id>, plus a sidecar
+// .cursor/.agent-sync-managed marker (deduplicated per emit) that
 // advertises ownership next to the strict-JSON file.
 //
 // The body is required to parse as a JSON object. A scalar, array,
@@ -78,8 +78,8 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 }
 
 // emitAgentsMD writes the agents-md node into AGENTS.md (workspace
-// root) as a managed section between <!-- aienvs:begin id=<id> -->
-// and <!-- aienvs:end id=<id> --> markers. AGENTS.md is tool-owned
+// root) as a managed section between <!-- agent-sync:begin id=<id> -->
+// and <!-- agent-sync:end id=<id> --> markers. AGENTS.md is tool-owned
 // (read by Cursor and other agents at the project root); user content
 // outside the managed section is preserved by the merge step
 // (Unit 12a).
@@ -90,7 +90,7 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 // plus multi-section merge (Units 12, 12a) serialize and combine them.
 //
 // The body is rejected when it contains the agent-sync marker opener.
-// Without this guard a body containing `<!-- aienvs:end id=other -->`
+// Without this guard a body containing `<!-- agent-sync:end id=other -->`
 // could break out of its own section or forge another section
 // entirely, leaving the merged AGENTS.md with conflicting markers the
 // merge step has no way to resolve safely.

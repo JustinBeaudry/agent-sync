@@ -14,7 +14,7 @@ import (
 // InitConfig is every decision needed to write a fresh manifest. Both the
 // wizard and the non-interactive flag path fill it in.
 type InitConfig struct {
-	// Dir is the workspace directory to initialize (where .aienv.yaml is
+	// Dir is the workspace directory to initialize (where .agent-sync.yaml is
 	// written). Empty means the current directory.
 	Dir string
 
@@ -64,7 +64,7 @@ func (c InitConfig) Validate() error {
 	return nil
 }
 
-// ManifestYAML renders the config as a .aienv.yaml document. The output
+// ManifestYAML renders the config as a .agent-sync.yaml document. The output
 // round-trips through manifest.LoadFile. Validate must pass first.
 func (c InitConfig) ManifestYAML() ([]byte, error) {
 	if err := c.Validate(); err != nil {

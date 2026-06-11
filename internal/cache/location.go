@@ -12,9 +12,9 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// DirName is the fixed aienvs-owned subdirectory inside the chosen
+// DirName is the fixed agent-sync-owned subdirectory inside the chosen
 // cache root. All materialized clones live under <root>/<DirName>/<key>.
-const DirName = "aienvs/repos"
+const DirName = "agent-sync/repos"
 
 // AuditFileName is the name of the audit file each cache entry writes
 // recording the plain canonical URL associated with the key. The file
@@ -31,7 +31,7 @@ var ErrNoCacheRoot = errors.New("no cache root available")
 // Location describes where a materialized canonical-source clone lives.
 //
 // Root is the top-level cache directory (e.g.
-// "/home/alice/.cache/aienvs/repos"); Dir is <Root>/<key>; AuditPath is
+// "/home/alice/.cache/agent-sync/repos"); Dir is <Root>/<key>; AuditPath is
 // the file inside Dir that records the plain canonical URL for human
 // diagnosis.
 type Location struct {

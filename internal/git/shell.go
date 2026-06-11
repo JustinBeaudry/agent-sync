@@ -91,7 +91,7 @@ var (
 // [ErrGitNotFound] rather than propagating the raw error.
 func DetectGit() error {
 	detectOnce.Do(func() {
-		if override := strings.TrimSpace(os.Getenv("AIENVS_GIT_EXECUTABLE")); override != "" {
+		if override := strings.TrimSpace(os.Getenv("AGENT_SYNC_GIT_EXECUTABLE")); override != "" {
 			// gosec G204/G304: the override is an explicit opt-in env var
 			// for CI hosts that need to pin `git` to a known location.
 			// exec.LookPath validates that the override resolves to a
@@ -102,7 +102,7 @@ func DetectGit() error {
 			// later at exec time with a less specific error.
 			p, err := exec.LookPath(override) //nolint:gosec
 			if err != nil {
-				detectErr = fmt.Errorf("%w: AIENVS_GIT_EXECUTABLE=%q: %w", ErrGitNotFound, override, err)
+				detectErr = fmt.Errorf("%w: AGENT_SYNC_GIT_EXECUTABLE=%q: %w", ErrGitNotFound, override, err)
 				return
 			}
 			gitPath = p
@@ -126,7 +126,7 @@ func GitPath() string {
 }
 
 // resetDetectForTests allows the test binary to re-run detection with a
-// different AIENVS_GIT_EXECUTABLE. It is intentionally unexported.
+// different AGENT_SYNC_GIT_EXECUTABLE. It is intentionally unexported.
 func resetDetectForTests() {
 	detectOnce = sync.Once{}
 	detectErr = nil

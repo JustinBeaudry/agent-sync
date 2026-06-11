@@ -26,7 +26,7 @@ type Sentinel struct {
 	SHA            string `json:"sha"`
 	StartedAt      string `json:"started_at"`
 	PrefixRel      string `json:"prefix_rel"`       // e.g. .claude/rules/agent-sync
-	StagingLeafRel string `json:"staging_leaf_rel"` // e.g. .claude/rules/.aienv-staging/<gen>/agent-sync
+	StagingLeafRel string `json:"staging_leaf_rel"` // e.g. .claude/rules/.agent-sync-staging/<gen>/agent-sync
 }
 
 func validStatus(s Status) bool {

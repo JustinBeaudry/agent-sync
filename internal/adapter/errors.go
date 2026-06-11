@@ -23,7 +23,7 @@ import (
 var (
 	// ErrAdapterCookieMissing is returned when the adapter's
 	// initialize result omits the cookie field entirely. Likely cause:
-	// the adapter binary doesn't speak aienvs/v1, or someone ran it
+	// the adapter binary doesn't speak agent-sync/v1, or someone ran it
 	// outside the CLI handshake.
 	ErrAdapterCookieMissing = errors.New("adapter: initialize result missing cookie field")
 
@@ -32,7 +32,7 @@ var (
 	ErrAdapterCookieMismatch = errors.New("adapter: cookie mismatch")
 
 	// ErrAdapterProtocolMismatch is returned when the adapter's
-	// protocol_version is not "aienvs/v1". Counter-propose negotiation
+	// protocol_version is not "agent-sync/v1". Counter-propose negotiation
 	// is deferred to Unit 8b; PR 2 simply refuses on mismatch.
 	ErrAdapterProtocolMismatch = errors.New("adapter: protocol_version mismatch")
 

@@ -41,7 +41,7 @@ func makeCanonicalRepo(t *testing.T, files []canonicalFile) canonicalRepo {
 	dir := t.TempDir()
 	mustGit(t, dir, "init", "--initial-branch=main", "--quiet")
 	mustGit(t, dir, "config", "user.email", "test@agent-sync.invalid")
-	mustGit(t, dir, "config", "user.name", "aienvs-test")
+	mustGit(t, dir, "config", "user.name", "agent-sync-test")
 	mustGit(t, dir, "config", "init.defaultBranch", "main")
 
 	for _, f := range files {

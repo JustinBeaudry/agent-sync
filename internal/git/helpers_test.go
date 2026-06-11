@@ -42,7 +42,7 @@ func makeRepo(t *testing.T) testRepo {
 
 	mustGit(t, dir, "init", "--initial-branch=main", "--quiet")
 	mustGit(t, dir, "config", "user.email", "test@agent-sync.invalid")
-	mustGit(t, dir, "config", "user.name", "aienvs-test")
+	mustGit(t, dir, "config", "user.name", "agent-sync-test")
 	// Ensure the post-init working tree is clean of `init.defaultBranch`
 	// warnings so CombinedOutput stays quiet.
 	mustGit(t, dir, "config", "init.defaultBranch", "main")
@@ -120,7 +120,7 @@ func requireGit(t *testing.T) {
 }
 
 // withDetectReset ensures DetectGit's memo is cleared before and after
-// the test so AIENVS_GIT_EXECUTABLE overrides take effect.
+// the test so AGENT_SYNC_GIT_EXECUTABLE overrides take effect.
 func withDetectReset(t *testing.T) {
 	t.Helper()
 	resetDetectForTests()

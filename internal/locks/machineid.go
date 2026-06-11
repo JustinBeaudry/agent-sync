@@ -14,7 +14,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/fsroot"
 )
 
-const machineIDRel = ".aienv/state/machine-id"
+const machineIDRel = ".agent-sync/state/machine-id"
 
 // machineIDAttempts bounds the create/re-read retry loop that resolves
 // the first-sync create race and a crash-poisoned empty file.

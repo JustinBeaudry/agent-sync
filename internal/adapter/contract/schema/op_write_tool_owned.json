@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aienvs.dev/schema/v1/op_write_tool_owned.json",
-  "title": "aienvs/v1 write_tool_owned op",
+  "$id": "https://agent-sync.dev/schema/v1/op_write_tool_owned.json",
+  "title": "agent-sync/v1 write_tool_owned op",
   "type": "object",
   "properties": {
     "op": {"const": "write_tool_owned"},

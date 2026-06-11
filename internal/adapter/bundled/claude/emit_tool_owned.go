@@ -10,10 +10,10 @@ import (
 
 const (
 	mcpJSONPath        = ".mcp.json"
-	mcpJSONPointerBase = "/mcpServers/aienvs_"
+	mcpJSONPointerBase = "/mcpServers/agentsync_"
 	claudeMDPath       = "CLAUDE.md"
-	claudeMDSidecar    = ".aienvs-managed"
-	sectionIDPrefix    = "aienvs:"
+	claudeMDSidecar    = ".agent-sync-managed"
+	sectionIDPrefix    = "agent-sync:"
 )
 
 // markerOpenBytes is the literal HTML-comment opener every agent-sync
@@ -21,10 +21,10 @@ const (
 // when it contains this byte sequence: a hostile body could otherwise
 // inject a fake end-marker followed by a fake begin-marker, splitting
 // the managed section in CLAUDE.md and confusing the merge step.
-var markerOpenBytes = []byte("<!-- aienvs:")
+var markerOpenBytes = []byte("<!-- agent-sync:")
 
 // emitMCPServerEntry emits one write_tool_owned op into .mcp.json
-// at /mcpServers/aienvs_<id>, plus a sidecar .aienvs-managed marker
+// at /mcpServers/agentsync_<id>, plus a sidecar .agent-sync-managed marker
 // (deduplicated per emit) that advertises ownership next to the
 // strict-JSON file.
 //
@@ -79,13 +79,13 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 
 // emitAgentsMD writes the agents-md companion overlay into
 // CLAUDE.md (workspace root) as a managed section between
-// <!-- aienvs:begin id=<id> --> and <!-- aienvs:end id=<id> -->
+// <!-- agent-sync:begin id=<id> --> and <!-- agent-sync:end id=<id> -->
 // markers. CLAUDE.md is tool-owned by Claude Code; user content
 // outside the managed section is preserved by the merge step
 // (Unit 12a).
 //
 // The body is rejected when it contains the agent-sync marker opener.
-// Without this guard a body containing `<!-- aienvs:end id=other -->`
+// Without this guard a body containing `<!-- agent-sync:end id=other -->`
 // could break out of its own section or forge another section
 // entirely, leaving the merged CLAUDE.md with conflicting markers
 // the merge step has no way to resolve safely.

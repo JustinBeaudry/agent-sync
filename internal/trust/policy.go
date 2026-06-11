@@ -15,7 +15,7 @@ type DecideFlags struct {
 	AcceptNewSource string
 
 	// AcceptAny reflects --accept-new-source=any. Requires AcceptAnyPeerGate
-	// (from AIENVS_ALLOW_UNSAFE_ANY=1 env or --i-understand-this-is-dangerous)
+	// (from AGENT_SYNC_ALLOW_UNSAFE_ANY=1 env or --i-understand-this-is-dangerous)
 	// to take effect; otherwise ErrTrustDecisionRequired is returned.
 	AcceptAny         bool
 	AcceptAnyPeerGate bool
@@ -30,7 +30,7 @@ type DecideInput struct {
 	// ResolvedSHA is the 40-hex SHA the Git layer resolved.
 	ResolvedSHA string
 
-	// ManifestTrustedSHA is the value of `trusted_sha:` from `.aienv.yaml`.
+	// ManifestTrustedSHA is the value of `trusted_sha:` from `.agent-sync.yaml`.
 	// Empty string means absent.
 	ManifestTrustedSHA string
 
@@ -188,7 +188,7 @@ func Decide(in DecideInput) (Decision, error) {
 			if in.Flags.AcceptAny {
 				if !in.Flags.AcceptAnyPeerGate {
 					d.Kind = KindDecisionRequired
-					d.Remediation = "--accept-new-source=any requires AIENVS_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
+					d.Remediation = "--accept-new-source=any requires AGENT_SYNC_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
 					return d, fmt.Errorf("%w: accept-any peer gate missing", ErrTrustDecisionRequired)
 				}
 				d.Kind = KindProceed
@@ -199,7 +199,7 @@ func Decide(in DecideInput) (Decision, error) {
 			d.Kind = KindDecisionRequired
 			d.Remediation = fmt.Sprintf(
 				"known URL %s changed SHA (%s -> %s). "+
-					"Commit `trusted_sha: %s` to .aienv.yaml, "+
+					"Commit `trusted_sha: %s` to .agent-sync.yaml, "+
 					"or rerun with --accept-new-source=%s.",
 				in.URL, shortSHA(in.State.CurrentSHA), shortSHA(in.ResolvedSHA),
 				in.ResolvedSHA, in.ResolvedSHA,
@@ -243,7 +243,7 @@ func Decide(in DecideInput) (Decision, error) {
 		if in.Flags.AcceptAny {
 			if !in.Flags.AcceptAnyPeerGate {
 				d.Kind = KindDecisionRequired
-				d.Remediation = "--accept-new-source=any requires AIENVS_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
+				d.Remediation = "--accept-new-source=any requires AGENT_SYNC_ALLOW_UNSAFE_ANY=1 or --i-understand-this-is-dangerous."
 				return d, fmt.Errorf("%w: accept-any peer gate missing", ErrTrustDecisionRequired)
 			}
 			d.Kind = KindProceed
@@ -253,7 +253,7 @@ func Decide(in DecideInput) (Decision, error) {
 		d.Kind = KindDecisionRequired
 		d.Remediation = fmt.Sprintf(
 			"first use of %s (%s). Rerun interactively, or pass "+
-				"--accept-new-source=%s, or commit `trusted_sha: %s` to .aienv.yaml.",
+				"--accept-new-source=%s, or commit `trusted_sha: %s` to .agent-sync.yaml.",
 			in.URL, shortSHA(in.ResolvedSHA), in.ResolvedSHA, in.ResolvedSHA,
 		)
 		return d, fmt.Errorf("%w: first use of %s", ErrTrustDecisionRequired, in.URL)

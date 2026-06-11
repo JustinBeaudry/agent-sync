@@ -32,8 +32,8 @@ const MaxAdapterManifestBytes = 1 << 20
 
 // ContractVersionV1 is the only contract_version this build of agent-sync
 // recognizes. Future protocol versions land via Unit 8b under capability
-// negotiation; the wire form itself stays at aienvs/v1.
-const ContractVersionV1 = "aienvs/v1"
+// negotiation; the wire form itself stays at agent-sync/v1.
+const ContractVersionV1 = "agent-sync/v1"
 
 // AdapterManifest describes one adapter as declared by its on-disk
 // adapter.yaml. The manifest sits next to the binary on PATH and
@@ -42,7 +42,7 @@ const ContractVersionV1 = "aienvs/v1"
 type AdapterManifest struct {
 	// Name is the adapter's identifier. Must be a single token of
 	// [a-z0-9][a-z0-9-_]{0,63} — same shape as IR node ids. Used in
-	// PATH lookups (aienvs-adapter-<name>) and in the workspace
+	// PATH lookups (agent-sync-adapter-<name>) and in the workspace
 	// manifest's adapters: block.
 	Name string `yaml:"name"`
 
@@ -151,7 +151,7 @@ func LoadAdapterManifestBytes(src []byte) (*AdapterManifest, error) {
 }
 
 // SyntheticAdapterManifest constructs the implicit manifest used when
-// PATH discovery finds an aienvs-adapter-<name> binary without a
+// PATH discovery finds an agent-sync-adapter-<name> binary without a
 // sibling adapter.yaml. Name must already be validated by the caller —
 // adapter-id grammar is enforced via path matching upstream.
 //
@@ -159,14 +159,14 @@ func LoadAdapterManifestBytes(src []byte) (*AdapterManifest, error) {
 // adapter. Discovery passes the absolute path it resolved during
 // directory scan (filepath.Join(dir, e.Name())) so spawn-time exec
 // uses the exact binary discovery validated rather than re-resolving
-// "aienvs-adapter-<name>" through $PATH (TOCTOU: the second lookup
+// "agent-sync-adapter-<name>" through $PATH (TOCTOU: the second lookup
 // could pick up a different binary). When binaryPath is empty the
 // manifest falls back to the bare PATH-relative name; callers without
 // a resolved location only get the kubectl-plugin convention.
 func SyntheticAdapterManifest(name, binaryPath string) *AdapterManifest {
 	cmd := binaryPath
 	if cmd == "" {
-		cmd = "aienvs-adapter-" + name
+		cmd = "agent-sync-adapter-" + name
 	}
 	return &AdapterManifest{
 		Name:            name,

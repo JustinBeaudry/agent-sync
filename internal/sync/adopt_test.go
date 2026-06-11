@@ -28,7 +28,7 @@ func TestConfirmAdopt_RequiresTypedTargetName(t *testing.T) {
 func TestBackupRel_Shape(t *testing.T) {
 	t.Parallel()
 	got := BackupRel("claude", "20260608T010203Z")
-	want := ".aienv/state/backups/claude-20260608T010203Z.tar.gz"
+	want := ".agent-sync/state/backups/claude-20260608T010203Z.tar.gz"
 	if got != want {
 		t.Errorf("BackupRel = %s want %s", got, want)
 	}

@@ -42,12 +42,12 @@
     "id": 1,
     "method": "initialize",
     "params": {
-      "client": "aienvs",
+      "client": "agent-sync",
       "protocol_versions": [
-        "aienvs/v1"
+        "agent-sync/v1"
       ],
       "cookie": "0123456789abcdef0123456789abcdef",
-      "workspace_root": "/tmp/aienvs-conformance",
+      "workspace_root": "/tmp/agent-sync-conformance",
       "reserved_prefix": ".echo",
       "ir_version": "v1"
     }
