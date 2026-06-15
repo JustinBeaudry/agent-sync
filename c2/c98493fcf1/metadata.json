@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "c2c98493fcf1",
+  "strategy": "manual-commit",
+  "branch": "fix/dogfooding-readiness",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-06-15-001-fix-dogfooding-readiness-plan.md",
+    "internal/engine/agents_md_test.go",
+    "internal/engine/e2e_dogfood_test.go",
+    "internal/engine/plan.go",
+    "internal/engine/validate_idempotency_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c2/c98493fcf1/0/metadata.json",
+      "transcript": "/c2/c98493fcf1/0/full.jsonl",
+      "context": "/c2/c98493fcf1/0/context.md",
+      "content_hash": "/c2/c98493fcf1/0/content_hash.txt",
+      "prompt": "/c2/c98493fcf1/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 48464,
+    "cache_creation_tokens": 647125,
+    "cache_read_tokens": 31005954,
+    "output_tokens": 138880,
+    "api_call_count": 127
+  }
+}
