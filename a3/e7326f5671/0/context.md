@@ -44,3 +44,18 @@ Execute work efficiently while maintaining quality and finishing features.
 
 This command takes a work document (plan or specification) or a bare prompt describing the work, and executes it systematically. The focus is on **shipping complete features** by understanding requirements quickly, following existing...
 
+### Prompt 7
+
+Base directory for this skill: /Users/justinbeaudry/.claude/plugins/cache/compound-engineering-plugin/compound-engineering/3.9.3/skills/ce-code-review
+
+# Code Review
+
+Reviews code changes using dynamically selected reviewer personas. Spawns parallel sub-agents that return structured JSON, then merges and deduplicates findings into a single report.
+
+## When to Use
+
+- Before creating a PR
+- After completing a task during iterative implementation
+- When feedback is needed on any code changes
+- C...
+
