@@ -212,38 +212,50 @@ gate passes.
 
 **Goal:** After a clean `sync`, `validate` reports no drift and a second `sync`
 reports unchanged for tool-owned outputs (markdown sections, JSON, TOML), by
-comparing the desired slice hash against the stored ledger hash instead of
-unconditionally reporting `WouldUpdate`.
+asking "would a sync rewrite this file?" instead of unconditionally reporting
+`WouldUpdate`.
+
+> **Implementation note (diverged from the original plan — recorded per
+> AGENTS.md "update the plan in the same PR"):** The original plan proposed
+> comparing a recomputed *desired slice hash* against the stored ledger
+> `SHA256` and exposing a hash function from `markdown.go`/`json.go`/`toml.go`.
+> The shipped approach is cleaner and uniform: a new non-mutating
+> `merge.DryMerge` runs the *same* shared merge dispatch the write path uses and
+> byte-compares the merged result against the on-disk file. Because the merge is
+> idempotent, "merged == on-disk" is exactly "no sync would rewrite it" — this
+> captures IR changes and out-of-band edits inside the managed slice, preserves
+> user content outside it, and works identically for markdown/JSON/TOML without
+> per-kind hash plumbing or a ledger read. The CRLF-vs-LF byte-instability the
+> approach below flagged was found and fixed at its source (`renderManagedBlock`
+> normalizes the managed body's newlines to the file's dominant style).
 
 **Requirements:** G2
 
 **Dependencies:** none (independent of U1; both are exercised together in U3)
 
-**Files:**
-- Modify: `internal/engine/plan.go` (the `OpWriteToolOwned` branch at ~50-57):
-  compute the desired slice hash for the op and compare to
-  `oldByPath[o.Path].SHA256` — `WouldCreate` if path unknown, `WouldUpdate` only
-  on hash mismatch, otherwise unchanged (mirror the `OpWriteFile` branch at
-  61-68, including its out-of-band-edit check)
-- Modify: `internal/merge/markdown.go`, `internal/merge/json.go`,
-  `internal/merge/toml.go` — expose a non-mutating slice-hash computation so the
-  Plan path can compute the desired hash without performing the merge write
-  (e.g., a `SliceHash`/dry-run variant, or extract the hash step the merge funcs
-  already perform at `markdown.go:49`, `json.go:69`, `toml.go:101`). Keep the
-  write-path and compare-path hashing identical so they can never diverge
-- Add test: `internal/engine/*_test.go` — idempotency regression spanning
-  sync→Plan(validate)→sync for tool-owned files
-- Add/extend test: `internal/merge/*_test.go` — slice-hash is stable across
-  recompute and matches what the write path stores
+**Files (as shipped):**
+- Modify: `internal/engine/plan.go` (the `OpWriteToolOwned` branch): call
+  `merge.DryMerge` and classify `WouldCreate` (file absent) / `WouldUpdate`
+  (file present and would change) / unchanged, deduping by path when several
+  entries target one file. Adds a shared `mergeEntryFrom` helper (also used by
+  `target.go`) to bridge the `contract`/`adapterkit` `ToolOwnedKind` split.
+- Modify: `internal/merge/apply.go` — extract a shared `mergeDispatch` used by
+  both `ApplyToFile` (write) and the new `DryMerge` (read-only), plus
+  `readExistingForDry` (reports file existence for create-vs-update).
+- Modify: `internal/merge/markdown.go` — `renderManagedBlock` normalizes the
+  managed body's newlines to the detected file style (CRLF idempotency fix).
+- Add tests: `internal/engine/validate_idempotency_test.go` (sync→validate
+  clean, sync→sync unchanged, out-of-band detected, JSON/TOML across kinds) and
+  `internal/merge/markdown_test.go` (CRLF-file + LF-body idempotency).
 
-**Approach:** The write path already stores the correct slice hash in the ledger;
-the bug is purely that Plan never reads it. The single source of truth must be a
-shared slice-hash function used by both `merge.ApplyToFile` (write) and the new
-Plan comparison (read), so a normalization change in one can't desync the other.
-Audit the merge for byte-instability before locking the hash: trailing newline,
-CRLF vs LF, and any embedded path separators must be canonicalized consistently
-(see go-windows-cross-platform learning). If found, normalize in one place that
-both write and compare share.
+**Approach:** The write path already stores the correct slice hash in the ledger,
+but Plan never compared anything — it unconditionally flagged every ledgered
+tool-owned path. The fix routes both the sync write and the validate compare
+through one `mergeDispatch`, so the bytes Plan predicts are produced by the exact
+code sync writes; they cannot drift apart. The merge was audited for
+byte-instability (trailing newline, CRLF vs LF) per the go-windows-cross-platform
+learning; the CRLF case was real and fixed in the one shared place
+(`renderManagedBlock`).
 
 **Execution note:** Test-first — write the failing sync→validate-clean
 regression test (it reproduces today's false drift) before touching `plan.go`.
@@ -283,11 +295,16 @@ with an `AGENTS.md`, a rule, and a skill.
 **Dependencies:** U1, U2
 
 **Files:**
-- Add test: `internal/engine/e2e_dogfood_test.go` (or the closest existing
-  engine-level test home) — builds a temporary canonical git repo, runs the
-  engine pipeline for `claude`, `cursor`, and `codex`, and asserts the full
-  cycle. Use the existing engine test harness / `internal/gittest` helpers and
-  honor `AGENT_SYNC_REQUIRE_GIT`
+- Add test: `internal/engine/e2e_dogfood_test.go` — runs the engine pipeline for
+  `claude`, `cursor`, and `codex` over in-memory `ir.Node`s and asserts the full
+  cycle, including that the JSON/TOML/markdown tool-owned files are written with
+  the expected content and carry exactly one marker pair (cross-adapter parity).
+
+> **Implementation note:** The shipped test drives the engine directly with
+> `ir.Node` values via the existing `dogfoodReq` harness (mirroring
+> `shared_subdir_test.go`), so it needs no real git repo and does not use
+> `internal/gittest` or the `AGENT_SYNC_REQUIRE_GIT` guard — git materialization
+> is out of the engine's scope under test here.
 
 **Approach:** Construct a realistic canonical repo (one `AGENTS.md`, one
 `rules/<id>.md`, one `skills/<id>/SKILL.md` using agent-sync frontmatter), sync

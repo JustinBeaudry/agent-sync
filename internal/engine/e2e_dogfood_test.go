@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/agent-sync/agent-sync/internal/adapter"
@@ -72,6 +74,37 @@ func TestE2E_Dogfood_HappyPath(t *testing.T) {
 	done1()
 	if summary.Outcome.ExitCode != 0 {
 		t.Fatalf("sync 1 exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
+	}
+
+	// Tool-owned files were actually written, across all three merge kinds:
+	// markdown-section (CLAUDE.md/AGENTS.md), JSON (.mcp.json, .cursor/mcp.json),
+	// and TOML (.codex/config.toml). Asserting drift==false alone would not
+	// prove the files exist with the expected content.
+	for _, f := range []struct{ path, want string }{
+		{"CLAUDE.md", "Always write tests first."}, // claude agents-md
+		{"AGENTS.md", "Always write tests first."}, // cursor/codex agents-md
+		{".mcp.json", "echo-server"},               // claude JSON
+		{".cursor/mcp.json", "echo-server"},        // cursor JSON
+		{".codex/config.toml", "echo-server"},      // codex TOML
+	} {
+		got := readFileString(t, filepath.Join(ws, f.path))
+		if !strings.Contains(got, f.want) {
+			t.Errorf("%s missing %q after sync; got:\n%s", f.path, f.want, got)
+		}
+	}
+
+	// Cross-adapter marker parity: the engine owns the begin/end markers, so
+	// every agents-md emitter (claude->CLAUDE.md, cursor/codex->AGENTS.md) must
+	// produce exactly one well-formed pair — never a double-wrap. This guards
+	// the same bug fixed in the claude adapter against cursor/codex regressing.
+	for _, mdFile := range []string{"CLAUDE.md", "AGENTS.md"} {
+		body := readFileString(t, filepath.Join(ws, mdFile))
+		if n := strings.Count(body, "<!-- agent-sync:begin id=agents -->"); n != 1 {
+			t.Errorf("%s begin-marker count = %d, want 1 (double-wrap?):\n%s", mdFile, n, body)
+		}
+		if n := strings.Count(body, "<!-- agent-sync:end id=agents -->"); n != 1 {
+			t.Errorf("%s end-marker count = %d, want 1:\n%s", mdFile, n, body)
+		}
 	}
 
 	// Validate immediately after a clean sync: zero drift on every target.

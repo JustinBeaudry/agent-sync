@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,13 +46,4 @@ func TestSync_ClaudeAgentsMD_MergesThroughEngine(t *testing.T) {
 	if !strings.Contains(got, "Always write tests first.") {
 		t.Errorf("CLAUDE.md missing user body; got:\n%s", got)
 	}
-}
-
-func readFileString(t *testing.T, path string) string {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	return string(b)
 }

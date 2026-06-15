@@ -112,4 +112,42 @@ func TestPlan_ToolOwned_DetectsOutOfBandEdit(t *testing.T) {
 	if !plan.DriftDetected {
 		t.Fatalf("validate must report drift after an out-of-band edit inside the managed section; got none: %+v", plan.Targets)
 	}
+	// Drift must land in WouldUpdate (the file exists and would be rewritten),
+	// not WouldCreate/OutOfBand — a future refactor routing it elsewhere would
+	// otherwise pass the bare DriftDetected check while mis-reporting the kind.
+	if len(plan.Targets) != 1 || len(plan.Targets[0].WouldUpdate) != 1 || plan.Targets[0].WouldUpdate[0] != "CLAUDE.md" {
+		t.Errorf("expected WouldUpdate=[CLAUDE.md], got %+v", plan.Targets)
+	}
+}
+
+// TestPlan_MCPEntryIdempotent_NoDriftAcrossKinds locks the validate-idempotency
+// fix for the JSON and TOML tool-owned merge kinds (not just markdown): an
+// mcp-server-entry synced through all three adapters writes .mcp.json /
+// .cursor/mcp.json (JSON) and .codex/config.toml (TOML); validate immediately
+// after must report no drift for any of them.
+func TestPlan_MCPEntryIdempotent_NoDriftAcrossKinds(t *testing.T) {
+	ws := t.TempDir()
+	nodes := []ir.Node{
+		{ID: "echo", Kind: ir.KindMCPServerEntry, Version: 1, Body: []byte(`{"command":"echo-server"}`)},
+	}
+
+	req1, done1 := dogfoodReq(t, ws)
+	req1.Nodes = nodes
+	if summary, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("sync: %v", err)
+	} else if summary.Outcome.ExitCode != 0 {
+		t.Fatalf("sync exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
+	}
+	done1()
+
+	req2, done2 := dogfoodReq(t, ws)
+	req2.Nodes = nodes
+	plan, err := Plan(context.Background(), req2)
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	done2()
+	if plan.DriftDetected {
+		t.Fatalf("validate reported drift for JSON/TOML mcp entries after a clean sync: %+v", plan.Targets)
+	}
 }

@@ -191,7 +191,12 @@ func renderManagedBlock(id, source string, body []byte, nl string) string {
 	}
 	b.WriteString(" -->")
 	b.WriteString(nl)
-	bs := string(body)
+	// Normalize the body's newlines to the file's dominant style so the
+	// rendered block is uniformly LF or CRLF. An LF body spliced verbatim into
+	// a CRLF file produces a mixed-newline file whose dominant style
+	// detectNewline can misjudge on the next pass — flipping the marker newline
+	// and breaking merge idempotency (surfacing as false validate drift).
+	bs := normalizeNewlines(string(body), nl)
 	b.WriteString(bs)
 	if len(bs) == 0 || !strings.HasSuffix(bs, "\n") {
 		b.WriteString(nl)
@@ -199,6 +204,17 @@ func renderManagedBlock(id, source string, body []byte, nl string) string {
 	b.WriteString(markerOpen + "end id=" + id + " -->")
 	b.WriteString(nl)
 	return b.String()
+}
+
+// normalizeNewlines rewrites every CRLF and lone LF in s to nl. Used to keep a
+// managed block's body consistent with the surrounding file's newline style,
+// which is required for merge idempotency (see renderManagedBlock).
+func normalizeNewlines(s, nl string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	if nl != "\n" {
+		s = strings.ReplaceAll(s, "\n", nl)
+	}
+	return s
 }
 
 // detectNewline returns the dominant newline style of data, defaulting

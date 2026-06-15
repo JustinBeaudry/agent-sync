@@ -44,7 +44,8 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 	// sibling content under a shared tree.
 	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.ops, old.Entries)
 
-	desired := map[string]string{} // path -> sha256 (write_file only)
+	desired := map[string]string{}     // path -> sha256 (write_file only)
+	toolOwnedSeen := map[string]bool{} // tool-owned paths already classified
 	for _, op := range out.ops {
 		switch o := op.(type) {
 		case contract.OpWriteFile:
@@ -57,17 +58,25 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 			// managed slice reports drift; user content outside the slice never
 			// does. (The old code unconditionally reported WouldUpdate for any
 			// ledgered path, so validate always saw false drift.)
-			entry := merge.MergeEntry{Kind: adapterkit.ToolOwnedKind(o.Kind), Locator: o.Locator, Content: o.Content}
+			entry := mergeEntryFrom(o)
 			exists, changed, _, derr := merge.DryMerge(req.Root, o.Path, entry)
 			if derr != nil {
 				change.Error = derr.Error()
 				return change
 			}
+			// Several entries can target one file (e.g. two mcp-server-entry
+			// ops -> .mcp.json). Classify each path once: a missing file is a
+			// create; an existing file an update if any of its entries changed.
+			if toolOwnedSeen[o.Path] {
+				continue
+			}
 			switch {
 			case !exists:
 				change.WouldCreate = append(change.WouldCreate, o.Path)
+				toolOwnedSeen[o.Path] = true
 			case changed:
 				change.WouldUpdate = append(change.WouldUpdate, o.Path)
+				toolOwnedSeen[o.Path] = true
 			}
 		}
 	}
@@ -115,6 +124,16 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 	change.OutOfBand = sortedStrings(change.OutOfBand)
 	sort.Strings(change.Warnings)
 	return change
+}
+
+// mergeEntryFrom builds a merge.MergeEntry from a tool-owned op. The
+// adapterkit.ToolOwnedKind(o.Kind) cast bridges contract.ToolOwnedKind and
+// adapterkit.ToolOwnedKind — two parallel string types kept separate by the
+// contract/adapterkit package split, with identical underlying values. Shared
+// by the sync (target.go) and validate (plan.go) paths so the entry is built
+// identically on both.
+func mergeEntryFrom(o contract.OpWriteToolOwned) merge.MergeEntry {
+	return merge.MergeEntry{Kind: adapterkit.ToolOwnedKind(o.Kind), Locator: o.Locator, Content: o.Content}
 }
 
 // sortedStrings returns a sorted copy of in.
