@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "082adf211297",
+  "strategy": "manual-commit",
+  "branch": "fix/dogfooding-readiness",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/quickstart.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/08/2adf211297/0/metadata.json",
+      "transcript": "/08/2adf211297/0/full.jsonl",
+      "context": "/08/2adf211297/0/context.md",
+      "content_hash": "/08/2adf211297/0/content_hash.txt",
+      "prompt": "/08/2adf211297/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 49177,
+    "cache_creation_tokens": 709661,
+    "cache_read_tokens": 45015447,
+    "output_tokens": 179343,
+    "api_call_count": 161
+  }
+}
