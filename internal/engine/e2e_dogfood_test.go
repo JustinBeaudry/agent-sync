@@ -67,11 +67,11 @@ func TestE2E_Dogfood_HappyPath(t *testing.T) {
 	// Sync 1: every target must succeed (warnings for unsupported kinds are
 	// fine; failures are not).
 	req1, done1 := dogfoodReq(t, ws)
+	t.Cleanup(done1)
 	summary, err := Sync(context.Background(), req1)
 	if err != nil {
 		t.Fatalf("sync 1: %v", err)
 	}
-	done1()
 	if summary.Outcome.ExitCode != 0 {
 		t.Fatalf("sync 1 exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
 	}
@@ -109,11 +109,11 @@ func TestE2E_Dogfood_HappyPath(t *testing.T) {
 
 	// Validate immediately after a clean sync: zero drift on every target.
 	req2, done2 := dogfoodReq(t, ws)
+	t.Cleanup(done2)
 	plan, err := Plan(context.Background(), req2)
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	done2()
 	if plan.DriftDetected {
 		for _, tc := range plan.Targets {
 			t.Logf("target %q: create=%v update=%v delete=%v oob=%v", tc.Target, tc.WouldCreate, tc.WouldUpdate, tc.WouldDelete, tc.OutOfBand)
@@ -123,11 +123,11 @@ func TestE2E_Dogfood_HappyPath(t *testing.T) {
 
 	// Sync 2: nothing changed, still clean.
 	req3, done3 := dogfoodReq(t, ws)
+	t.Cleanup(done3)
 	summary2, err := Sync(context.Background(), req3)
 	if err != nil {
 		t.Fatalf("sync 2: %v", err)
 	}
-	done3()
 	if summary2.Outcome.ExitCode != 0 {
 		t.Fatalf("sync 2 exit = %d, want 0 (%+v)", summary2.Outcome.ExitCode, summary2.Outcome)
 	}

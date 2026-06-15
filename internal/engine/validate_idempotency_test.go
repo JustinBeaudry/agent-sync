@@ -22,19 +22,19 @@ func TestPlan_ToolOwnedIdempotent_NoDriftAfterCleanSync(t *testing.T) {
 
 	// Sync, then plan against the resulting tree — expect zero drift.
 	req1, done1 := claudeReqOn(t, ws, nodes)
+	t.Cleanup(done1)
 	if summary, err := Sync(context.Background(), req1); err != nil {
 		t.Fatalf("sync 1: %v", err)
 	} else if summary.Outcome.ExitCode != 0 {
 		t.Fatalf("sync 1 exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
 	}
-	done1()
 
 	req2, done2 := claudeReqOn(t, ws, nodes)
+	t.Cleanup(done2)
 	plan, err := Plan(context.Background(), req2)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	done2()
 
 	if plan.DriftDetected {
 		t.Fatalf("validate reported drift on an in-sync workspace: %+v", plan.Targets)
@@ -55,13 +55,14 @@ func TestSync_ToolOwnedIdempotent_SecondSyncUnchanged(t *testing.T) {
 	}
 
 	req1, done1 := claudeReqOn(t, ws, nodes)
+	t.Cleanup(done1)
 	if _, err := Sync(context.Background(), req1); err != nil {
 		t.Fatalf("sync 1: %v", err)
 	}
-	done1()
 	first := readFileString(t, filepath.Join(ws, "CLAUDE.md"))
 
 	req2, done2 := claudeReqOn(t, ws, nodes)
+	t.Cleanup(done2)
 	summary, err := Sync(context.Background(), req2)
 	if err != nil {
 		t.Fatalf("sync 2: %v", err)
@@ -69,7 +70,6 @@ func TestSync_ToolOwnedIdempotent_SecondSyncUnchanged(t *testing.T) {
 	if summary.Outcome.ExitCode != 0 {
 		t.Fatalf("sync 2 exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
 	}
-	done2()
 
 	if second := readFileString(t, filepath.Join(ws, "CLAUDE.md")); second != first {
 		t.Errorf("CLAUDE.md changed across identical syncs:\n--- first ---\n%s\n--- second ---\n%s", first, second)
@@ -86,10 +86,10 @@ func TestPlan_ToolOwned_DetectsOutOfBandEdit(t *testing.T) {
 	}
 
 	req1, done1 := claudeReqOn(t, ws, nodes)
+	t.Cleanup(done1)
 	if _, err := Sync(context.Background(), req1); err != nil {
 		t.Fatalf("sync 1: %v", err)
 	}
-	done1()
 
 	// Tamper inside the managed section.
 	mdPath := filepath.Join(ws, "CLAUDE.md")
@@ -103,11 +103,11 @@ func TestPlan_ToolOwned_DetectsOutOfBandEdit(t *testing.T) {
 	}
 
 	req2, done2 := claudeReqOn(t, ws, nodes)
+	t.Cleanup(done2)
 	plan, err := Plan(context.Background(), req2)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	done2()
 
 	if !plan.DriftDetected {
 		t.Fatalf("validate must report drift after an out-of-band edit inside the managed section; got none: %+v", plan.Targets)
@@ -132,21 +132,21 @@ func TestPlan_MCPEntryIdempotent_NoDriftAcrossKinds(t *testing.T) {
 	}
 
 	req1, done1 := dogfoodReq(t, ws)
+	t.Cleanup(done1)
 	req1.Nodes = nodes
 	if summary, err := Sync(context.Background(), req1); err != nil {
 		t.Fatalf("sync: %v", err)
 	} else if summary.Outcome.ExitCode != 0 {
 		t.Fatalf("sync exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
 	}
-	done1()
 
 	req2, done2 := dogfoodReq(t, ws)
+	t.Cleanup(done2)
 	req2.Nodes = nodes
 	plan, err := Plan(context.Background(), req2)
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	done2()
 	if plan.DriftDetected {
 		t.Fatalf("validate reported drift for JSON/TOML mcp entries after a clean sync: %+v", plan.Targets)
 	}

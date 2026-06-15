@@ -130,10 +130,20 @@ shipped. To remove agent-sync-managed content by hand in the meantime:
 
 ## Try the example
 
+`examples/canonical/` ships as plain files inside the agent-sync repo, not as a
+standalone repo. A local canonical source is resolved by commit SHA via
+`git.Open` (which opens the directory you point at — it does not walk up to a
+parent repo), so copy the example into its own git repo first:
+
 ```bash
-# From a scratch workspace directory:
-agent-sync init --local-path /path/to/agent-sync/examples/canonical \
-  --commit <sha-of-that-repo> --target claude --target cursor --target codex
+# Seed a standalone canonical repo from the bundled example:
+cp -r /path/to/agent-sync/examples/canonical /tmp/agent-config
+cd /tmp/agent-config && git init -q && git add -A && git commit -q -m "seed"
+SHA=$(git rev-parse HEAD)
+
+# Then, from a scratch workspace directory elsewhere:
+agent-sync init --local-path /tmp/agent-config --commit "$SHA" \
+  --target claude --target cursor --target codex
 agent-sync sync
 agent-sync validate    # → no drift
 ```
