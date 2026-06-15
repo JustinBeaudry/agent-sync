@@ -22,6 +22,17 @@ func fixedNow() func() time.Time {
 	return func() time.Time { return t }
 }
 
+// readFileString reads a workspace file and fails the test on error. Shared
+// across engine tests that assert on emitted file contents.
+func readFileString(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(b)
+}
+
 // newClaudeRequest builds a Request that syncs a single rule node through
 // the real bundled claude adapter into a fresh temp workspace.
 func newClaudeRequest(t *testing.T, nodes []ir.Node) (Request, string, func()) {

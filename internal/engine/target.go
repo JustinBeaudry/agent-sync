@@ -18,7 +18,6 @@ import (
 	"github.com/agent-sync/agent-sync/internal/locks"
 	"github.com/agent-sync/agent-sync/internal/merge"
 	syncpkg "github.com/agent-sync/agent-sync/internal/sync"
-	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 // genTimestampFormat is a fixed-width, lexically-sortable instant used
@@ -489,7 +488,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 		}
 		holder := "engine:" + target
 		for _, o := range toolOwned {
-			entry := merge.MergeEntry{Kind: adapterkit.ToolOwnedKind(o.Kind), Locator: o.Locator, Content: o.Content}
+			entry := mergeEntryFrom(o)
 			sliceHash, _, merr := merge.ApplyToFile(ctx, root, reg, o.Path, entry, holder)
 			if merr != nil {
 				return statusResult{}, fmt.Errorf("engine: merge %s: %w", o.Path, merr)

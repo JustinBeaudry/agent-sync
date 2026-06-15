@@ -110,6 +110,34 @@ func TestMergeMarkdown_NoOpUpsertByteIdentical(t *testing.T) {
 	}
 }
 
+// TestMergeMarkdown_CRLFFileWithLFBodyIsIdempotent guards the newline-flip
+// regression: an LF-ending body (as IR canonical content usually arrives)
+// spliced into a CRLF-authored file must produce a uniformly-newlined block,
+// so a second merge is byte-identical. Without body normalization the first
+// pass yields a mixed-newline file where the LF body lines outnumber the CRLF
+// lines, detectNewline flips LF<->CRLF on the next pass, the markers re-render,
+// and validate reports false drift forever.
+func TestMergeMarkdown_CRLFFileWithLFBodyIsIdempotent(t *testing.T) {
+	t.Parallel()
+	existing := "intro\r\n"
+	// Many LF lines so LF count exceeds the surrounding CRLF count.
+	body := "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\n"
+	first, h1, _, err := md(existing, mdUpsert("foo", body))
+	if err != nil {
+		t.Fatalf("first merge: %v", err)
+	}
+	second, h2, _, err := md(first, mdUpsert("foo", body))
+	if err != nil {
+		t.Fatalf("second merge: %v", err)
+	}
+	if second != first {
+		t.Errorf("merge not idempotent on CRLF file with LF body:\n first: %q\nsecond: %q", first, second)
+	}
+	if h1 != h2 {
+		t.Errorf("slice hash unstable across passes: %q vs %q", h1, h2)
+	}
+}
+
 func TestMergeMarkdown_MultiAdapterSectionsCoexist(t *testing.T) {
 	t.Parallel()
 	in := "<!-- agent-sync:begin id=cursor -->\nc\n<!-- agent-sync:end id=cursor -->\n"
