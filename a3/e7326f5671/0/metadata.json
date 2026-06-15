@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "a3e7326f5671",
+  "session_id": "bcc20973-5df5-4d11-ba6f-9011798a37f8",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-15T18:01:25.125457Z",
+  "branch": "fix/dogfooding-readiness",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/bundled/claude/emit_tool_owned.go",
+    "internal/adapter/bundled/claude/header.go",
+    "internal/adapter/bundled/claude/header_test.go",
+    "internal/adapter/bundled/claude/emit_test.go",
+    "internal/engine/agents_md_test.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "7feafa234bcd",
+  "token_usage": {
+    "input_tokens": 33436,
+    "cache_creation_tokens": 500862,
+    "cache_read_tokens": 9694550,
+    "output_tokens": 63863,
+    "api_call_count": 60
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-15T18:01:24.763217Z",
+    "agent_lines": 78,
+    "human_added": 377,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 455,
+    "agent_percentage": 17.142857142857142
+  }
+}

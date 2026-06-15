@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "a3e7326f5671",
+  "strategy": "manual-commit",
+  "branch": "fix/dogfooding-readiness",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/adapter/bundled/claude/emit_test.go",
+    "internal/adapter/bundled/claude/emit_tool_owned.go",
+    "internal/adapter/bundled/claude/header.go",
+    "internal/adapter/bundled/claude/header_test.go",
+    "internal/engine/agents_md_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a3/e7326f5671/0/metadata.json",
+      "transcript": "/a3/e7326f5671/0/full.jsonl",
+      "context": "/a3/e7326f5671/0/context.md",
+      "content_hash": "/a3/e7326f5671/0/content_hash.txt",
+      "prompt": "/a3/e7326f5671/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 33436,
+    "cache_creation_tokens": 500862,
+    "cache_read_tokens": 9694550,
+    "output_tokens": 63863,
+    "api_call_count": 60
+  }
+}
