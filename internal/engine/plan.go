@@ -11,6 +11,8 @@ import (
 	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
 	"github.com/agent-sync/agent-sync/internal/ledger"
+	"github.com/agent-sync/agent-sync/internal/merge"
+	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
 // planTarget computes the dry-run change set for one target without
@@ -48,12 +50,24 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 		case contract.OpWriteFile:
 			desired[o.Path] = sha256Hex(o.Content)
 		case contract.OpWriteToolOwned:
-			// Tool-owned slices: treat presence as an update candidate;
-			// a precise slice diff is deferred (v1 merges idempotently).
-			if _, known := oldByPath[o.Path]; known {
-				change.WouldUpdate = append(change.WouldUpdate, o.Path)
-			} else {
+			// Tool-owned files: drift = "would a sync rewrite this file?".
+			// DryMerge runs the same merge the sync path uses and compares the
+			// result to the on-disk bytes. Because the merge is idempotent, a
+			// clean sync reports no drift here; an out-of-band edit inside the
+			// managed slice reports drift; user content outside the slice never
+			// does. (The old code unconditionally reported WouldUpdate for any
+			// ledgered path, so validate always saw false drift.)
+			entry := merge.MergeEntry{Kind: adapterkit.ToolOwnedKind(o.Kind), Locator: o.Locator, Content: o.Content}
+			exists, changed, _, derr := merge.DryMerge(req.Root, o.Path, entry)
+			if derr != nil {
+				change.Error = derr.Error()
+				return change
+			}
+			switch {
+			case !exists:
 				change.WouldCreate = append(change.WouldCreate, o.Path)
+			case changed:
+				change.WouldUpdate = append(change.WouldUpdate, o.Path)
 			}
 		}
 	}
