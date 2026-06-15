@@ -15,6 +15,12 @@ into each tool's own conventions.
 > Module path `github.com/agent-sync/agent-sync` is provisional until the canonical
 > hosting location is chosen.
 
+## Quickstart
+
+New to agent-sync? [`docs/quickstart.md`](docs/quickstart.md) walks through
+authoring a canonical repo and running your first `init → sync → validate`,
+with a copyable example under [`examples/canonical/`](examples/canonical/).
+
 ## What agent-sync does
 
 1. **One manifest per workspace.** A `.agent-sync.yaml` pins the workspace to a
@@ -34,7 +40,7 @@ into each tool's own conventions.
 
 ## Supported tools
 
-Adapters translate the tool-agnostic IR into each tool's native files. Two
+Adapters translate the tool-agnostic IR into each tool's native files. Three
 adapters ship bundled today; the rest are planned and tracked against the v1
 roadmap. The `Planned (tier)` label records the intended support tier once the
 adapter lands.
@@ -43,7 +49,7 @@ adapter lands.
 |------|--------|
 | Claude Code | ✅ Bundled |
 | Cursor | ✅ Bundled |
-| Codex CLI | Planned (primary) |
+| Codex CLI | ✅ Bundled |
 | Pi (`@mariozechner/pi-coding-agent`) | Planned (primary) |
 | Gemini CLI | Planned (supported) |
 | Windsurf | Planned (experimental) |
