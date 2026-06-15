@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "59d7baf25958",
+  "session_id": "bcc20973-5df5-4d11-ba6f-9011798a37f8",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-15T20:43:14.507035Z",
+  "branch": "feat/curl-install",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c7057ce338e9",
+  "token_usage": {
+    "input_tokens": 49870,
+    "cache_creation_tokens": 1188091,
+    "cache_read_tokens": 55695267,
+    "output_tokens": 212322,
+    "api_call_count": 185
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-15T20:43:13.780598Z",
+    "agent_lines": 0,
+    "human_added": 147,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 147,
+    "agent_percentage": 0
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "59d7baf25958",
+  "strategy": "manual-commit",
+  "branch": "feat/curl-install",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/59/d7baf25958/0/metadata.json",
+      "transcript": "/59/d7baf25958/0/full.jsonl",
+      "context": "/59/d7baf25958/0/context.md",
+      "content_hash": "/59/d7baf25958/0/content_hash.txt",
+      "prompt": "/59/d7baf25958/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 49870,
+    "cache_creation_tokens": 1188091,
+    "cache_read_tokens": 55695267,
+    "output_tokens": 212322,
+    "api_call_count": 185
+  }
+}
