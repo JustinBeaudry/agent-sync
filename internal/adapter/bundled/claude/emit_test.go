@@ -396,7 +396,7 @@ func TestEmitMCPServerEntry_DedupsSidecarAcrossMultipleNodes(t *testing.T) {
 	}
 }
 
-func TestEmitAgentsMD_WrapsBodyInSection(t *testing.T) {
+func TestEmitAgentsMD_SendsInnerBodyOnly(t *testing.T) {
 	t.Parallel()
 
 	res, ops := emitFixture(t, "agents-md-companion.json")
@@ -418,12 +418,13 @@ func TestEmitAgentsMD_WrapsBodyInSection(t *testing.T) {
 	if md.Locator != "agent-sync:claude" {
 		t.Errorf("locator=%q want %q", md.Locator, "agent-sync:claude")
 	}
+	// The engine owns the begin/end markers — the adapter must send the
+	// INNER body only. Marker-wrapped content is rejected by the merge
+	// ("the engine owns markers; pass inner body only"); this guards the
+	// double-wrap bug and matches the cursor/codex adapters.
 	body := string(md.Content)
-	if !strings.Contains(body, "<!-- agent-sync:begin id=claude -->") {
-		t.Errorf("CLAUDE.md content missing begin marker; got %q", body)
-	}
-	if !strings.Contains(body, "<!-- agent-sync:end id=claude -->") {
-		t.Errorf("CLAUDE.md content missing end marker; got %q", body)
+	if strings.Contains(body, "<!-- agent-sync:") {
+		t.Errorf("CLAUDE.md content must not contain marker syntax (engine owns markers); got %q", body)
 	}
 	if !strings.Contains(body, "## Build commands") {
 		t.Errorf("CLAUDE.md content missing user body; got %q", body)

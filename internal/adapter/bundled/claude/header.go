@@ -3,8 +3,6 @@ package claude
 import (
 	"fmt"
 	"strings"
-
-	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
 // managedHeaderTemplate is the canonical "do not edit" banner the
@@ -51,46 +49,6 @@ func jsonSidecarMarker() []byte {
 	return []byte(jsonSidecarBody)
 }
 
-// sectionMarkerBegin returns the opening marker for a managed section
-// inside a tool-owned markdown file (currently just CLAUDE.md). The
-// marker is HTML-comment shaped so any markdown renderer treats it
-// as invisible.
-//
-// id MUST satisfy the IR id grammar; an invalid id is a programming
-// error inside the adapter (the IR decoder rejects bad ids upstream)
-// and panics here so the failure surfaces immediately rather than
-// silently corrupting CLAUDE.md.
-func sectionMarkerBegin(id string) []byte {
-	mustValidID(id)
-	return []byte("<!-- agent-sync:begin id=" + id + " -->")
-}
-
-// sectionMarkerEnd returns the closing marker. See sectionMarkerBegin
-// for the id-validation contract.
-func sectionMarkerEnd(id string) []byte {
-	mustValidID(id)
-	return []byte("<!-- agent-sync:end id=" + id + " -->")
-}
-
-// wrapManagedSection wraps body bytes between the begin/end markers
-// for the supplied id and returns the full slice ready for a
-// write_tool_owned op. A trailing newline after the end marker keeps
-// the merged file POSIX-clean if it is the last entry.
-func wrapManagedSection(id string, body []byte) []byte {
-	begin := sectionMarkerBegin(id)
-	end := sectionMarkerEnd(id)
-	out := make([]byte, 0, len(begin)+len(body)+len(end)+3)
-	out = append(out, begin...)
-	out = append(out, '\n')
-	out = append(out, body...)
-	if len(body) == 0 || body[len(body)-1] != '\n' {
-		out = append(out, '\n')
-	}
-	out = append(out, end...)
-	out = append(out, '\n')
-	return out
-}
-
 // readmeForSubdir returns the README.md body the claude adapter
 // emits into each reserved subdirectory. The README explains
 // ownership and the exit path so a human stumbling into
@@ -117,13 +75,4 @@ func readmeForSubdir(subdirLabel string) []byte {
 			"    agent-sync unmanage claude\n",
 		subdirLabel,
 	)
-}
-
-// mustValidID panics with a programmer-targeted message when id
-// does not satisfy the IR id grammar. The IR decoder catches user
-// inputs upstream; this guard is for adapter bugs.
-func mustValidID(id string) {
-	if !ir.IsValidID(id) {
-		panic(fmt.Sprintf("claude: invalid id %q reached marker construction (IR decoder should have rejected it upstream)", id))
-	}
 }

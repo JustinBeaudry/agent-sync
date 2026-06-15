@@ -84,11 +84,17 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 // outside the managed section is preserved by the merge step
 // (Unit 12a).
 //
-// The body is rejected when it contains the agent-sync marker opener.
-// Without this guard a body containing `<!-- agent-sync:end id=other -->`
-// could break out of its own section or forge another section
-// entirely, leaving the merged CLAUDE.md with conflicting markers
-// the merge step has no way to resolve safely.
+// The engine owns the begin/end markers — it renders the managed block
+// from the locator during the markdown-section merge. The adapter passes
+// the INNER body only; sending marker-wrapped content is rejected by the
+// merge ("the engine owns markers; pass inner body only"). This mirrors
+// the cursor and codex adapters.
+//
+// The body is still rejected when it contains the agent-sync marker
+// opener. Without this guard a body containing
+// `<!-- agent-sync:end id=other -->` could forge another section,
+// leaving the merged CLAUDE.md with conflicting markers the merge step
+// has no way to resolve safely.
 //
 // No managed-file header is added inside the section: the begin/end
 // markers serve as the equivalent ownership advertisement, and a
@@ -104,13 +110,12 @@ func emitAgentsMD(emitted *emittedOps, node irNode) error {
 			Message: fmt.Sprintf("claude: agents-md %q body contains agent-sync marker syntax (%q); refusing to corrupt CLAUDE.md", node.ID, string(markerOpenBytes)),
 		}
 	}
-	wrapped := wrapManagedSection(node.ID, body)
 
 	emitted.add(adapterkit.OpWriteToolOwned{
 		Path:    claudeMDPath,
 		Kind:    adapterkit.ToolOwnedKindMarkdownSection,
 		Locator: sectionIDPrefix + node.ID,
-		Content: wrapped,
+		Content: body,
 	})
 	return nil
 }
