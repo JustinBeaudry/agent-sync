@@ -61,7 +61,7 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 		return prepared{}, fmt.Errorf("open workspace root: %w", err)
 	}
 
-	mat, err := materialize(ctx, m, materializeOptions{Offline: flags.Offline, Now: now})
+	mat, err := materialize(ctx, m, materializeOptions{Offline: flags.Offline, Now: now, Root: root})
 	if err != nil {
 		_ = root.Close()
 		return prepared{}, err

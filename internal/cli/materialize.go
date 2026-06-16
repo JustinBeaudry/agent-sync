@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/agent-sync/agent-sync/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 	"github.com/agent-sync/agent-sync/internal/git"
 	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/trust"
+	"github.com/agent-sync/agent-sync/internal/worktree"
 )
 
 // ErrFloatingLocalUnsupported is returned when a local_path canonical
@@ -30,29 +32,52 @@ type materialized struct {
 	Warnings []ir.Warning
 }
 
-// materializeOptions controls network posture for materialization.
+// materializeOptions controls network posture and supplies the workspace root
+// needed by the in-repo (local_dir) source kind.
 type materializeOptions struct {
 	Offline bool
 	Now     time.Time
+	// Root is the opened workspace root, required by the local_dir source kind
+	// (it reads the working tree). nil for url/local_path sources.
+	Root *fsroot.Root
 }
 
 // materialize turns a loaded manifest into decoded IR. It dispatches on
-// canonical source kind: a local_path is opened directly (no network); a
-// url goes through canonicalize -> cache resolve -> git materialize, with
-// the trust gate enforced against the resolved SHA.
+// canonical source kind:
+//   - local_dir: read directly from the working tree (no git, no network, no
+//     trust, no pin) — see materializeLocalDir.
+//   - local_path: open a local git clone directly (no network).
+//   - url: canonicalize -> cache resolve -> git materialize, with the trust
+//     gate enforced against the resolved SHA.
 //
-// Both paths require a pinned commit in v1 — the URL path because the
-// offline/cache contract needs it, and the local path because resolving a
-// moving HEAD is deferred.
+// The git-backed kinds require a pinned commit in v1; the local_dir kind is
+// unpinned by nature.
 func materialize(ctx context.Context, m *manifest.Manifest, opts materializeOptions) (materialized, error) {
 	switch {
+	case m.Canonical.LocalDir != "":
+		return materializeLocalDir(m, opts)
 	case m.Canonical.LocalPath != "":
 		return materializeLocal(m)
 	case m.Canonical.URL != "":
 		return materializeURL(ctx, m, opts)
 	default:
-		return materialized{}, errors.New("cli: manifest has neither url nor local_path")
+		return materialized{}, errors.New("cli: manifest has no canonical source (url, local_path, or local_dir)")
 	}
+}
+
+// materializeLocalDir reads an in-repo working-tree source. It deliberately
+// skips git materialization, the trust (TOFU) gate, and the offline-strict
+// SHA requirement: a working-tree source touches no network and has no commit
+// to pin or trust. The empty ref flows to the engine as a zero-SHA placeholder.
+func materializeLocalDir(m *manifest.Manifest, opts materializeOptions) (materialized, error) {
+	if opts.Root == nil {
+		return materialized{}, errors.New("cli: local_dir source requires an open workspace root")
+	}
+	reader, err := worktree.NewReader(opts.Root, m.Canonical.LocalDir)
+	if err != nil {
+		return materialized{}, fmt.Errorf("cli: local_dir source: %w", err)
+	}
+	return decodeAt(reader, "")
 }
 
 func materializeLocal(m *manifest.Manifest) (materialized, error) {
@@ -111,12 +136,20 @@ func materializeURL(ctx context.Context, m *manifest.Manifest, opts materializeO
 	return decodeAt(repo, res.ResolvedSHA)
 }
 
-func decodeAt(repo *git.Repository, sha string) (materialized, error) {
-	nodes, decodeWarnings, err := ir.Decode(repo, sha, ir.DecodeOptions{})
-	if err != nil {
-		return materialized{}, fmt.Errorf("cli: decode IR at %s: %w", sha, err)
+// decodeAt decodes any SourceTree at ref. ref is a 40-hex commit SHA for
+// git-backed sources and the empty string for the working-tree source (which
+// has no commit); an empty ref flows through to the engine's zero-SHA
+// placeholder.
+func decodeAt(src ir.SourceTree, ref string) (materialized, error) {
+	at := ref
+	if at == "" {
+		at = "working tree"
 	}
-	skills, skillWarnings := ir.SkillsByID(nodes, repo, sha)
+	nodes, decodeWarnings, err := ir.Decode(src, ref, ir.DecodeOptions{})
+	if err != nil {
+		return materialized{}, fmt.Errorf("cli: decode IR at %s: %w", at, err)
+	}
+	skills, skillWarnings := ir.SkillsByID(nodes, src, ref)
 	warnings := append(append([]ir.Warning(nil), decodeWarnings...), skillWarnings...)
-	return materialized{Nodes: nodes, Skills: skills, Commit: sha, Warnings: warnings}, nil
+	return materialized{Nodes: nodes, Skills: skills, Commit: ref, Warnings: warnings}, nil
 }
