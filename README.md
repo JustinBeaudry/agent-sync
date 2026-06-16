@@ -7,13 +7,8 @@ source of skills, rules, commands, and MCP servers; native files rendered
 into each tool's own conventions.
 
 > **Status:** pre-alpha. v1 is in active development. Architecture and
-> rationale live in:
->
-> - Requirements: [`docs/brainstorms/2026-04-21-aienvs-agent-workspace-requirements.md`](docs/brainstorms/2026-04-21-aienvs-agent-workspace-requirements.md)
-> - Implementation plan: [`docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md`](docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md)
->
-> Module path `github.com/agent-sync/agent-sync` is provisional until the canonical
-> hosting location is chosen.
+> rationale live in the [requirements](docs/brainstorms/2026-04-21-aienvs-agent-workspace-requirements.md)
+> and [implementation plan](docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md).
 
 ## Install
 
@@ -63,9 +58,8 @@ with a copyable example under [`examples/canonical/`](examples/canonical/).
 ## Supported tools
 
 Adapters translate the tool-agnostic IR into each tool's native files. Three
-adapters ship bundled today; the rest are planned and tracked against the v1
-roadmap. The `Planned (tier)` label records the intended support tier once the
-adapter lands.
+adapters ship bundled today; the rest are planned, and the `Planned (tier)`
+label records the support tier each will land at.
 
 | Tool | Status |
 |------|--------|

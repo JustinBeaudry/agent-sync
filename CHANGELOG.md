@@ -11,6 +11,8 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-16
+
 ### Added
 
 - Apache-2.0 `LICENSE` and `NOTICE` files; license declared in `README`.
@@ -32,7 +34,7 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 ### Changed
 
 - `README` tool-support table now distinguishes bundled adapters (Claude Code,
-  Cursor) from planned ones, instead of advertising unimplemented tiers.
+  Cursor, Codex CLI) from planned ones, instead of advertising unimplemented tiers.
 
 ### Removed
 
