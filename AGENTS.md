@@ -43,10 +43,16 @@ These are non-negotiable; violating them breaks v1:
    needed to proceed. (Units 6, 16.)
 4. **Pinning is default; `floating: true` must be explicit.** `init`
    resolves refs to SHAs and writes them back to the manifest.
-   (Units 2, 5.)
+   (Units 2, 5.) **Exception — the in-repo `canonical.local_dir` source**
+   (a working-tree directory like `.agents`) is unpinned by nature: it has
+   no commit/ref/trust anchor and is read straight from the filesystem via
+   `internal/worktree`. The `agent-sync-` skill-id prefix is reserved for
+   emitted output in the shared `.agents/skills` tree (the reader skips
+   `skills/agent-sync-*`), so it is unavailable for authored skill ids.
 5. **Offline-strict with pinned-cached exception.** `sync` fails offline
    unless the manifest is pinned by `commit:` and the SHA is present in
-   cache. (Units 4, 5.)
+   cache. (Units 4, 5.) The `local_dir` source is **exempt** — it touches no
+   network, so it always succeeds offline and skips the trust (TOFU) gate.
 6. **Two-rename atomic swap.** `<prefix>` → `<prefix>.old`;
    `<staging>/<target>` → `<prefix>`; best-effort `RemoveAll <prefix>.old`.
    Both steps share a single parent `os.Root`. Recovery state machine lives

@@ -34,10 +34,20 @@ v2-grade change that requires a separate spec.
 
 ## Canonical repo layout
 
-The canonical repo is a normal git repository. The decoder reads from a
-specific commit (Unit 5's `git.Repository` keyed by commit SHA). Tree
-walks are case-sensitive even on case-insensitive filesystems — the
-canonical SHA is authoritative.
+The decoder reads from a `SourceTree` (`internal/ir`): a narrow interface
+exposing a flat tree listing (`ReadTree`) and blob contents (`BlobContent`)
+at an opaque ref. Two sources satisfy it:
+
+- **git** (`git.Repository`) — ref is the commit SHA; the canonical source is
+  a normal git repository read at that commit.
+- **working tree** (`internal/worktree.Reader`) — an in-repo `local_dir` (e.g.
+  `.agents`) read straight from the filesystem; ref is ignored, paths are
+  presented relative to the source root, and the emitted-output subtree
+  (`skills/agent-sync-*`) is skipped so the source never reads its own output.
+
+The same layout below applies regardless of source — for the working-tree
+source it is rooted at `local_dir` rather than the repo root. Tree walks are
+case-sensitive even on case-insensitive filesystems.
 
 ```
 canonical-repo/

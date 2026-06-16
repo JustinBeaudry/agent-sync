@@ -30,11 +30,18 @@ is the only package that may parse or write `.agent-sync.yaml`.
 # Manifest schema version. v1 is the only accepted value today.
 version: 1
 
-# Canonical agent-config source. Exactly one of `url` or `local_path`
-# must be set; setting both is a load error.
+# Canonical agent-config source. Exactly one of `url`, `local_path`, or
+# `local_dir` must be set; setting more than one is a load error.
+#
+#   url        — a remote git repository (cloned + pinned by `commit`).
+#   local_path — a local git repository / clone (opened + pinned by `commit`).
+#   local_dir  — an in-repo working-tree directory read straight from the
+#                filesystem. Unpinned by nature: no `commit`/`ref`/`trusted_sha`,
+#                and exempt from trust (TOFU) and offline-strict.
 canonical:
-  url: https://github.com/example/agents-config.git  # exclusive with local_path
-  # local_path: /absolute/path/to/a/working/clone     # exclusive with url
+  url: https://github.com/example/agents-config.git  # exclusive with local_path/local_dir
+  # local_path: /absolute/path/to/a/working/clone     # exclusive with url/local_dir
+  # local_dir: .agents                                 # exclusive with url/local_path
 
   # Optional git ref (branch or tag). `agent-sync init` resolves this to a
   # SHA unless `--defer-resolve` is used.
@@ -99,8 +106,10 @@ The loader enforces these at parse time. Any violation returns
 | Rule | Error text excerpt |
 |------|---------------------|
 | Unknown top-level key | `unknown field` (goccy formatter names line + field) |
-| `canonical.url` AND `canonical.local_path` both set | `canonical source must set exactly one of url or local_path (got both)` |
-| Neither `canonical.url` nor `canonical.local_path` set | `canonical source must set exactly one of url or local_path (got neither)` |
+| Not exactly one of `canonical.url` / `local_path` / `local_dir` set | `canonical source must set exactly one of url, local_path, or local_dir (got N)` |
+| `canonical.local_dir` set with `commit`/`ref`/`trusted_sha` | `canonical.local_dir is an unpinned working-tree source and cannot set commit, ref, or trusted_sha` |
+| `canonical.local_dir` is the workspace root (`.`) | `canonical.local_dir must name a workspace subdirectory, not the workspace root` |
+| `canonical.local_dir` is absolute / rooted / contains `..` | `canonical.local_dir: …` (wraps the reserved-prefix path rules) |
 | `trusted_sha` set, `canonical.commit` empty | `trusted_sha is set but canonical.commit is empty (no floating-with-pin hybrid)` |
 | `canonical.commit` not 40-hex | `canonical.commit must be 40 lowercase hex` |
 | `trusted_sha` not 40-hex | `trusted_sha must be 40 lowercase hex` |
@@ -134,14 +143,22 @@ strictly required.
 
 Describes where the portable agent-config source lives.
 
-- `canonical.url` (string, xor `local_path`): Git URL.
-- `canonical.local_path` (string, xor `url`): absolute filesystem path
-  to a clone. Intended for air-gapped environments and agent-sync
-  development itself.
+- `canonical.url` (string; exactly one of url/local_path/local_dir): Git URL.
+- `canonical.local_path` (string; exactly one of url/local_path/local_dir):
+  absolute filesystem path to a git clone. Intended for air-gapped
+  environments and agent-sync development itself. Pinned by `commit`.
+- `canonical.local_dir` (string; exactly one of url/local_path/local_dir):
+  a workspace-relative directory (e.g. `.agents`) whose contents are compiled
+  straight from the **working tree** — no git, no clone, no commit. Unpinned by
+  nature and exempt from trust (TOFU) and offline-strict, since there is
+  nothing remote to fetch, pin, or trust. Must be a clean, non-root,
+  workspace-relative path. The `agent-sync-` skill-id prefix is reserved for
+  emitted output in the shared `.agents/skills` tree and is not available for
+  authored skill ids (the reader skips `skills/agent-sync-*`).
 - `canonical.ref` (string, optional): symbolic git ref; only consumed
-  by `agent-sync init` to resolve to `commit`.
+  by `agent-sync init` to resolve to `commit`. Not valid with `local_dir`.
 - `canonical.commit` (string, optional when `floating: true`): 40-char
-  lowercase hex SHA. Pinning is the default.
+  lowercase hex SHA. Pinning is the default. Not valid with `local_dir`.
 
 ### `trusted_sha` (string, optional)
 
