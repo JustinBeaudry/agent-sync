@@ -15,6 +15,28 @@ into each tool's own conventions.
 > Module path `github.com/agent-sync/agent-sync` is provisional until the canonical
 > hosting location is chosen.
 
+## Install
+
+Download the prebuilt binary for your platform, verify its checksum, and put it
+on your PATH — one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JustinBeaudry/agent-sync/main/install.sh | sh
+```
+
+Installs to `/usr/local/bin` (falling back to `~/.local/bin` if that isn't
+writable). Pin a version or change the location with env vars:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JustinBeaudry/agent-sync/main/install.sh \
+  | AGENT_SYNC_VERSION=v0.1.0 AGENT_SYNC_INSTALL_DIR="$HOME/bin" sh
+```
+
+Prefer not to pipe to a shell? Download the archive for your OS/arch from the
+[Releases page](https://github.com/JustinBeaudry/agent-sync/releases), verify it
+against `checksums.txt`, extract the `agent-sync` binary, and move it onto your
+PATH. (Windows: grab the `.zip`.) Git must be on your PATH at runtime.
+
 ## Quickstart
 
 New to agent-sync? [`docs/quickstart.md`](docs/quickstart.md) walks through

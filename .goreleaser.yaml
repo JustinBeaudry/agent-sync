@@ -81,7 +81,10 @@ changelog:
       - "Merge branch"
 
 release:
-  draft: true
+  # Auto-publish on tag push so `install.sh` (which resolves the latest
+  # published release via the GitHub API) has artifacts to fetch. Flip back to
+  # `draft: true` if you want a manual review gate before each release goes live.
+  draft: false
   prerelease: auto
   footer: |
     ---
