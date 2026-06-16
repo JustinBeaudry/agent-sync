@@ -34,10 +34,14 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: release --clean
+          # Signing is opt-in: goreleaser registers checksums.txt.minisig as a
+          # publishable artifact whenever the `signs` block runs, so without a
+          # key the no-op sign script leaves nothing to upload and the release
+          # fails. Skip the whole sign stage unless MINISIGN_KEY is configured;
+          # checksums.txt (which install.sh verifies against) ships either way.
+          args: ${{ secrets.MINISIGN_KEY != '' && 'release --clean' || 'release --clean --skip=sign' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional release-signing secret: contents of an UNENCRYPTED minisign
-          # secret key (`minisign -G -W`). When unset, goreleaser still publishes
-          # SHA-256 checksums; the signature is skipped (see .goreleaser.yaml).
+          # secret key (`minisign -G -W`). Set it and signing turns on automatically.
           MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
