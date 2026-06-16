@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "6cb6a4b78afe",
+  "session_id": "70c352b9-39cc-41e9-a232-6b4ef76e5593",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-16T20:46:41.602199Z",
+  "branch": "feat/in-repo-local-skill-source",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "CHANGELOG.md",
+    "README.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2784a1006317",
+  "checkpoint_transcript_start": 257,
+  "transcript_lines_at_start": 257,
+  "token_usage": {
+    "input_tokens": 13713,
+    "cache_creation_tokens": 502879,
+    "cache_read_tokens": 30251655,
+    "output_tokens": 94518,
+    "api_call_count": 117
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-16T20:46:41.111023Z",
+    "agent_lines": 19,
+    "human_added": 906,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 925,
+    "agent_percentage": 2.054054054054054
+  }
+}
