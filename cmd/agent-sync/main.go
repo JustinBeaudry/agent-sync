@@ -30,7 +30,12 @@ func run(args []string) int {
 	// (KTD-8). It prints the error itself (the root sets SilenceErrors); we
 	// translate it to a process exit code via the documented exit-code
 	// carriers (trust, adapter, missing-flag, report verdict).
-	err := fang.Execute(context.Background(), root)
+	//
+	// fang.Execute overwrites root.Version with its own build-info lookup, so
+	// the -ldflags -X main.version value only reaches `--version` when we hand
+	// it back via WithVersion; otherwise the binary reports fang's
+	// "unknown (built from source)" placeholder.
+	err := fang.Execute(context.Background(), root, fang.WithVersion(version))
 	if err != nil {
 		return cli.MapExit(err)
 	}

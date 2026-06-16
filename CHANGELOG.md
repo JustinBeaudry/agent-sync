@@ -11,6 +11,13 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `agent-sync --version` now reports the release tag injected via
+  `-ldflags -X main.version` instead of fang's `unknown (built from source)`
+  placeholder. `fang.Execute` overwrites `root.Version` from build info, so the
+  value is now passed back through `fang.WithVersion`.
+
 ## [0.1.0] - 2026-06-16
 
 ### Added
