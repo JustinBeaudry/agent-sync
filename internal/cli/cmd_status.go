@@ -117,10 +117,14 @@ func renderStatusText(cmd *cobra.Command, rep statusReport) error {
 }
 
 func sourceOf(m *manifest.Manifest) string {
-	if m.Canonical.URL != "" {
+	switch {
+	case m.Canonical.URL != "":
 		return m.Canonical.URL
+	case m.Canonical.LocalPath != "":
+		return m.Canonical.LocalPath
+	default:
+		return m.Canonical.LocalDir
 	}
-	return m.Canonical.LocalPath
 }
 
 func displayCommit(c string) string {

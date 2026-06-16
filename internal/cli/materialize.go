@@ -37,8 +37,10 @@ type materialized struct {
 type materializeOptions struct {
 	Offline bool
 	Now     time.Time
-	// Root is the opened workspace root, required by the local_dir source kind
-	// (it reads the working tree). nil for url/local_path sources.
+	// Root is the opened workspace root, consumed only by the local_dir source
+	// kind (it reads the working tree). prepareEngine always supplies it; the
+	// url/local_path paths ignore it. The nil check in materializeLocalDir is a
+	// defensive guard for direct callers, not a state setup.go produces.
 	Root *fsroot.Root
 }
 

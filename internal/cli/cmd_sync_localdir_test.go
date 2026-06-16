@@ -79,6 +79,19 @@ func TestSync_LocalDir_IdempotentAcrossSharedTree(t *testing.T) {
 	mustExist(t, filepath.Join(ws, ".agents", "skills", "foo", "SKILL.md"))
 }
 
+// status must report the in-repo directory as the source (regression guard for
+// sourceOf, which previously ignored local_dir and rendered a blank source).
+func TestStatus_LocalDir_ReportsSource(t *testing.T) {
+	ws := writeLocalDirWorkspace(t)
+	out, _, err := runCmd(t, ws, "status", "--output", "text")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !strings.Contains(out, ".agents") {
+		t.Fatalf("status should show the local_dir source:\n%s", out)
+	}
+}
+
 // Removing an authored source file orphans its emitted output, which the next
 // sync deletes — while leaving the authored source and other outputs intact.
 func TestSync_LocalDir_OrphanDeletion(t *testing.T) {
