@@ -133,6 +133,85 @@ func TestLoad_InvalidNeither(t *testing.T) {
 	}
 }
 
+func TestLoad_ValidLocalDir(t *testing.T) {
+	src := []byte("version: 1\ncanonical:\n  local_dir: .agents\ntargets: [claude]\n")
+	m, err := manifest.LoadBytes(src, manifest.LoadOptions{NonInteractive: true})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if m.Canonical.LocalDir != ".agents" {
+		t.Errorf("local_dir = %q, want .agents", m.Canonical.LocalDir)
+	}
+	if m.Canonical.URL != "" || m.Canonical.LocalPath != "" {
+		t.Errorf("url/local_path should be empty for a local_dir source")
+	}
+	if m.Canonical.Commit != "" || m.TrustedSHA != "" {
+		t.Errorf("local_dir source must carry no pin (commit=%q trusted=%q)", m.Canonical.Commit, m.TrustedSHA)
+	}
+}
+
+func TestLoad_LocalDirCleaned(t *testing.T) {
+	src := []byte("version: 1\ncanonical:\n  local_dir: .agents/\n")
+	m, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if m.Canonical.LocalDir != ".agents" {
+		t.Errorf("local_dir = %q, want cleaned .agents", m.Canonical.LocalDir)
+	}
+}
+
+func TestLoad_InvalidLocalDirWithOtherSource(t *testing.T) {
+	src := []byte("version: 1\ncanonical:\n  url: https://example.com/x.git\n  local_dir: .agents\n")
+	_, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected error: url and local_dir both set")
+	}
+	if !strings.Contains(err.Error(), "exactly one") {
+		t.Errorf("error does not name the one-of invariant; got: %v", err)
+	}
+}
+
+func TestLoad_InvalidLocalDirWithPin(t *testing.T) {
+	for _, field := range []string{
+		"  commit: 1111111111111111111111111111111111111111\n  ref: ignored\n",
+		"  ref: main\n",
+	} {
+		src := []byte("version: 1\ncanonical:\n  local_dir: .agents\n" + field)
+		_, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+		if err == nil {
+			t.Fatalf("expected error: local_dir with pin field (%q)", field)
+		}
+		if !strings.Contains(err.Error(), "unpinned working-tree source") {
+			t.Errorf("error does not name the unpinned invariant; got: %v", err)
+		}
+	}
+}
+
+func TestLoad_InvalidLocalDirRoot(t *testing.T) {
+	src := []byte("version: 1\ncanonical:\n  local_dir: \".\"\n")
+	_, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected error: local_dir is the workspace root")
+	}
+	if !strings.Contains(err.Error(), "workspace root") {
+		t.Errorf("error does not name the root rejection; got: %v", err)
+	}
+}
+
+func TestLoad_InvalidLocalDirUnsafePath(t *testing.T) {
+	for _, bad := range []string{"/etc/agents", "../escape", "C:/agents"} {
+		src := []byte("version: 1\ncanonical:\n  local_dir: " + strconvQuote(bad) + "\n")
+		_, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+		if err == nil {
+			t.Fatalf("expected error for unsafe local_dir %q", bad)
+		}
+		if !strings.Contains(err.Error(), "local_dir") {
+			t.Errorf("error does not reference local_dir for %q; got: %v", bad, err)
+		}
+	}
+}
+
 func TestLoad_InvalidTrustedWithoutCommit(t *testing.T) {
 	_, err := loadFixture(t, "invalid-trusted-without-commit.yaml", manifest.LoadOptions{})
 	if err == nil {

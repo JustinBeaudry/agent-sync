@@ -29,15 +29,27 @@ type Manifest struct {
 }
 
 type CanonicalSource struct {
-	// Exactly one of URL or LocalPath must be set.
+	// Exactly one of URL, LocalPath, or LocalDir must be set.
+	//
+	//   - URL       — a remote git repository (cloned + pinned by Commit).
+	//   - LocalPath — a local git repository / clone (opened + pinned by Commit).
+	//   - LocalDir  — an in-repo working-tree directory read directly from the
+	//                 filesystem. Unpinned by nature: it has no git object store,
+	//                 no Commit, and is exempt from trust (TOFU) and offline-strict.
 	URL       string `yaml:"url,omitempty"`
 	LocalPath string `yaml:"local_path,omitempty"`
 
+	// LocalDir is a workspace-relative directory (e.g. ".agents") whose contents
+	// are compiled as the canonical source straight from the working tree. It is
+	// mutually exclusive with URL/LocalPath and must not set Ref/Commit.
+	LocalDir string `yaml:"local_dir,omitempty"`
+
 	// Ref is an optional git ref name (branch, tag) used at init time before
-	// resolving to Commit.
+	// resolving to Commit. Not valid for LocalDir.
 	Ref string `yaml:"ref,omitempty"`
 
-	// Commit is the pinned git commit SHA (40 hex). Pinning is the default.
+	// Commit is the pinned git commit SHA (40 hex). Pinning is the default for
+	// the git-backed sources (URL/LocalPath). Not valid for LocalDir.
 	Commit string `yaml:"commit,omitempty"`
 }
 
