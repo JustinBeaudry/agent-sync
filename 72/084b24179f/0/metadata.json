@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "72084b24179f",
+  "session_id": "70c352b9-39cc-41e9-a232-6b4ef76e5593",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-16T21:00:52.041608Z",
+  "branch": "feat/in-repo-local-skill-source",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-06-16-001-feat-in-repo-local-skill-source-plan.md",
+    "internal/cli/cmd_sync_localdir_test.go",
+    "internal/cli/materialize.go"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2784a1006317",
+  "token_usage": {
+    "input_tokens": 48842,
+    "cache_creation_tokens": 692163,
+    "cache_read_tokens": 47349124,
+    "output_tokens": 157819,
+    "api_call_count": 201
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-16T21:00:51.342066Z",
+    "agent_lines": 557,
+    "human_added": 59,
+    "human_modified": 2,
+    "human_removed": 0,
+    "total_committed": 618,
+    "agent_percentage": 90.1294498381877
+  }
+}

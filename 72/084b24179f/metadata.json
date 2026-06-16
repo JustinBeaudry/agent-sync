@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "72084b24179f",
+  "strategy": "manual-commit",
+  "branch": "feat/in-repo-local-skill-source",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-06-16-001-feat-in-repo-local-skill-source-plan.md",
+    "internal/cli/cmd_sync_localdir_test.go",
+    "internal/cli/materialize.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/72/084b24179f/0/metadata.json",
+      "transcript": "/72/084b24179f/0/full.jsonl",
+      "context": "/72/084b24179f/0/context.md",
+      "content_hash": "/72/084b24179f/0/content_hash.txt",
+      "prompt": "/72/084b24179f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 48842,
+    "cache_creation_tokens": 692163,
+    "cache_read_tokens": 47349124,
+    "output_tokens": 157819,
+    "api_call_count": 201
+  }
+}
