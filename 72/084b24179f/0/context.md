@@ -62,3 +62,11 @@ Reviews code changes using dynamically selected reviewer personas. Spawns parall
 - When feedback is needed on any code changes
 - C...
 
+### Prompt 8
+
+Base directory for this skill: /Users/justinbeaudry/.claude/plugins/cache/compound-engineering-plugin/compound-engineering/3.9.3/skills/ce-commit-push-pr
+
+# Git Commit, Push, and PR
+
+**Asking the user:** When this skill says "ask the user", use the platform's blocking question tool: `AskUserQuestion` in Claude Code (call `ToolSearch` with `select:AskUserQuestion` first if its schema isn't loaded), `request_user_input` in Codex, `ask_user` in Gemini, `ask_user` in Pi (requires the `pi-ask-user...
+
