@@ -18,9 +18,13 @@ type InitConfig struct {
 	// written). Empty means the current directory.
 	Dir string
 
-	// Exactly one of SourceURL / LocalPath is set.
+	// Exactly one of SourceURL / LocalPath / LocalDir is set.
 	SourceURL string
 	LocalPath string
+
+	// LocalDir is an in-repo working-tree source directory (e.g. ".agents").
+	// It is unpinned by nature: no Ref/Commit/Floating apply.
+	LocalDir string
 
 	// Ref is the optional git ref (branch/tag) resolved to a SHA at init
 	// time unless Floating.
@@ -42,12 +46,27 @@ type InitConfig struct {
 func (c InitConfig) Validate() error {
 	hasURL := strings.TrimSpace(c.SourceURL) != ""
 	hasLocal := strings.TrimSpace(c.LocalPath) != ""
-	switch {
-	case hasURL && hasLocal:
-		return errors.New("wizard: set exactly one of source URL or local path, not both")
-	case !hasURL && !hasLocal:
-		return errors.New("wizard: a source URL or local path is required")
+	hasDir := strings.TrimSpace(c.LocalDir) != ""
+	n := 0
+	for _, set := range []bool{hasURL, hasLocal, hasDir} {
+		if set {
+			n++
+		}
 	}
+	if n != 1 {
+		return errors.New("wizard: set exactly one of source URL, local path, or local directory")
+	}
+
+	// An in-repo local_dir source is unpinned by nature: a ref/commit/floating
+	// pin is a configuration error rather than a no-op. Reject the combination
+	// here so init never writes a manifest that load would refuse.
+	if hasDir {
+		if c.Commit != "" || strings.TrimSpace(c.Ref) != "" || c.Floating {
+			return errors.New("wizard: a local directory is an unpinned working-tree source; it cannot set a ref, commit, or --floating")
+		}
+		return nil
+	}
+
 	if !c.Floating && c.Commit == "" {
 		return errors.New("wizard: a pinned commit is required unless --floating is set")
 	}
@@ -73,9 +92,13 @@ func (c InitConfig) ManifestYAML() ([]byte, error) {
 	var b strings.Builder
 	b.WriteString("version: 1\n")
 	b.WriteString("canonical:\n")
-	if c.SourceURL != "" {
+	switch {
+	case c.SourceURL != "":
 		fmt.Fprintf(&b, "  url: %s\n", c.SourceURL)
-	} else {
+	case c.LocalDir != "":
+		// An in-repo working-tree source: just the directory, no ref/commit.
+		fmt.Fprintf(&b, "  local_dir: %s\n", c.LocalDir)
+	default:
 		fmt.Fprintf(&b, "  local_path: %s\n", c.LocalPath)
 	}
 	if c.Ref != "" {

@@ -40,9 +40,12 @@ with a copyable example under [`examples/canonical/`](examples/canonical/).
 
 ## What agent-sync does
 
-1. **One manifest per workspace.** A `.agent-sync.yaml` pins the workspace to a
-   canonical Git repo (pinned by commit SHA by default) and declares which
-   target tools receive configuration.
+1. **One manifest per workspace.** A `.agent-sync.yaml` binds the workspace to a
+   canonical source and declares which target tools receive configuration. The
+   source is one of: a remote Git repo (`url`) or a local clone (`local_path`),
+   both pinned by commit SHA; or an in-repo working-tree directory (`local_dir`,
+   e.g. `.agents`) for per-repo skills authored right in the repo — unpinned,
+   and exempt from trust and offline-strict since there's nothing remote to fetch.
 2. **Explicit `sync`.** `agent-sync sync` materializes the pinned content,
    compiles it via per-tool adapters, stages the output, and atomically
    swaps it into each tool's reserved subdirectory (e.g.

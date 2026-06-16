@@ -67,11 +67,17 @@ agent-sync init --source https://github.com/your-org/agent-config --ref main \
 # Or a local canonical repo, pinned to a specific commit:
 agent-sync init --local-path ../agent-config --commit <40-char-sha> \
   --target claude --target cursor
+
+# Or per-repo skills authored right in this repo (no git, no pin):
+agent-sync init --local-dir .agents --target claude --target codex
 ```
 
-This writes a `.agent-sync.yaml` manifest with the pinned `commit` and a
-`trusted_sha`. On a terminal, `agent-sync init` with no flags runs an
-interactive wizard.
+The `url`/`local_path` forms write a `.agent-sync.yaml` with a pinned `commit`
+and `trusted_sha`. The `--local-dir` form points the workspace at an in-repo
+directory (here `.agents`) read straight from the working tree: no commit, no
+trust prompt, and it works offline — author skills under `.agents/skills/<id>/`,
+rules under `.agents/rules/`, and so on, then sync. On a terminal, `agent-sync
+init` with no flags runs an interactive wizard.
 
 ---
 

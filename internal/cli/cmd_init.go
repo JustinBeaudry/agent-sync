@@ -21,6 +21,7 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 	var (
 		source    string
 		localPath string
+		localDir  string
 		ref       string
 		commit    string
 		floating  bool
@@ -54,6 +55,7 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				Dir:       destDir,
 				SourceURL: source,
 				LocalPath: localPath,
+				LocalDir:  localDir,
 				Ref:       ref,
 				Commit:    commit,
 				Floating:  floating,
@@ -61,7 +63,7 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 			}
 
 			interactive := tui.Interactive(rc.Access.IsTTY, rc.Access.NonInteractive, rc.Access.Accessible)
-			if interactive && source == "" && localPath == "" {
+			if interactive && source == "" && localPath == "" && localDir == "" {
 				// Drive the wizard to collect the source/ref/targets.
 				wcfg, committed, werr := wizard.Run(
 					cmd.Context(), deps.in(), deps.err(), rc.Access.NoColor, bundledTargetNames(),
@@ -77,8 +79,9 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				cfg.Floating = floating
 			} else {
 				// Non-interactive (or flags supplied): require a source. Name
-				// both flags — init accepts either --source or --local-path.
-				if err := requireFlag(rc.Access.NonInteractive, source != "" || localPath != "", "--source/--local-path", "canonical repo URL or local path"); err != nil {
+				// all three flags — init accepts --source, --local-path, or
+				// --local-dir.
+				if err := requireFlag(rc.Access.NonInteractive, source != "" || localPath != "" || localDir != "", "--source/--local-path/--local-dir", "canonical repo URL, local git path, or in-repo directory"); err != nil {
 					return err
 				}
 			}
@@ -123,7 +126,8 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&source, "source", "", "canonical repository URL")
-	cmd.Flags().StringVar(&localPath, "local-path", "", "local canonical repository path (mutually exclusive with --source)")
+	cmd.Flags().StringVar(&localPath, "local-path", "", "local canonical git repository path (mutually exclusive with --source)")
+	cmd.Flags().StringVar(&localDir, "local-dir", "", "in-repo working-tree source directory, e.g. .agents (unpinned; mutually exclusive with --source/--local-path)")
 	cmd.Flags().StringVar(&ref, "ref", "", "git ref (branch/tag) to track")
 	cmd.Flags().StringVar(&commit, "commit", "", "pin to this commit SHA (required for a local path unless --floating; URLs resolve --ref automatically)")
 	cmd.Flags().BoolVar(&floating, "floating", false, "do not pin to a SHA (pinning is the default)")
@@ -140,6 +144,10 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 //
 // Already-pinned (cfg.Commit set) and floating configs are left untouched.
 func resolvePin(ctx context.Context, cfg *wizard.InitConfig, offline bool) error {
+	// An in-repo working-tree source has no commit to resolve or pin.
+	if cfg.LocalDir != "" {
+		return nil
+	}
 	if cfg.Floating || cfg.Commit != "" {
 		return nil
 	}

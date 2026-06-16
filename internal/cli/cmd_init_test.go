@@ -46,6 +46,36 @@ func TestInit_NonInteractiveLocalPathWritesLoadableManifest(t *testing.T) {
 	}
 }
 
+func TestInit_NonInteractiveLocalDirWritesUnpinnedManifest(t *testing.T) {
+	ws := t.TempDir()
+	if _, errOut, err := runInit(t, "--dir", ws, "--local-dir", ".agents", "--target", "claude"); err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("written manifest does not load: %v", lerr)
+	}
+	if m.Canonical.LocalDir != ".agents" {
+		t.Fatalf("local_dir = %q, want .agents", m.Canonical.LocalDir)
+	}
+	if m.Canonical.Commit != "" || m.TrustedSHA != "" {
+		t.Fatalf("local_dir manifest must be unpinned (commit=%q trusted=%q)", m.Canonical.Commit, m.TrustedSHA)
+	}
+}
+
+func TestInit_LocalDirRejectsPinAndOtherSources(t *testing.T) {
+	const sha40 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if _, _, err := runInit(t, "--dir", t.TempDir(), "--local-dir", ".agents", "--commit", sha40); err == nil {
+		t.Error("expected error: --local-dir with --commit")
+	}
+	if _, _, err := runInit(t, "--dir", t.TempDir(), "--local-dir", ".agents", "--floating"); err == nil {
+		t.Error("expected error: --local-dir with --floating")
+	}
+	if _, _, err := runInit(t, "--dir", t.TempDir(), "--local-dir", ".agents", "--source", "https://example.com/x.git"); err == nil {
+		t.Error("expected error: --local-dir with --source")
+	}
+}
+
 func TestInit_NonInteractiveMissingSourceFailsFast(t *testing.T) {
 	ws := t.TempDir()
 	_, _, err := runInit(t, "--dir", ws)

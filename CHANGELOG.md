@@ -11,6 +11,19 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+### Added
+
+- In-repo local skill source (`canonical.local_dir`). A workspace can author
+  skills, rules, commands, AGENTS.md, mcp, and plugins under a workspace-relative
+  directory (e.g. `.agents`) and compile them straight from the working tree —
+  no git, no clone, no commit pin. The source kind is a third, mutually-exclusive
+  option alongside `url`/`local_path`, exempt from pinning, trust (TOFU), and
+  offline-strict. Authored skills coexist with agent-sync's own emitted skills
+  in the shared `.agents/skills` tree via the reserved `agent-sync-` id prefix.
+  Configure with `agent-sync init --local-dir .agents`. The decoder now reads
+  through an `ir.SourceTree` interface satisfied by both `git.Repository` and a
+  new `internal/worktree.Reader`.
+
 ### Fixed
 
 - `agent-sync --version` now reports the release tag injected via

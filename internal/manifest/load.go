@@ -139,19 +139,43 @@ func Validate(m *Manifest, opts LoadOptions) error {
 	// Normalize scalar fields before any checks.
 	m.Canonical.URL = strings.TrimSpace(m.Canonical.URL)
 	m.Canonical.LocalPath = strings.TrimSpace(m.Canonical.LocalPath)
+	m.Canonical.LocalDir = strings.TrimSpace(m.Canonical.LocalDir)
+	m.Canonical.Ref = strings.TrimSpace(m.Canonical.Ref)
 
-	// Canonical source 1:1 invariant: exactly one of url/local_path.
+	// Canonical source 1:1 invariant: exactly one of url/local_path/local_dir.
 	hasURL := m.Canonical.URL != ""
-	hasLocal := m.Canonical.LocalPath != ""
-	switch {
-	case hasURL && hasLocal:
-		return fmt.Errorf("%w: canonical source must set exactly one of url or local_path (got both)", ErrInvalidManifest)
-	case !hasURL && !hasLocal:
-		return fmt.Errorf("%w: canonical source must set exactly one of url or local_path (got neither)", ErrInvalidManifest)
+	hasLocalPath := m.Canonical.LocalPath != ""
+	hasLocalDir := m.Canonical.LocalDir != ""
+	sources := 0
+	for _, set := range []bool{hasURL, hasLocalPath, hasLocalDir} {
+		if set {
+			sources++
+		}
+	}
+	if sources != 1 {
+		return fmt.Errorf("%w: canonical source must set exactly one of url, local_path, or local_dir (got %d)", ErrInvalidManifest, sources)
 	}
 
 	commit := strings.TrimSpace(m.Canonical.Commit)
 	trusted := strings.TrimSpace(m.TrustedSHA)
+
+	// local_dir is an in-repo working-tree source: unpinned by nature, so a
+	// git ref / commit / trust anchor is a configuration error rather than a
+	// no-op. Validate its path with the same workspace-relative rules as
+	// reserved_prefix and reject the workspace root.
+	if hasLocalDir {
+		if commit != "" || trusted != "" || m.Canonical.Ref != "" {
+			return fmt.Errorf("%w: canonical.local_dir is an unpinned working-tree source and cannot set commit, ref, or trusted_sha", ErrInvalidManifest)
+		}
+		cleaned, err := ValidateReservedPrefix(m.Canonical.LocalDir)
+		if err != nil {
+			return fmt.Errorf("%w: canonical.local_dir: %w", ErrInvalidManifest, err)
+		}
+		if cleaned == "" || cleaned == "." {
+			return fmt.Errorf("%w: canonical.local_dir must name a workspace subdirectory, not the workspace root", ErrInvalidManifest)
+		}
+		m.Canonical.LocalDir = cleaned
+	}
 
 	if trusted != "" && commit == "" {
 		return fmt.Errorf("%w: trusted_sha is set but canonical.commit is empty (no floating-with-pin hybrid)", ErrInvalidManifest)

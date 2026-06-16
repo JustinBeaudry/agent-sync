@@ -20,6 +20,11 @@ func TestInitConfig_Validate(t *testing.T) {
 		{"no source", InitConfig{Commit: "abc"}, true},
 		{"unpinned non-floating", InitConfig{SourceURL: "u"}, true},
 		{"floating with commit", InitConfig{SourceURL: "u", Floating: true, Commit: "abc"}, true},
+		{"local_dir ok", InitConfig{LocalDir: ".agents"}, false},
+		{"local_dir + commit", InitConfig{LocalDir: ".agents", Commit: "abc"}, true},
+		{"local_dir + ref", InitConfig{LocalDir: ".agents", Ref: "main"}, true},
+		{"local_dir + floating", InitConfig{LocalDir: ".agents", Floating: true}, true},
+		{"local_dir + url", InitConfig{LocalDir: ".agents", SourceURL: "u"}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -66,6 +71,21 @@ func TestInitConfig_ManifestYAML(t *testing.T) {
 	}
 	if strings.Contains(string(floatOut), "floating:") {
 		t.Errorf("schema has no floating key; should not be emitted:\n%s", floatOut)
+	}
+
+	// A local_dir manifest emits the directory and nothing pin-related.
+	dirOut, derr := InitConfig{LocalDir: ".agents", Targets: []string{"claude"}}.ManifestYAML()
+	if derr != nil {
+		t.Fatalf("local_dir ManifestYAML: %v", derr)
+	}
+	ds := string(dirOut)
+	if !strings.Contains(ds, "local_dir: .agents") {
+		t.Errorf("local_dir manifest missing the directory:\n%s", ds)
+	}
+	for _, unwanted := range []string{"url:", "local_path:", "ref:", "commit:", "trusted_sha:"} {
+		if strings.Contains(ds, unwanted) {
+			t.Errorf("local_dir manifest should not emit %q:\n%s", unwanted, ds)
+		}
 	}
 }
 

@@ -32,8 +32,8 @@ var rootAgentsMDOverlay = map[string]string{
 // The decoder is deterministic: same commit SHA → byte-identical IR
 // (modulo Go map iteration in user-visible fields, which we explicitly
 // sort).
-func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node, []Warning, error) {
-	entries, err := repo.ReadTree(commitSHA)
+func Decode(src SourceTree, ref string, opts DecodeOptions) ([]Node, []Warning, error) {
+	entries, err := src.ReadTree(ref)
 	if err != nil {
 		return nil, nil, fmt.Errorf("ir: read tree: %w", err)
 	}
@@ -70,7 +70,7 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 		p := e.Path
 		switch {
 		case p == "AGENTS.md":
-			node, err := buildAgentsMD(repo, commitSHA, e, "" /* no overlay scope */)
+			node, err := buildAgentsMD(src, ref, e, "" /* no overlay scope */)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -81,7 +81,7 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 			hasAgentsMD = true
 
 		case isOverlayPath(p):
-			node, err := buildAgentsMD(repo, commitSHA, e, rootAgentsMDOverlay[p])
+			node, err := buildAgentsMD(src, ref, e, rootAgentsMDOverlay[p])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -96,7 +96,7 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 			hasAgentsMD = true
 
 		case strings.HasPrefix(p, "rules/"):
-			node, err := buildSimpleNode(repo, commitSHA, e, KindRule, "rules/", ".md")
+			node, err := buildSimpleNode(src, ref, e, KindRule, "rules/", ".md")
 			if err != nil {
 				return nil, nil, err
 			}
@@ -125,7 +125,7 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 				if !IsValidID(id) {
 					return nil, nil, fmt.Errorf("%w: skill id %q (from %q)", ErrInvalidID, id, p)
 				}
-				node, err := buildSkillNode(repo, commitSHA, e, id)
+				node, err := buildSkillNode(src, ref, e, id)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -139,7 +139,7 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 			// via SkillsByID. They do not become Nodes themselves.
 
 		case strings.HasPrefix(p, "commands/"):
-			node, err := buildSimpleNode(repo, commitSHA, e, KindCommand, "commands/", ".md")
+			node, err := buildSimpleNode(src, ref, e, KindCommand, "commands/", ".md")
 			if err != nil {
 				return nil, nil, err
 			}
@@ -149,7 +149,7 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 			nodes = append(nodes, node)
 
 		case strings.HasPrefix(p, "mcp/"):
-			node, err := buildSimpleNode(repo, commitSHA, e, KindMCPServerEntry, "mcp/", ".json")
+			node, err := buildSimpleNode(src, ref, e, KindMCPServerEntry, "mcp/", ".json")
 			if err != nil {
 				return nil, nil, err
 			}
@@ -159,7 +159,7 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 			nodes = append(nodes, node)
 
 		case strings.HasPrefix(p, "plugins/"):
-			node, err := buildSimpleNode(repo, commitSHA, e, KindPluginReference, "plugins/", ".toml")
+			node, err := buildSimpleNode(src, ref, e, KindPluginReference, "plugins/", ".toml")
 			if err != nil {
 				return nil, nil, err
 			}
@@ -223,7 +223,7 @@ func Decode(repo *git.Repository, commitSHA string, opts DecodeOptions) ([]Node,
 // WarnSkillAssetUnreadable when an asset blob fails to load. The asset
 // is omitted from the bundle (best-effort), and the warning lets
 // callers surface the failure instead of swallowing it silently.
-func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) (map[string]Skill, []Warning) {
+func SkillsByID(nodes []Node, src SourceTree, ref string) (map[string]Skill, []Warning) {
 	var warnings []Warning
 	out := map[string]Skill{}
 	// Index skill nodes for fast lookup.
@@ -237,7 +237,7 @@ func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) (map[strin
 		return out, warnings
 	}
 
-	entries, err := repo.ReadTree(commitSHA)
+	entries, err := src.ReadTree(ref)
 	if err != nil {
 		return out, warnings
 	}
@@ -264,7 +264,7 @@ func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) (map[strin
 		if _, ok := skills[id]; !ok {
 			continue
 		}
-		content, err := repo.BlobContent(commitSHA, e.Path)
+		content, err := src.BlobContent(ref, e.Path)
 		if err != nil {
 			// Best-effort: skip the asset rather than failing the
 			// whole skills lookup, but surface the failure as a
@@ -312,8 +312,8 @@ func SkillsByID(nodes []Node, repo *git.Repository, commitSHA string) (map[strin
 // buildAgentsMD reads the file content, applies frontmatter, and produces
 // an agents-md Node. When overlayTarget is non-empty, it scopes the node
 // to that adapter (e.g., "claude" for CLAUDE.md).
-func buildAgentsMD(repo *git.Repository, commitSHA string, e git.TreeEntry, overlayTarget string) (Node, error) {
-	body, err := repo.BlobContent(commitSHA, e.Path)
+func buildAgentsMD(src SourceTree, ref string, e git.TreeEntry, overlayTarget string) (Node, error) {
+	body, err := src.BlobContent(ref, e.Path)
 	if err != nil {
 		return Node{}, fmt.Errorf("ir: read %q: %w", e.Path, err)
 	}
@@ -356,7 +356,7 @@ func buildAgentsMD(repo *git.Repository, commitSHA string, e git.TreeEntry, over
 // `dirPrefix` is the canonical directory (with trailing slash);
 // `requiredExt` is the only allowed extension. Any other extension is
 // ErrUnrecognizedFile.
-func buildSimpleNode(repo *git.Repository, commitSHA string, e git.TreeEntry, kind Kind, dirPrefix, requiredExt string) (Node, error) {
+func buildSimpleNode(src SourceTree, ref string, e git.TreeEntry, kind Kind, dirPrefix, requiredExt string) (Node, error) {
 	if path.Ext(e.Path) != requiredExt {
 		return Node{}, fmt.Errorf("%w: %s (expected %s files)", ErrUnrecognizedFile, e.Path, requiredExt)
 	}
@@ -370,7 +370,7 @@ func buildSimpleNode(repo *git.Repository, commitSHA string, e git.TreeEntry, ki
 	if !IsValidID(id) {
 		return Node{}, fmt.Errorf("%w: id %q (from %q)", ErrInvalidID, id, e.Path)
 	}
-	body, err := repo.BlobContent(commitSHA, e.Path)
+	body, err := src.BlobContent(ref, e.Path)
 	if err != nil {
 		return Node{}, fmt.Errorf("ir: read %q: %w", e.Path, err)
 	}
@@ -394,8 +394,8 @@ func buildSimpleNode(repo *git.Repository, commitSHA string, e git.TreeEntry, ki
 
 // buildSkillNode reads a skills/<id>/SKILL.md and returns the base skill
 // Node. Asset attachment happens later via SkillsByID.
-func buildSkillNode(repo *git.Repository, commitSHA string, e git.TreeEntry, id string) (Node, error) {
-	body, err := repo.BlobContent(commitSHA, e.Path)
+func buildSkillNode(src SourceTree, ref string, e git.TreeEntry, id string) (Node, error) {
+	body, err := src.BlobContent(ref, e.Path)
 	if err != nil {
 		return Node{}, fmt.Errorf("ir: read %q: %w", e.Path, err)
 	}

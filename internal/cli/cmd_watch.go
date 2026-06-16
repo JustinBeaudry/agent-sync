@@ -45,8 +45,17 @@ func newWatchCommand(deps RootDeps) *cobra.Command {
 			}
 
 			paths := []string{ws.ManifestPath}
-			if m.Canonical.LocalPath != "" {
+			switch {
+			case m.Canonical.LocalPath != "":
 				paths = append(paths, m.Canonical.LocalPath)
+			case m.Canonical.LocalDir != "":
+				// Watch the in-repo source directory so edits under it
+				// re-sync. The emitted skill output lives inside this tree
+				// (<local_dir>/skills/agent-sync-*); a sync that writes it
+				// triggers one more event, but the follow-up sync is an
+				// idempotent no-op (no writes, no swap), so the loop is
+				// bounded rather than runaway — see watch.Run's no-op-sync note.
+				paths = append(paths, filepath.Join(ws.Root, m.Canonical.LocalDir))
 			}
 
 			// Ctrl+C (SIGINT) or SIGTERM (process managers, Docker, K8s)
