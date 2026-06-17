@@ -48,3 +48,43 @@ func findProjectRoot(cwd, home string, maxHops int) (string, bool) {
 	}
 	return "", false
 }
+
+// collectEmitScopes walks from cwd up to projectRoot (inclusive) and
+// returns a Scope for each directory that holds a manifest. The manifest at
+// projectRoot is LevelProject; every other one is LevelDirectory. Results
+// are ordered shallow→deep (projectRoot first, cwd last), matching
+// ascending precedence. All emit scopes have Emit=true.
+//
+// projectRoot must be cwd or an ancestor of it; the walk is bounded by
+// reaching projectRoot or the filesystem root.
+func collectEmitScopes(cwd, projectRoot string) ([]Scope, error) {
+	var found []Scope
+	dir := cwd
+	for {
+		if path, ok := manifestAt(dir); ok {
+			level := LevelDirectory
+			if dir == projectRoot {
+				level = LevelProject
+			}
+			found = append(found, Scope{
+				Root:         dir,
+				ManifestPath: path,
+				Level:        level,
+				Emit:         true,
+			})
+		}
+		if dir == projectRoot {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	// found is deep→shallow; reverse to shallow→deep.
+	for i, j := 0, len(found)-1; i < j; i, j = i+1, j-1 {
+		found[i], found[j] = found[j], found[i]
+	}
+	return found, nil
+}

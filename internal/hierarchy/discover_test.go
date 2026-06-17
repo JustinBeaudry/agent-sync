@@ -97,3 +97,70 @@ func TestFindProjectRootStopsAtHome(t *testing.T) {
 		t.Fatal("findProjectRoot treated home as a project root")
 	}
 }
+
+func TestCollectEmitScopesProjectAndDirectory(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	pkg := filepath.Join(repo, "packages", "api")
+	mkGit(t, repo)
+	writeManifest(t, repo) // project level
+	writeManifest(t, pkg)  // directory level
+	if err := os.MkdirAll(filepath.Join(pkg, "src"), 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	cwd := filepath.Join(pkg, "src") // cwd below the deepest manifest
+
+	scopes, err := collectEmitScopes(cwd, repo)
+	if err != nil {
+		t.Fatalf("collectEmitScopes: %v", err)
+	}
+	if len(scopes) != 2 {
+		t.Fatalf("got %d scopes, want 2: %+v", len(scopes), scopes)
+	}
+	// Shallow→deep: project first, then the directory-level manifest.
+	if scopes[0].Root != repo || scopes[0].Level != LevelProject {
+		t.Errorf("scope[0] = %+v, want project at %q", scopes[0], repo)
+	}
+	if scopes[1].Root != pkg || scopes[1].Level != LevelDirectory {
+		t.Errorf("scope[1] = %+v, want directory at %q", scopes[1], pkg)
+	}
+	for i, s := range scopes {
+		if !s.Emit {
+			t.Errorf("scope[%d] Emit = false, want true", i)
+		}
+	}
+}
+
+func TestCollectEmitScopesSkipsDirsWithoutManifest(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	deep := filepath.Join(repo, "a", "b")
+	mkGit(t, repo)
+	writeManifest(t, repo) // only the project root has a manifest
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	scopes, err := collectEmitScopes(deep, repo)
+	if err != nil {
+		t.Fatalf("collectEmitScopes: %v", err)
+	}
+	if len(scopes) != 1 || scopes[0].Root != repo || scopes[0].Level != LevelProject {
+		t.Fatalf("got %+v, want a single project scope at %q", scopes, repo)
+	}
+}
+
+func TestCollectEmitScopesCwdIsProjectRoot(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	mkGit(t, repo)
+	writeManifest(t, repo)
+
+	scopes, err := collectEmitScopes(repo, repo)
+	if err != nil {
+		t.Fatalf("collectEmitScopes: %v", err)
+	}
+	if len(scopes) != 1 || scopes[0].Level != LevelProject {
+		t.Fatalf("got %+v, want single project scope", scopes)
+	}
+}
