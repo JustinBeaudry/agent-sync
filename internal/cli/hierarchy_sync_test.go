@@ -14,6 +14,7 @@ import (
 
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
+	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/report"
 )
 
@@ -213,6 +214,62 @@ func TestRunHierarchySyncContinuesPastMalformedScope(t *testing.T) {
 	// (c) The aggregate exit code is non-zero because a scope failed.
 	if got := hierarchyExitCode(outcomes); got == 0 {
 		t.Error("aggregate exit code must be non-zero when a scope fails")
+	}
+}
+
+// TestHierarchySyncEmitsCoverageWarning checks that a directory-level scope
+// emitting a skill for target claude carries a coverage warning (claude does
+// not read nested skills natively), while the project-level scope emitting the
+// same skill carries none (project level is always native).
+func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	rc := newTestRuntime()
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+
+	outcomes, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{IncludeUser: false, EngineOpts: engine.Options{
+			Mode:   report.ModeAtomic,
+			Now:    func() time.Time { return now },
+			Logger: rc.Logger,
+		}},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	if len(outcomes) != 2 {
+		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	}
+	proj, dir := outcomes[0], outcomes[1]
+	if proj.Scope.Level != hierarchy.LevelProject {
+		t.Fatalf("first scope level = %s, want project", proj.Scope.Level)
+	}
+	if dir.Scope.Level != hierarchy.LevelDirectory {
+		t.Fatalf("second scope level = %s, want directory", dir.Scope.Level)
+	}
+
+	// Project scope: skill at project level is native, so no warnings.
+	if len(proj.Warnings) != 0 {
+		t.Errorf("project scope should carry no coverage warnings, got: %+v", proj.Warnings)
+	}
+	// Directory scope: claude does not read nested skills natively → 1 warning.
+	if len(dir.Warnings) != 1 {
+		t.Fatalf("directory scope should carry 1 coverage warning, got %d: %+v", len(dir.Warnings), dir.Warnings)
+	}
+	w := dir.Warnings[0]
+	if w.Target != "claude" || w.Kind != ir.KindSkill || w.Level != hierarchy.LevelDirectory {
+		t.Errorf("warning = %+v, want claude/skill/directory", w)
+	}
+
+	// The warning surfaces in text output, scoped under the directory header.
+	var buf bytes.Buffer
+	if err := renderHierarchyText(&buf, outcomes); err != nil {
+		t.Fatalf("renderHierarchyText: %v", err)
+	}
+	out := buf.String()
+	if !bytes.Contains([]byte(out), []byte("warning:")) || !bytes.Contains([]byte(out), []byte("claude")) {
+		t.Errorf("text output missing coverage warning:\n%s", out)
 	}
 }
 

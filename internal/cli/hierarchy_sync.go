@@ -9,8 +9,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/agent-sync/agent-sync/internal/coverage"
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
+	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/report"
 )
 
@@ -20,6 +22,10 @@ type scopeOutcome struct {
 	Scope   hierarchy.Scope
 	Summary report.Summary
 	Err     error
+	// Warnings are the coverage gaps for this scope: kinds it emits that the
+	// target tools will not read natively at the scope's level. Empty for
+	// project/user scopes (always native) and for scopes that fail to prepare.
+	Warnings []coverage.Warning
 }
 
 // hierarchySyncOptions carries the per-run knobs the orchestrator applies to
@@ -59,6 +65,11 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		}
 		req := prep.Request
 		req.Options = opts.EngineOpts
+		// Coverage warnings are computed from the decoded IR (the distinct kinds
+		// this scope emits), the manifest's targets, and the scope's level.
+		// Computed after a successful prepare (nodes exist); independent of the
+		// sync outcome.
+		out.Warnings = coverage.Analyze(sc.Level, kindsOf(req.Nodes), req.Targets)
 		summary, serr := engine.Sync(ctx, req)
 		prep.Close()
 		if serr != nil {
@@ -69,6 +80,21 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		outcomes = append(outcomes, out)
 	}
 	return outcomes, nil
+}
+
+// kindsOf returns the distinct IR kinds present in nodes, preserving
+// first-seen order. Used to feed coverage.Analyze the scope's emitted kinds.
+func kindsOf(nodes []ir.Node) []ir.Kind {
+	seen := make(map[ir.Kind]bool, len(nodes))
+	var out []ir.Kind
+	for _, n := range nodes {
+		if seen[n.Kind] {
+			continue
+		}
+		seen[n.Kind] = true
+		out = append(out, n.Kind)
+	}
+	return out
 }
 
 // hierarchyExitCode is non-zero when any scope failed to prepare/sync or any
@@ -106,6 +132,11 @@ func renderHierarchyText(w io.Writer, outcomes []scopeOutcome) error {
 		if _, err := fmt.Fprint(w, report.RenderText(o.Summary)); err != nil {
 			return err
 		}
+		for _, warn := range o.Warnings {
+			if _, err := fmt.Fprintf(w, "  warning: %s\n", warn.Detail); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -113,10 +144,11 @@ func renderHierarchyText(w io.Writer, outcomes []scopeOutcome) error {
 // hierarchyScopeJSON is one scope's entry in the aggregate JSON document.
 // Exactly one of Summary or Error is populated, matching scopeOutcome.
 type hierarchyScopeJSON struct {
-	Root    string          `json:"root"`
-	Level   string          `json:"level"`
-	Summary *report.Summary `json:"summary,omitempty"`
-	Error   string          `json:"error,omitempty"`
+	Root     string             `json:"root"`
+	Level    string             `json:"level"`
+	Summary  *report.Summary    `json:"summary,omitempty"`
+	Error    string             `json:"error,omitempty"`
+	Warnings []coverage.Warning `json:"coverage_warnings,omitempty"`
 }
 
 // renderHierarchyJSON writes the aggregate machine-readable document: one
@@ -126,8 +158,9 @@ func renderHierarchyJSON(w io.Writer, outcomes []scopeOutcome) error {
 	scopes := make([]hierarchyScopeJSON, 0, len(outcomes))
 	for _, o := range outcomes {
 		entry := hierarchyScopeJSON{
-			Root:  o.Scope.Root,
-			Level: o.Scope.Level.String(),
+			Root:     o.Scope.Root,
+			Level:    o.Scope.Level.String(),
+			Warnings: o.Warnings,
 		}
 		if o.Err != nil {
 			entry.Error = o.Err.Error()
