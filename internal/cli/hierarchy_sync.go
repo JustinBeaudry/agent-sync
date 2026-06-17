@@ -132,6 +132,14 @@ func renderHierarchyJSON(w io.Writer, outcomes []scopeOutcome) error {
 		if o.Err != nil {
 			entry.Error = o.Err.Error()
 		} else {
+			// Embed the per-scope summary raw: the aggregate is marshaled
+			// below via json.Marshal(doc), which uses report.Summary's struct
+			// tags directly rather than report.MarshalJSON. This is
+			// intentional. The aggregate document carries its own top-level
+			// schema_version, and each embedded summary's JSON matches the
+			// standalone report shape minus that version wrapper (targets is
+			// populated by Summarize, not by the marshaler). Per-scope
+			// summaries deliberately do not repeat schema_version.
 			s := o.Summary
 			entry.Summary = &s
 		}

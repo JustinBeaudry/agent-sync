@@ -139,6 +139,83 @@ func TestSyncCommandHierarchy(t *testing.T) {
 	mustNotExist(t, filepath.Join(home, ".claude"))
 }
 
+// TestRunHierarchySyncContinuesPastMalformedScope drives the real
+// continue-and-report path end-to-end: a valid project-level manifest at the
+// git root and a nested directory-level scope whose manifest is malformed YAML.
+// The malformed scope fails inside prepareScope (manifest.LoadFile rejects the
+// YAML before any sync runs), so the failure layer is "prepare". The run must
+// still emit the valid scope and record the bad scope's error without aborting.
+func TestRunHierarchySyncContinuesPastMalformedScope(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	// Corrupt the nested (directory) scope's manifest so prepareScope fails
+	// for that scope only. Discovery keys off manifest presence, not validity,
+	// so the scope is still discovered and entered into the loop.
+	if err := os.WriteFile(filepath.Join(nested, ".agent-sync.yaml"), []byte(":\n  not: [valid"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rc := newTestRuntime()
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+
+	outcomes, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{IncludeUser: false, EngineOpts: engine.Options{
+			Mode:   report.ModeAtomic,
+			Now:    func() time.Time { return now },
+			Logger: rc.Logger,
+		}},
+		now,
+	)
+	// Discovery succeeded (both manifests are present), so the orchestrator
+	// returns no top-level error — the bad scope is reported per-scope.
+	if err != nil {
+		t.Fatalf("runHierarchySync returned a top-level error: %v", err)
+	}
+
+	if len(outcomes) != 2 {
+		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	}
+	// Outcomes are shallow→deep: project (valid) first, directory (bad) second.
+	valid, bad := outcomes[0], outcomes[1]
+	if valid.Scope.Level != hierarchy.LevelProject {
+		t.Fatalf("first scope level = %s, want project", valid.Scope.Level)
+	}
+	if bad.Scope.Level != hierarchy.LevelDirectory {
+		t.Fatalf("second scope level = %s, want directory", bad.Scope.Level)
+	}
+
+	// (b) Exactly one outcome errored (the malformed scope), and the valid
+	// scope has a nil error with a populated summary.
+	if valid.Err != nil {
+		t.Errorf("valid scope errored: %v", valid.Err)
+	}
+	if valid.Summary.Workspace == "" {
+		t.Errorf("valid scope summary not populated: %+v", valid.Summary)
+	}
+	if bad.Err == nil {
+		t.Fatal("malformed scope must report an error")
+	}
+	errored := 0
+	for _, o := range outcomes {
+		if o.Err != nil {
+			errored++
+		}
+	}
+	if errored != 1 {
+		t.Errorf("got %d errored outcomes, want exactly 1", errored)
+	}
+
+	// (a) The valid scope still emitted its .claude files on disk despite the
+	// sibling scope failing.
+	mustExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
+	// The malformed scope emitted nothing.
+	mustNotExist(t, filepath.Join(nested, ".claude"))
+
+	// (c) The aggregate exit code is non-zero because a scope failed.
+	if got := hierarchyExitCode(outcomes); got == 0 {
+		t.Error("aggregate exit code must be non-zero when a scope fails")
+	}
+}
+
 func TestSyncCommandUserFlag(t *testing.T) {
 	home, _, nested := hierarchyTree(t)
 	// Add a user-level manifest + authored skill at home.
