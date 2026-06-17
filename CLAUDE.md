@@ -21,4 +21,7 @@ adds Claude-Code-specific expectations only.
 - Do not introduce dependencies that require CGo unless explicitly
   justified in a plan update.
 - Do not reach outside `internal/fsroot` to touch user paths — the
-  safe-filesystem layer is the single enforcement point.
+  safe-filesystem layer is the single enforcement point. (Hierarchy-aware
+  sync may open a scope root outside the repo — including the home directory
+  under `sync --user` — but every such write still goes through
+  `fsroot.OpenWorkspaceRoot`; that remains the only enforcement point.)
