@@ -43,6 +43,12 @@ type prepared struct {
 // canonical IR, discover adapters, and assemble an engine.Request. Per-run
 // engine.Options (mode, adopt, expect-deletions) are layered on by the
 // caller via the returned Request.Options.
+//
+// prepareEngine is the single-scope wrapper: it resolves the nearest
+// workspace from cwd (or the explicit --workspace override) and delegates to
+// prepareScope. It is used by validate, and by sync when an explicit
+// --workspace override is in effect. The hierarchy sync orchestrator skips
+// it and calls prepareScope directly, once per discovered scope.
 func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prepared, error) {
 	if rc == nil {
 		return prepared{}, errors.New("cli: prepareEngine called with nil runtime context")
@@ -52,11 +58,27 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	if err != nil {
 		return prepared{}, fmt.Errorf("locate workspace: %w", err)
 	}
-	m, err := manifest.LoadFile(ws.ManifestPath, manifest.LoadOptions{NonInteractive: rc.Access.NonInteractive})
+	return prepareScope(ctx, rc, ws.Root, ws.ManifestPath, now)
+}
+
+// prepareScope builds the per-invocation engine inputs for one already-located
+// scope: it loads the manifest at manifestPath, opens an fsroot at scopeRoot,
+// materializes the canonical IR, discovers adapters, and assembles an
+// engine.Request. The caller must Close the returned root (via prepared.Close).
+//
+// This is the multi-scope-safe core: the hierarchy orchestrator calls it once
+// per discovered scope, each against that scope's own root, so each scope's
+// engine.Sync writes its own staging and ledger.
+func prepareScope(ctx context.Context, rc *runtimeContext, scopeRoot, manifestPath string, now time.Time) (prepared, error) {
+	if rc == nil {
+		return prepared{}, errors.New("cli: prepareScope called with nil runtime context")
+	}
+	flags := rc.Flags
+	m, err := manifest.LoadFile(manifestPath, manifest.LoadOptions{NonInteractive: rc.Access.NonInteractive})
 	if err != nil {
 		return prepared{}, fmt.Errorf("load manifest: %w", err)
 	}
-	root, err := fsroot.OpenWorkspaceRoot(ws.Root)
+	root, err := fsroot.OpenWorkspaceRoot(scopeRoot)
 	if err != nil {
 		return prepared{}, fmt.Errorf("open workspace root: %w", err)
 	}
@@ -84,7 +106,7 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 
 	req := engine.Request{
 		Root:          root,
-		WorkspacePath: ws.Root,
+		WorkspacePath: scopeRoot,
 		Registry:      reg,
 		Targets:       m.Targets,
 		Nodes:         mat.Nodes,
@@ -93,7 +115,7 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 		Options:       engine.Options{Now: func() time.Time { return now }, Logger: rc.Logger},
 	}
 	return prepared{
-		Workspace: ws,
+		Workspace: &workspace.Workspace{Root: scopeRoot, ManifestPath: manifestPath},
 		Manifest:  m,
 		Root:      root,
 		Request:   req,
