@@ -42,12 +42,18 @@ with a copyable example under [`examples/canonical/`](examples/canonical/).
 
 ## What agent-sync does
 
-1. **One manifest per workspace.** A `.agent-sync.yaml` binds the workspace to a
+1. **Manifests form a hierarchy.** A `.agent-sync.yaml` binds a directory to a
    canonical source and declares which target tools receive configuration. The
    source is one of: a remote Git repo (`url`) or a local clone (`local_path`),
    both pinned by commit SHA; or an in-repo working-tree directory (`local_dir`,
    e.g. `.agents`) for per-repo skills authored right in the repo — unpinned,
    and exempt from trust and offline-strict since there's nothing remote to fetch.
+   `sync` walks up from the current directory (project root = nearest `.git`
+   ancestor) and emits every manifest it finds, each to its own scope; the
+   user-level manifest at `~` is emitted only with `sync --user`. agent-sync
+   never merges across levels — each target tool resolves precedence via its own
+   native config hierarchy, and `sync` warns when a scope emits a kind a tool
+   won't read natively at that level.
 2. **Explicit `sync`.** `agent-sync sync` materializes the pinned content,
    compiles it via per-tool adapters, stages the output, and atomically
    swaps it into each tool's reserved subdirectory (e.g.

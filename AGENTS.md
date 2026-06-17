@@ -27,7 +27,12 @@ These are non-negotiable; violating them breaks v1:
 1. **All writes into a workspace go through `internal/fsroot`.** No direct
    `os.WriteFile`, `os.Create`, or `os.Rename` against workspace paths.
    The safe-filesystem layer is the only legitimate way to write a file
-   inside a reserved prefix. (Units 1, 13.)
+   inside a reserved prefix. (Units 1, 13.) With hierarchy-aware sync there
+   may be multiple `fsroot.Root` instances active in one run — one per
+   discovered scope (project, intermediate directories, and the user home
+   `~` under `sync --user`) — each opened via `fsroot.OpenWorkspaceRoot` and
+   enforcing its own boundary independently. The home directory is a
+   legitimate scope root, opened only on an explicit `--user` sync.
 2. **Adapters never write files directly.** They emit declarative ops
    over the v1 protocol; the CLI core performs the actual writes. This
    centralizes safe-write semantics and enforces declarative-only output.

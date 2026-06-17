@@ -127,6 +127,219 @@ func TestStatus_ReportsSourceAndTargets(t *testing.T) {
 	}
 }
 
+// runStatusHierarchy drives the real status cobra command on the hierarchy
+// path: it sets cwd (so discovery walks from there), swaps the home seam to
+// keep the suite hermetic, and deliberately omits --workspace so discovery
+// runs across all scopes.
+func runStatusHierarchy(t *testing.T, cwd, home string, extraArgs ...string) (string, string, error) {
+	t.Helper()
+	t.Chdir(cwd)
+	prev := resolveHome
+	resolveHome = func() (string, error) { return home, nil }
+	t.Cleanup(func() { resolveHome = prev })
+
+	var out, errBuf bytes.Buffer
+	root := NewRootCommand(RootDeps{Out: &out, Err: &errBuf, Version: "test"})
+	args := append([]string{"status", "--non-interactive"}, extraArgs...)
+	root.SetArgs(args)
+	err := root.Execute()
+	return out.String(), errBuf.String(), err
+}
+
+func TestStatusShowsHierarchy(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	// Add a user-level manifest + authored skill at home so the user scope is
+	// discovered (read-only, never emitted).
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/skills/user-skill/SKILL.md", "user skill body\n")
+
+	// Sync the whole hierarchy (no --user) so the project + directory scopes get
+	// ledgers; the user scope stays unsynced (untracked).
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("seed sync failed: %v\nstderr: %s", err, errOut)
+	}
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "text")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+
+	// All three scopes are listed with their levels and roots.
+	for _, want := range []string{"user", "project", "directory", home, repo, nested} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status output missing %q:\n%s", want, out)
+		}
+	}
+	// The user scope is marked read-only / not emitted.
+	if !strings.Contains(out, "read-only") {
+		t.Errorf("status should mark the user scope read-only:\n%s", out)
+	}
+	// The project + directory scopes were synced → managed files.
+	if !strings.Contains(out, "managed file") {
+		t.Errorf("status should show managed files for synced scopes:\n%s", out)
+	}
+	// The user scope was not synced → untracked.
+	if !strings.Contains(out, "untracked") {
+		t.Errorf("status should show the unsynced user scope as untracked:\n%s", out)
+	}
+}
+
+func TestStatusHierarchyJSONListsScopes(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/skills/user-skill/SKILL.md", "user skill body\n")
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "json")
+	if err != nil {
+		t.Fatalf("status json: %v", err)
+	}
+	var doc struct {
+		Scopes []struct {
+			Level    string `json:"level"`
+			Root     string `json:"root"`
+			ReadOnly bool   `json:"read_only"`
+		} `json:"scopes"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("status json invalid: %v\n%s", err, out)
+	}
+	if len(doc.Scopes) != 3 {
+		t.Fatalf("got %d scopes, want 3: %+v", len(doc.Scopes), doc.Scopes)
+	}
+	if doc.Scopes[0].Level != "user" || !doc.Scopes[0].ReadOnly {
+		t.Errorf("first scope = %+v, want user/read-only", doc.Scopes[0])
+	}
+}
+
+// TestStatusContinuesPastMalformedScope drives the status continue-and-report
+// path: a valid project scope at the git root and a nested directory scope
+// whose .agent-sync.yaml is malformed YAML. The bad scope fails inside
+// scopeTargets (manifest.LoadFile rejects the YAML), so the failure layer is
+// the manifest load. status must still render the valid scope with its
+// level/source and surface an error line for the bad scope without aborting
+// with a top-level error.
+func TestStatusContinuesPastMalformedScope(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	// Corrupt the nested (directory) scope's manifest so scopeTargets fails for
+	// that scope only. Discovery keys off manifest presence, not validity, so
+	// the scope is still discovered and entered into the loop.
+	if err := os.WriteFile(filepath.Join(nested, ".agent-sync.yaml"), []byte(":\n  not: [valid"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "text")
+	if err != nil {
+		t.Fatalf("status must not abort with a top-level error when a scope is malformed: %v", err)
+	}
+
+	// The valid project scope still renders with its level, root, and source.
+	for _, want := range []string{"project", repo, "source:"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status output missing %q for the valid scope:\n%s", want, out)
+		}
+	}
+	// The malformed directory scope surfaces an error line under its header.
+	if !strings.Contains(out, "directory") || !strings.Contains(out, nested) {
+		t.Errorf("status output missing the directory scope header:\n%s", out)
+	}
+	if !strings.Contains(out, "ERROR:") {
+		t.Errorf("status should surface an error line for the malformed scope:\n%s", out)
+	}
+
+	// JSON confirms the bad scope records a per-scope error field while the
+	// valid scope does not, and the run still succeeds.
+	jout, _, jerr := runStatusHierarchy(t, nested, home, "--output", "json")
+	if jerr != nil {
+		t.Fatalf("status json must not abort: %v", jerr)
+	}
+	var doc struct {
+		Scopes []struct {
+			Level  string `json:"level"`
+			Source string `json:"source"`
+			Error  string `json:"error"`
+		} `json:"scopes"`
+	}
+	if uerr := json.Unmarshal([]byte(jout), &doc); uerr != nil {
+		t.Fatalf("status json invalid: %v\n%s", uerr, jout)
+	}
+	var sawValid, sawBad bool
+	for _, sc := range doc.Scopes {
+		switch sc.Level {
+		case "project":
+			if sc.Error == "" && sc.Source != "" {
+				sawValid = true
+			}
+		case "directory":
+			if sc.Error != "" {
+				sawBad = true
+			}
+		}
+	}
+	if !sawValid {
+		t.Errorf("expected a valid project scope with a source and no error: %+v", doc.Scopes)
+	}
+	if !sawBad {
+		t.Errorf("expected the directory scope to record a per-scope error: %+v", doc.Scopes)
+	}
+}
+
+func TestStatusHierarchy_WatchFailedBannerPerScope(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	// Plant the watch-failure marker under the nested (directory) scope's root
+	// only. Watch mode writes this marker per-root after a failed sync, so the
+	// default (hierarchy) status must surface the banner for that scope.
+	stateDir := filepath.Join(nested, ".agent-sync", "state")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "last-watch.failed"), []byte("boom\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "text")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !strings.Contains(out, "watch-mode sync failed") {
+		t.Fatalf("hierarchy status should surface the watch-failed banner for the affected scope:\n%s", out)
+	}
+
+	// JSON marks watch_failed=true for the directory scope and false elsewhere.
+	jout, _, jerr := runStatusHierarchy(t, nested, home, "--output", "json")
+	if jerr != nil {
+		t.Fatalf("status json: %v", jerr)
+	}
+	var doc struct {
+		Scopes []struct {
+			Level       string `json:"level"`
+			Root        string `json:"root"`
+			WatchFailed bool   `json:"watch_failed"`
+		} `json:"scopes"`
+	}
+	if uerr := json.Unmarshal([]byte(jout), &doc); uerr != nil {
+		t.Fatalf("status json invalid: %v\n%s", uerr, jout)
+	}
+	var sawFlagged, sawClean bool
+	for _, sc := range doc.Scopes {
+		switch sc.Root {
+		case nested:
+			sawFlagged = sc.WatchFailed
+		case repo:
+			sawClean = !sc.WatchFailed
+		}
+	}
+	if !sawFlagged {
+		t.Errorf("expected watch_failed=true for the directory scope %q: %+v", nested, doc.Scopes)
+	}
+	if !sawClean {
+		t.Errorf("expected watch_failed=false for the unaffected project scope %q: %+v", repo, doc.Scopes)
+	}
+}
+
 func TestStatus_WatchFailedBanner(t *testing.T) {
 	requireGit(t)
 	canonical, sha := makeCanonicalRepo(t)
