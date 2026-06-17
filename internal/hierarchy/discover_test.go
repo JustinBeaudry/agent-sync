@@ -164,3 +164,39 @@ func TestCollectEmitScopesCwdIsProjectRoot(t *testing.T) {
 		t.Fatalf("got %+v, want single project scope", scopes)
 	}
 }
+
+func TestUserScopeReadOnlyByDefault(t *testing.T) {
+	home := t.TempDir()
+	writeManifest(t, home)
+
+	scope, ok := userScope(home, false)
+	if !ok {
+		t.Fatal("userScope did not find the home manifest")
+	}
+	if scope.Level != LevelUser {
+		t.Errorf("level = %v, want user", scope.Level)
+	}
+	if scope.Emit {
+		t.Error("user scope Emit = true without IncludeUser; want false")
+	}
+}
+
+func TestUserScopeEmitWhenIncluded(t *testing.T) {
+	home := t.TempDir()
+	writeManifest(t, home)
+
+	scope, ok := userScope(home, true)
+	if !ok {
+		t.Fatal("userScope did not find the home manifest")
+	}
+	if !scope.Emit {
+		t.Error("user scope Emit = false with IncludeUser; want true")
+	}
+}
+
+func TestUserScopeAbsent(t *testing.T) {
+	home := t.TempDir() // no manifest written
+	if _, ok := userScope(home, true); ok {
+		t.Fatal("userScope reported a scope where home has no manifest")
+	}
+}

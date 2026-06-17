@@ -88,3 +88,20 @@ func collectEmitScopes(cwd, projectRoot string) ([]Scope, error) {
 	}
 	return found, nil
 }
+
+// userScope returns the user-home scope when home holds a manifest. Emit is
+// set only when includeUser is true (the --user flag); otherwise the scope
+// is returned read-only so callers can still display it in the precedence
+// view without writing to the home directory.
+func userScope(home string, includeUser bool) (Scope, bool) {
+	path, ok := manifestAt(home)
+	if !ok {
+		return Scope{}, false
+	}
+	return Scope{
+		Root:         home,
+		ManifestPath: path,
+		Level:        LevelUser,
+		Emit:         includeUser,
+	}, true
+}
