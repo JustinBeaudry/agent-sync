@@ -108,6 +108,68 @@ func TestRunHierarchySyncEmitsEachScope(t *testing.T) {
 	}
 }
 
+// runSyncHierarchy drives the real sync cobra command on the hierarchy path:
+// it sets cwd (so discovery walks from there), swaps the home seam to keep the
+// suite hermetic, and deliberately omits --workspace so discovery runs.
+func runSyncHierarchy(t *testing.T, cwd, home string, extraArgs ...string) (string, string, error) {
+	t.Helper()
+	t.Chdir(cwd)
+	prev := resolveHome
+	resolveHome = func() (string, error) { return home, nil }
+	t.Cleanup(func() { resolveHome = prev })
+
+	var out, errBuf bytes.Buffer
+	root := NewRootCommand(RootDeps{Out: &out, Err: &errBuf, Version: "test"})
+	args := append([]string{"sync", "--non-interactive"}, extraArgs...)
+	root.SetArgs(args)
+	err := root.Execute()
+	return out.String(), errBuf.String(), err
+}
+
+func TestSyncCommandHierarchy(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+
+	mustExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
+	mustExist(t, filepath.Join(nested, ".claude", "skills", "agent-sync-api-skill", "SKILL.md"))
+	// A repo sync without --user must never write under the home directory.
+	mustNotExist(t, filepath.Join(home, ".claude"))
+}
+
+func TestSyncCommandUserFlag(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	// Add a user-level manifest + authored skill at home.
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/skills/user-skill/SKILL.md", "user skill body\n")
+
+	// Without --user: the user scope is NOT emitted.
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("sync (no --user) failed: %v\nstderr: %s", err, errOut)
+	}
+	mustNotExist(t, filepath.Join(home, ".claude"))
+
+	// With --user: the user scope IS emitted.
+	if _, errOut, err := runSyncHierarchy(t, nested, home, "--user"); err != nil {
+		t.Fatalf("sync --user failed: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, filepath.Join(home, ".claude", "skills", "agent-sync-user-skill", "SKILL.md"))
+}
+
+func TestSyncCommandUserWithWorkspaceIsError(t *testing.T) {
+	ws := writeLocalDirWorkspace(t)
+	var out, errBuf bytes.Buffer
+	root := NewRootCommand(RootDeps{Out: &out, Err: &errBuf, Version: "test"})
+	root.SetArgs([]string{"sync", "--workspace", ws, "--non-interactive", "--user"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error when --user is combined with --workspace")
+	}
+}
+
 func TestHierarchyExitCode(t *testing.T) {
 	clean := scopeOutcome{Summary: report.Summary{Outcome: report.Outcome{ExitCode: 0}}}
 	failedSync := scopeOutcome{Summary: report.Summary{Outcome: report.Outcome{ExitCode: 1}}}
