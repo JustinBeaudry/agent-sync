@@ -11,6 +11,39 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-17
+
+### Added
+
+- Hierarchy-aware manifests. `agent-sync` discovers a `.agent-sync.yaml` at
+  multiple filesystem scopes by walking up from the current directory — project
+  (the nearest `.git` ancestor), any intermediate directories, and the user home
+  (`~`) — and emits each manifest to its own scope. Precedence is resolved by
+  each target tool's native config hierarchy (Claude Code, Codex's `AGENTS.md`
+  walk, Cursor's nested `.cursor/rules`); agent-sync never merges across levels.
+  New `internal/hierarchy` package.
+- `sync` is multi-scope: it emits every manifest from the current directory up
+  to the project root, with continue-and-report across scopes (one failing scope
+  no longer blocks the others, and per-scope operational/trust failures keep
+  their specific exit codes). The new `--user` flag also emits the user-level
+  (`~`) manifest; a plain repo `sync` never writes under the home directory, and
+  `--user` is mutually exclusive with `--workspace`.
+- Coverage warnings (`internal/coverage`). `sync` warns when a scope emits a
+  node kind a target tool will not read natively at that level (e.g. a
+  nested-directory skill for Claude), so silently-ineffective output is surfaced
+  rather than hidden. Unknown targets/kinds default to native (no false
+  warnings).
+- Hierarchy-aware `status`. It lists every discovered scope (user/project/
+  directory) with its level, source, and per-target managed-file counts, and
+  surfaces the watch-failure banner per scope.
+
+### Notes
+
+- `validate` and `watch` remain single-scope (nearest workspace) for now.
+- The runtime filesystem-mapping fallback for tools that cannot layer a kind
+  natively is deferred behind a future explicit flag; the sync engine is
+  unchanged by this release.
+
 ## [0.2.0] - 2026-06-16
 
 ### Added
