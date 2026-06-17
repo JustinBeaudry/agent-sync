@@ -98,6 +98,44 @@ func TestFindProjectRootStopsAtHome(t *testing.T) {
 	}
 }
 
+func TestFindProjectRootMaxHopsExhausted(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "a", "b", "c")
+	mkGit(t, repo)
+	deep := filepath.Join(repo, "d", "e")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// .git is 2 hops above `deep`; a budget of 2 cannot reach it.
+	if _, ok := findProjectRoot(deep, home, 2); ok {
+		t.Fatal("findProjectRoot found a root outside the hop budget")
+	}
+	// A generous budget finds it, proving the prior failure was the bound.
+	if _, ok := findProjectRoot(deep, home, 64); !ok {
+		t.Fatal("findProjectRoot missed the root with an ample budget")
+	}
+}
+
+func TestDiscoverRespectsMaxHopsOption(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "a", "b")
+	mkGit(t, repo)
+	writeManifest(t, repo)
+	deep := filepath.Join(repo, "c", "d")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// MaxHops=1 cannot reach the .git 2 hops up, so no project root is
+	// found and the no-git fallback applies (cwd has no manifest → empty).
+	scopes, err := Discover(deep, Options{Home: home, MaxHops: 1})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(scopes) != 0 {
+		t.Fatalf("got %+v, want no scopes when MaxHops is too small", scopes)
+	}
+}
+
 func TestCollectEmitScopesProjectAndDirectory(t *testing.T) {
 	home := t.TempDir()
 	repo := filepath.Join(home, "repo")
@@ -253,11 +291,9 @@ func TestDiscoverIncludeUser(t *testing.T) {
 func TestDiscoverNoGitFallbackIsCwdOnly(t *testing.T) {
 	home := t.TempDir()
 	notes := filepath.Join(home, "notes")
-	parent := filepath.Join(home, "notes") // parent of cwd; has a manifest but no .git anywhere
 	deep := filepath.Join(notes, "deep")
-	writeManifest(t, parent) // would-be directory level, but no git → ignored
-	writeManifest(t, deep)   // cwd's own manifest
-	_ = parent
+	writeManifest(t, notes) // would-be directory level, but no git → ignored
+	writeManifest(t, deep)  // cwd's own manifest
 
 	scopes, err := Discover(deep, Options{Home: home})
 	if err != nil {

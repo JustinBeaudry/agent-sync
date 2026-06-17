@@ -63,6 +63,9 @@ func findProjectRoot(cwd, home string, maxHops int) (string, bool) {
 func collectEmitScopes(cwd, projectRoot string) ([]Scope, error) {
 	var found []Scope
 	dir := cwd
+	// The cwd→projectRoot distance is already bounded by findProjectRoot's
+	// hop budget (projectRoot is a verified ancestor of cwd), so this walk
+	// needs no separate hop cap; the parent==dir check is the root backstop.
 	for {
 		if path, ok := manifestAt(dir); ok {
 			level := LevelDirectory
