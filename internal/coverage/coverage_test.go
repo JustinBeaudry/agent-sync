@@ -51,6 +51,20 @@ func TestAnalyzeDirectoryLevelCursorRuleNative(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDirectoryLevelClaudeMixedKindsWarnsOnlyNonNative(t *testing.T) {
+	// claude reads nested CLAUDE.md (agents-md) but not nested skills, so a
+	// directory-level scope emitting both kinds must warn for skill only. Pins
+	// the per-kind filtering against future edits to the native-support table.
+	got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindAgentsMD, ir.KindSkill}, []string{"claude"})
+	if len(got) != 1 {
+		t.Fatalf("expected exactly 1 warning (skill only), got %d: %+v", len(got), got)
+	}
+	w := got[0]
+	if w.Target != "claude" || w.Kind != ir.KindSkill || w.Level != hierarchy.LevelDirectory {
+		t.Errorf("warning = %+v, want claude/skill/directory", w)
+	}
+}
+
 func TestAnalyzeUnknownTargetNoWarnings(t *testing.T) {
 	// An adapter we have no table for must never produce false warnings.
 	if got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindSkill}, []string{"some-third-party"}); len(got) != 0 {

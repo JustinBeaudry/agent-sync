@@ -41,6 +41,13 @@ func (l Level) String() string {
 	}
 }
 
+// MarshalText renders the level as its lowercase label so a Level embedded in
+// JSON (e.g. coverage warnings) serializes consistently with other level
+// fields rather than as a raw integer.
+func (l Level) MarshalText() ([]byte, error) {
+	return []byte(l.String()), nil
+}
+
 // Scope is one discovered manifest and the directory it anchors.
 type Scope struct {
 	// Root is the absolute directory containing the manifest. It is the

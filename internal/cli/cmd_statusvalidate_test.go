@@ -215,6 +215,78 @@ func TestStatusHierarchyJSONListsScopes(t *testing.T) {
 	}
 }
 
+// TestStatusContinuesPastMalformedScope drives the status continue-and-report
+// path: a valid project scope at the git root and a nested directory scope
+// whose .agent-sync.yaml is malformed YAML. The bad scope fails inside
+// scopeTargets (manifest.LoadFile rejects the YAML), so the failure layer is
+// the manifest load. status must still render the valid scope with its
+// level/source and surface an error line for the bad scope without aborting
+// with a top-level error.
+func TestStatusContinuesPastMalformedScope(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	// Corrupt the nested (directory) scope's manifest so scopeTargets fails for
+	// that scope only. Discovery keys off manifest presence, not validity, so
+	// the scope is still discovered and entered into the loop.
+	if err := os.WriteFile(filepath.Join(nested, ".agent-sync.yaml"), []byte(":\n  not: [valid"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "text")
+	if err != nil {
+		t.Fatalf("status must not abort with a top-level error when a scope is malformed: %v", err)
+	}
+
+	// The valid project scope still renders with its level, root, and source.
+	for _, want := range []string{"project", repo, "source:"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status output missing %q for the valid scope:\n%s", want, out)
+		}
+	}
+	// The malformed directory scope surfaces an error line under its header.
+	if !strings.Contains(out, "directory") || !strings.Contains(out, nested) {
+		t.Errorf("status output missing the directory scope header:\n%s", out)
+	}
+	if !strings.Contains(out, "ERROR:") {
+		t.Errorf("status should surface an error line for the malformed scope:\n%s", out)
+	}
+
+	// JSON confirms the bad scope records a per-scope error field while the
+	// valid scope does not, and the run still succeeds.
+	jout, _, jerr := runStatusHierarchy(t, nested, home, "--output", "json")
+	if jerr != nil {
+		t.Fatalf("status json must not abort: %v", jerr)
+	}
+	var doc struct {
+		Scopes []struct {
+			Level  string `json:"level"`
+			Source string `json:"source"`
+			Error  string `json:"error"`
+		} `json:"scopes"`
+	}
+	if uerr := json.Unmarshal([]byte(jout), &doc); uerr != nil {
+		t.Fatalf("status json invalid: %v\n%s", uerr, jout)
+	}
+	var sawValid, sawBad bool
+	for _, sc := range doc.Scopes {
+		switch sc.Level {
+		case "project":
+			if sc.Error == "" && sc.Source != "" {
+				sawValid = true
+			}
+		case "directory":
+			if sc.Error != "" {
+				sawBad = true
+			}
+		}
+	}
+	if !sawValid {
+		t.Errorf("expected a valid project scope with a source and no error: %+v", doc.Scopes)
+	}
+	if !sawBad {
+		t.Errorf("expected the directory scope to record a per-scope error: %+v", doc.Scopes)
+	}
+}
+
 func TestStatus_WatchFailedBanner(t *testing.T) {
 	requireGit(t)
 	canonical, sha := makeCanonicalRepo(t)

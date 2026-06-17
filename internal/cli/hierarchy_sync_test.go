@@ -271,6 +271,21 @@ func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
 	if !bytes.Contains([]byte(out), []byte("warning:")) || !bytes.Contains([]byte(out), []byte("claude")) {
 		t.Errorf("text output missing coverage warning:\n%s", out)
 	}
+
+	// The coverage warning's embedded level must serialize as a string in the
+	// aggregate JSON (e.g. "level":"directory"), not as a raw integer
+	// ("level":2), staying consistent with the CLI's other level fields.
+	var jbuf bytes.Buffer
+	if err := renderHierarchyJSON(&jbuf, outcomes); err != nil {
+		t.Fatalf("renderHierarchyJSON: %v", err)
+	}
+	js := jbuf.String()
+	if !bytes.Contains([]byte(js), []byte(`"level":"directory"`)) {
+		t.Errorf("coverage_warnings JSON should carry a string level (\"level\":\"directory\"):\n%s", js)
+	}
+	if bytes.Contains([]byte(js), []byte(`"level":2`)) {
+		t.Errorf("coverage_warnings JSON must not serialize level as an integer:\n%s", js)
+	}
 }
 
 func TestSyncCommandUserFlag(t *testing.T) {
