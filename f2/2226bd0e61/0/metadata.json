@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "f22226bd0e61",
+  "session_id": "f13d5104-1471-4a09-8ede-59b4b4290e5d",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-17T14:59:00.248392Z",
+  "branch": "feat/hierarchy-aware-manifests",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-06-17-001-feat-hierarchy-discovery-plan.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "666ed170b495",
+  "token_usage": {
+    "input_tokens": 30639,
+    "cache_creation_tokens": 423390,
+    "cache_read_tokens": 6377360,
+    "output_tokens": 94389,
+    "api_call_count": 46
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-17T14:58:59.937883Z",
+    "agent_lines": 805,
+    "human_added": 260,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1065,
+    "agent_percentage": 75.5868544600939
+  }
+}
