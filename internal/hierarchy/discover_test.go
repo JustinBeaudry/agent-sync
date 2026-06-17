@@ -320,6 +320,48 @@ func TestDiscoverCwdIsHomeNoDuplicate(t *testing.T) {
 	}
 }
 
+func TestDiscoverRelativeHomeResolvesToAbsolute(t *testing.T) {
+	// A caller may supply a relative Options.Home. Discover must resolve it
+	// to absolute before comparing against the absolute cwd chain in
+	// findProjectRoot; otherwise the home boundary never matches and the
+	// user scope / root detection misbehaves.
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	repo := filepath.Join(home, "repo")
+	mkGit(t, repo)
+	writeManifest(t, home) // user
+	writeManifest(t, repo) // project
+
+	// Run from base so that the relative "home" resolves to the absolute
+	// home dir above.
+	t.Chdir(base)
+
+	absScopes, err := Discover(repo, Options{Home: home, IncludeUser: true})
+	if err != nil {
+		t.Fatalf("Discover (absolute home): %v", err)
+	}
+	relScopes, err := Discover(repo, Options{Home: "home", IncludeUser: true})
+	if err != nil {
+		t.Fatalf("Discover (relative home): %v", err)
+	}
+
+	if len(relScopes) != len(absScopes) {
+		t.Fatalf("relative home gave %d scopes, absolute gave %d: rel=%+v abs=%+v",
+			len(relScopes), len(absScopes), relScopes, absScopes)
+	}
+	for i := range absScopes {
+		if relScopes[i].Root != absScopes[i].Root ||
+			relScopes[i].Level != absScopes[i].Level ||
+			relScopes[i].Emit != absScopes[i].Emit {
+			t.Errorf("scope[%d]: relative home = %+v, want %+v", i, relScopes[i], absScopes[i])
+		}
+	}
+	// Sanity: the user scope must be detected and rooted at the absolute home.
+	if len(relScopes) == 0 || relScopes[0].Level != LevelUser || relScopes[0].Root != home {
+		t.Fatalf("got %+v, want a user scope at absolute home %q", relScopes, home)
+	}
+}
+
 func TestDiscoverNoManifestsIsEmpty(t *testing.T) {
 	home := t.TempDir()
 	repo := filepath.Join(home, "repo")

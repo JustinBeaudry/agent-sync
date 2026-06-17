@@ -50,12 +50,13 @@ type hierarchyStatusReport struct {
 // other fields beyond Level/Root are empty) when the scope's manifest fails to
 // load — status continues past it (continue-and-report).
 type scopeStatus struct {
-	Level    string              `json:"level"`
-	Root     string              `json:"root"`
-	Source   string              `json:"source,omitempty"`
-	ReadOnly bool                `json:"read_only"`
-	Targets  []targetStatusEntry `json:"targets,omitempty"`
-	Err      string              `json:"error,omitempty"`
+	Level       string              `json:"level"`
+	Root        string              `json:"root"`
+	Source      string              `json:"source,omitempty"`
+	ReadOnly    bool                `json:"read_only"`
+	Targets     []targetStatusEntry `json:"targets,omitempty"`
+	WatchFailed bool                `json:"watch_failed"`
+	Err         string              `json:"error,omitempty"`
 }
 
 func newStatusCommand() *cobra.Command {
@@ -162,6 +163,7 @@ func runHierarchyStatus(cmd *cobra.Command, rc *runtimeContext) error {
 		}
 		st.Source = ss.Source
 		st.Targets = ss.Targets
+		st.WatchFailed = ss.WatchFailed
 		rep.Scopes = append(rep.Scopes, st)
 	}
 
@@ -178,8 +180,9 @@ func runHierarchyStatus(cmd *cobra.Command, rc *runtimeContext) error {
 
 // scopeResult holds the manifest-derived facts for one scope.
 type scopeResult struct {
-	Source  string
-	Targets []targetStatusEntry
+	Source      string
+	Targets     []targetStatusEntry
+	WatchFailed bool
 }
 
 // scopeTargets loads a scope's manifest and, for each manifest target, reads
@@ -196,7 +199,7 @@ func scopeTargets(rc *runtimeContext, sc hierarchy.Scope) (scopeResult, error) {
 	}
 	defer func() { _ = root.Close() }()
 
-	res := scopeResult{Source: sourceOf(m)}
+	res := scopeResult{Source: sourceOf(m), WatchFailed: markerExists(root, lastWatchFailedRel)}
 	for _, target := range sortedCopy(m.Targets) {
 		entry := targetStatusEntry{Target: target}
 		if led, lerr := ledger.Load(root, target); lerr == nil {
@@ -233,6 +236,11 @@ func renderHierarchyStatusText(cmd *cobra.Command, rep hierarchyStatusReport) er
 				return err
 			}
 			continue
+		}
+		if sc.WatchFailed {
+			if _, err := fmt.Fprintln(w, "  WARNING: the last watch-mode sync failed (see .agent-sync/state/last-watch.failed)"); err != nil {
+				return err
+			}
 		}
 		if _, err := fmt.Fprintf(w, "  source: %s\n", sc.Source); err != nil {
 			return err

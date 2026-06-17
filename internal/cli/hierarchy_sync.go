@@ -56,27 +56,33 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		if !sc.Emit {
 			continue // read-only (user) scope shown elsewhere, not emitted
 		}
-		out := scopeOutcome{Scope: sc}
-		prep, perr := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, now)
-		if perr != nil {
-			out.Err = perr
-			outcomes = append(outcomes, out)
-			continue // continue-and-report
-		}
-		req := prep.Request
-		req.Options = opts.EngineOpts
-		// Coverage warnings are computed from the decoded IR (the distinct kinds
-		// this scope emits), the manifest's targets, and the scope's level.
-		// Computed after a successful prepare (nodes exist); independent of the
-		// sync outcome.
-		out.Warnings = coverage.Analyze(sc.Level, kindsOf(req.Nodes), req.Targets)
-		summary, serr := engine.Sync(ctx, req)
-		prep.Close()
-		if serr != nil {
-			out.Err = serr
-		} else {
-			out.Summary = summary
-		}
+		// Run each scope inside a closure so prep.Close runs via defer at the
+		// end of the iteration: the same per-iteration close timing as a manual
+		// Close, but robust against future early returns or a panic in
+		// coverage.Analyze / engine.Sync.
+		out := func() scopeOutcome {
+			out := scopeOutcome{Scope: sc}
+			prep, perr := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, now)
+			if perr != nil {
+				out.Err = perr
+				return out // continue-and-report
+			}
+			defer prep.Close()
+			req := prep.Request
+			req.Options = opts.EngineOpts
+			// Coverage warnings are computed from the decoded IR (the distinct
+			// kinds this scope emits), the manifest's targets, and the scope's
+			// level. Computed after a successful prepare (nodes exist);
+			// independent of the sync outcome.
+			out.Warnings = coverage.Analyze(sc.Level, kindsOf(req.Nodes), req.Targets)
+			summary, serr := engine.Sync(ctx, req)
+			if serr != nil {
+				out.Err = serr
+			} else {
+				out.Summary = summary
+			}
+			return out
+		}()
 		outcomes = append(outcomes, out)
 	}
 	return outcomes, nil
@@ -100,11 +106,34 @@ func kindsOf(nodes []ir.Node) []ir.Kind {
 // hierarchyExitCode is non-zero when any scope failed to prepare/sync or any
 // scope's own summary reported a non-zero exit (continue-and-report: one bad
 // scope fails the run without blocking the others' emit).
+//
+// It preserves the operational/trust exit codes the single-scope path would
+// surface: a scope error carrying its own ExitCode() (e.g. the trust gate's
+// exit 3/4/5 from materializeURL) is mapped via MapExit rather than collapsed
+// to a flat 1. With multiple failing scopes the highest-severity specific code
+// wins, since codes are assigned in ascending severity (1 generic failure < 2
+// usage < 3/4/5 trust). An ordinary sync-failure summary (no carried code)
+// stays at exit 1.
 func hierarchyExitCode(outcomes []scopeOutcome) int {
+	code := 0
 	for _, o := range outcomes {
-		if o.Err != nil || o.Summary.Outcome.ExitCode != 0 {
-			return 1
+		c := scopeExitCode(o)
+		if c > code {
+			code = c
 		}
+	}
+	return code
+}
+
+// scopeExitCode is the exit code a single scope contributes: 0 when clean, the
+// scope error's mapped code (MapExit unwraps any exitCoder, e.g. the trust
+// gate's specific code), or 1 for a summary that reported a non-zero verdict.
+func scopeExitCode(o scopeOutcome) int {
+	if o.Err != nil {
+		return MapExit(o.Err)
+	}
+	if o.Summary.Outcome.ExitCode != 0 {
+		return o.Summary.Outcome.ExitCode
 	}
 	return 0
 }
@@ -127,11 +156,13 @@ func renderHierarchyText(w io.Writer, outcomes []scopeOutcome) error {
 			if _, err := fmt.Fprintf(w, "ERROR: %v\n", o.Err); err != nil {
 				return err
 			}
-			continue
-		}
-		if _, err := fmt.Fprint(w, report.RenderText(o.Summary)); err != nil {
+		} else if _, err := fmt.Fprint(w, report.RenderText(o.Summary)); err != nil {
 			return err
 		}
+		// Coverage warnings are computed independent of the sync outcome (a
+		// scope can fail to sync after a successful prepare), so render them
+		// even for errored scopes — matching the JSON output, which always
+		// carries coverage_warnings.
 		for _, warn := range o.Warnings {
 			if _, err := fmt.Fprintf(w, "  warning: %s\n", warn.Detail); err != nil {
 				return err

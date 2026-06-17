@@ -136,7 +136,16 @@ func Discover(cwd string, opts Options) ([]Scope, error) {
 		}
 		home = h
 	}
-	home = filepath.Clean(home)
+	// Resolve home to absolute before cleaning. os.UserHomeDir already
+	// returns an absolute path, but a caller may pass a relative
+	// Options.Home; without this, the dir == home comparison in
+	// findProjectRoot (which walks the absolute absCwd chain) would never
+	// match, breaking root/home detection.
+	absHome, err := filepath.Abs(home)
+	if err != nil {
+		return nil, fmt.Errorf("hierarchy: resolve home %q: %w", home, err)
+	}
+	home = filepath.Clean(absHome)
 
 	maxHops := opts.MaxHops
 	if maxHops <= 0 {

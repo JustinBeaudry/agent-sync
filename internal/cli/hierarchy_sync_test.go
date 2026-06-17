@@ -12,10 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agent-sync/agent-sync/internal/coverage"
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/report"
+	"github.com/agent-sync/agent-sync/internal/trust"
 )
 
 // hierarchyLocalDirManifest is the in-repo (local_dir) manifest used by the hierarchy
@@ -335,6 +337,34 @@ func TestHierarchyExitCode(t *testing.T) {
 	}
 }
 
+// TestHierarchyExitCodePreservesOperationalCodes asserts a scope whose prepare
+// fails with a trust/operational error surfaces that specific exit code (3/4/5
+// for trust, 2 for an unclassified operational error) rather than collapsing to
+// a flat 1 — matching the code the single-scope path would surface via MapExit.
+func TestHierarchyExitCodePreservesOperationalCodes(t *testing.T) {
+	trustErr := scopeOutcome{Err: &exitError{
+		code: trust.ExitFirstUseDenied,
+		err:  errors.New("cli: trust: first use denied"),
+	}}
+	failedSync := scopeOutcome{Summary: report.Summary{Outcome: report.Outcome{ExitCode: 1}}}
+	clean := scopeOutcome{Summary: report.Summary{Outcome: report.Outcome{ExitCode: 0}}}
+
+	if got := hierarchyExitCode([]scopeOutcome{clean, trustErr}); got != trust.ExitFirstUseDenied {
+		t.Errorf("trust-error scope exit = %d, want %d", got, trust.ExitFirstUseDenied)
+	}
+	// Highest-severity specific code wins when several scopes fail: a trust
+	// failure (5) outranks an ordinary sync-failure summary (1).
+	if got := hierarchyExitCode([]scopeOutcome{failedSync, trustErr}); got != trust.ExitFirstUseDenied {
+		t.Errorf("mixed-failure exit = %d, want %d (highest severity)", got, trust.ExitFirstUseDenied)
+	}
+	// An unclassified prepare error (e.g. a malformed manifest) maps to the
+	// operational/usage code, not a flat 1.
+	plainErr := scopeOutcome{Err: errors.New("malformed manifest")}
+	if got := hierarchyExitCode([]scopeOutcome{clean, plainErr}); got != exitUsage {
+		t.Errorf("unclassified prepare-error exit = %d, want %d", got, exitUsage)
+	}
+}
+
 func TestRenderHierarchyText(t *testing.T) {
 	outcomes := []scopeOutcome{
 		{
@@ -345,13 +375,26 @@ func TestRenderHierarchyText(t *testing.T) {
 			Scope: hierarchy.Scope{Root: "/repo/pkg", Level: hierarchy.LevelDirectory},
 			Err:   errors.New("kaboom"),
 		},
+		// A scope that fails at SYNC after a successful prepare still has
+		// computed coverage warnings; they must render even though Err is set.
+		{
+			Scope:    hierarchy.Scope{Root: "/repo/nested", Level: hierarchy.LevelDirectory},
+			Err:      errors.New("sync exploded"),
+			Warnings: []coverage.Warning{{Detail: "cursor does not read agent from a nested directory"}},
+		},
 	}
 	var buf bytes.Buffer
 	if err := renderHierarchyText(&buf, outcomes); err != nil {
 		t.Fatalf("renderHierarchyText: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{"project: /repo", "directory: /repo/pkg", "ERROR: kaboom"} {
+	for _, want := range []string{
+		"project: /repo",
+		"directory: /repo/pkg",
+		"ERROR: kaboom",
+		"ERROR: sync exploded",
+		"warning: cursor does not read agent from a nested directory",
+	} {
 		if !bytes.Contains([]byte(out), []byte(want)) {
 			t.Errorf("text output missing %q:\n%s", want, out)
 		}

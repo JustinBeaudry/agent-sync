@@ -287,6 +287,59 @@ func TestStatusContinuesPastMalformedScope(t *testing.T) {
 	}
 }
 
+func TestStatusHierarchy_WatchFailedBannerPerScope(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	// Plant the watch-failure marker under the nested (directory) scope's root
+	// only. Watch mode writes this marker per-root after a failed sync, so the
+	// default (hierarchy) status must surface the banner for that scope.
+	stateDir := filepath.Join(nested, ".agent-sync", "state")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "last-watch.failed"), []byte("boom\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "text")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !strings.Contains(out, "watch-mode sync failed") {
+		t.Fatalf("hierarchy status should surface the watch-failed banner for the affected scope:\n%s", out)
+	}
+
+	// JSON marks watch_failed=true for the directory scope and false elsewhere.
+	jout, _, jerr := runStatusHierarchy(t, nested, home, "--output", "json")
+	if jerr != nil {
+		t.Fatalf("status json: %v", jerr)
+	}
+	var doc struct {
+		Scopes []struct {
+			Level       string `json:"level"`
+			Root        string `json:"root"`
+			WatchFailed bool   `json:"watch_failed"`
+		} `json:"scopes"`
+	}
+	if uerr := json.Unmarshal([]byte(jout), &doc); uerr != nil {
+		t.Fatalf("status json invalid: %v\n%s", uerr, jout)
+	}
+	var sawFlagged, sawClean bool
+	for _, sc := range doc.Scopes {
+		switch sc.Root {
+		case nested:
+			sawFlagged = sc.WatchFailed
+		case repo:
+			sawClean = !sc.WatchFailed
+		}
+	}
+	if !sawFlagged {
+		t.Errorf("expected watch_failed=true for the directory scope %q: %+v", nested, doc.Scopes)
+	}
+	if !sawClean {
+		t.Errorf("expected watch_failed=false for the unaffected project scope %q: %+v", repo, doc.Scopes)
+	}
+}
+
 func TestStatus_WatchFailedBanner(t *testing.T) {
 	requireGit(t)
 	canonical, sha := makeCanonicalRepo(t)
