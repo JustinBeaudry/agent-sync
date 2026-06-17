@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "d5b34bce1183",
+  "strategy": "manual-commit",
+  "branch": "feat/hierarchy-aware-manifests",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/cli/setup.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d5/b34bce1183/0/metadata.json",
+      "transcript": "/d5/b34bce1183/0/full.jsonl",
+      "context": "/d5/b34bce1183/0/context.md",
+      "content_hash": "/d5/b34bce1183/0/content_hash.txt",
+      "prompt": "/d5/b34bce1183/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 49973,
+    "cache_creation_tokens": 1188773,
+    "cache_read_tokens": 69225192,
+    "output_tokens": 199599,
+    "api_call_count": 252
+  }
+}
