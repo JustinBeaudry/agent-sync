@@ -1,5 +1,7 @@
 # agent-sync
 
+[![Release](https://img.shields.io/github/v/release/JustinBeaudry/agent-sync?label=release)](https://github.com/JustinBeaudry/agent-sync/releases/latest)
+
 `agent-sync` is a Go CLI that keeps AI-agent configuration for multiple tools
 (Claude Code, Cursor, Codex CLI — and more to come) in sync from a single
 Git-backed manifest. Think of it as `dotfiles` for agents: one canonical
