@@ -127,6 +127,94 @@ func TestStatus_ReportsSourceAndTargets(t *testing.T) {
 	}
 }
 
+// runStatusHierarchy drives the real status cobra command on the hierarchy
+// path: it sets cwd (so discovery walks from there), swaps the home seam to
+// keep the suite hermetic, and deliberately omits --workspace so discovery
+// runs across all scopes.
+func runStatusHierarchy(t *testing.T, cwd, home string, extraArgs ...string) (string, string, error) {
+	t.Helper()
+	t.Chdir(cwd)
+	prev := resolveHome
+	resolveHome = func() (string, error) { return home, nil }
+	t.Cleanup(func() { resolveHome = prev })
+
+	var out, errBuf bytes.Buffer
+	root := NewRootCommand(RootDeps{Out: &out, Err: &errBuf, Version: "test"})
+	args := append([]string{"status", "--non-interactive"}, extraArgs...)
+	root.SetArgs(args)
+	err := root.Execute()
+	return out.String(), errBuf.String(), err
+}
+
+func TestStatusShowsHierarchy(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	// Add a user-level manifest + authored skill at home so the user scope is
+	// discovered (read-only, never emitted).
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/skills/user-skill/SKILL.md", "user skill body\n")
+
+	// Sync the whole hierarchy (no --user) so the project + directory scopes get
+	// ledgers; the user scope stays unsynced (untracked).
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("seed sync failed: %v\nstderr: %s", err, errOut)
+	}
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "text")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+
+	// All three scopes are listed with their levels and roots.
+	for _, want := range []string{"user", "project", "directory", home, repo, nested} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status output missing %q:\n%s", want, out)
+		}
+	}
+	// The user scope is marked read-only / not emitted.
+	if !strings.Contains(out, "read-only") {
+		t.Errorf("status should mark the user scope read-only:\n%s", out)
+	}
+	// The project + directory scopes were synced → managed files.
+	if !strings.Contains(out, "managed file") {
+		t.Errorf("status should show managed files for synced scopes:\n%s", out)
+	}
+	// The user scope was not synced → untracked.
+	if !strings.Contains(out, "untracked") {
+		t.Errorf("status should show the unsynced user scope as untracked:\n%s", out)
+	}
+}
+
+func TestStatusHierarchyJSONListsScopes(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/skills/user-skill/SKILL.md", "user skill body\n")
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "json")
+	if err != nil {
+		t.Fatalf("status json: %v", err)
+	}
+	var doc struct {
+		Scopes []struct {
+			Level    string `json:"level"`
+			Root     string `json:"root"`
+			ReadOnly bool   `json:"read_only"`
+		} `json:"scopes"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("status json invalid: %v\n%s", err, out)
+	}
+	if len(doc.Scopes) != 3 {
+		t.Fatalf("got %d scopes, want 3: %+v", len(doc.Scopes), doc.Scopes)
+	}
+	if doc.Scopes[0].Level != "user" || !doc.Scopes[0].ReadOnly {
+		t.Errorf("first scope = %+v, want user/read-only", doc.Scopes[0])
+	}
+}
+
 func TestStatus_WatchFailedBanner(t *testing.T) {
 	requireGit(t)
 	canonical, sha := makeCanonicalRepo(t)
