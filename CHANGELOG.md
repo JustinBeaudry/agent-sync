@@ -11,6 +11,8 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-16
+
 ### Added
 
 - In-repo local skill source (`canonical.local_dir`). A workspace can author
