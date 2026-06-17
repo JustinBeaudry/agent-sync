@@ -255,8 +255,8 @@ func TestDiscoverNoGitFallbackIsCwdOnly(t *testing.T) {
 	notes := filepath.Join(home, "notes")
 	parent := filepath.Join(home, "notes") // parent of cwd; has a manifest but no .git anywhere
 	deep := filepath.Join(notes, "deep")
-	writeManifest(t, parent)   // would-be directory level, but no git → ignored
-	writeManifest(t, deep)     // cwd's own manifest
+	writeManifest(t, parent) // would-be directory level, but no git → ignored
+	writeManifest(t, deep)   // cwd's own manifest
 	_ = parent
 
 	scopes, err := Discover(deep, Options{Home: home})

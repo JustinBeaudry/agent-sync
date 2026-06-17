@@ -58,6 +58,8 @@ func findProjectRoot(cwd, home string, maxHops int) (string, bool) {
 //
 // projectRoot must be cwd or an ancestor of it; the walk is bounded by
 // reaching projectRoot or the filesystem root.
+//
+//nolint:unparam // error return is the stable contract Discover propagates; reserved for future I/O.
 func collectEmitScopes(cwd, projectRoot string) ([]Scope, error) {
 	var found []Scope
 	dir := cwd
