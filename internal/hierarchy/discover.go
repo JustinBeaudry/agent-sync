@@ -1,6 +1,7 @@
 package hierarchy
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -104,4 +105,58 @@ func userScope(home string, includeUser bool) (Scope, bool) {
 		Level:        LevelUser,
 		Emit:         includeUser,
 	}, true
+}
+
+// Discover returns every manifest that applies at cwd, ordered from
+// broadest (lowest precedence) to most specific (highest precedence):
+// the user-home scope first (if present), then the project scope, then any
+// directory scopes down to cwd.
+//
+// Emit scopes are the manifests from cwd up to the project root (the nearest
+// .git ancestor). When there is no .git ancestor, only cwd's own manifest is
+// an emit scope, classified as project. The user-home scope is included for
+// visibility but is Emit=true only when Options.IncludeUser is set.
+func Discover(cwd string, opts Options) ([]Scope, error) {
+	absCwd, err := filepath.Abs(cwd)
+	if err != nil {
+		return nil, fmt.Errorf("hierarchy: resolve cwd %q: %w", cwd, err)
+	}
+	absCwd = filepath.Clean(absCwd)
+
+	home := opts.Home
+	if home == "" {
+		h, herr := os.UserHomeDir()
+		if herr != nil {
+			return nil, fmt.Errorf("hierarchy: resolve home: %w", herr)
+		}
+		home = h
+	}
+	home = filepath.Clean(home)
+
+	maxHops := opts.MaxHops
+	if maxHops <= 0 {
+		maxHops = workspace.DefaultMaxHops
+	}
+
+	var emit []Scope
+	if root, ok := findProjectRoot(absCwd, home, maxHops); ok {
+		emit, err = collectEmitScopes(absCwd, root)
+		if err != nil {
+			return nil, err
+		}
+	} else if absCwd != home {
+		// No .git ancestor: only cwd's own manifest applies, classified as
+		// project. Skipped when cwd is home, where the manifest is the user
+		// scope (added below) and must not be double-counted.
+		if path, has := manifestAt(absCwd); has {
+			emit = []Scope{{Root: absCwd, ManifestPath: path, Level: LevelProject, Emit: true}}
+		}
+	}
+
+	var out []Scope
+	if us, has := userScope(home, opts.IncludeUser); has {
+		out = append(out, us)
+	}
+	out = append(out, emit...)
+	return out, nil
 }

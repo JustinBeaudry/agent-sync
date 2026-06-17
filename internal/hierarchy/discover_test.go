@@ -200,3 +200,100 @@ func TestUserScopeAbsent(t *testing.T) {
 		t.Fatal("userScope reported a scope where home has no manifest")
 	}
 }
+
+func TestDiscoverFullHierarchy(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "work", "repo")
+	pkg := filepath.Join(repo, "packages", "api")
+	mkGit(t, repo)
+	writeManifest(t, home) // user
+	writeManifest(t, repo) // project
+	writeManifest(t, pkg)  // directory
+
+	scopes, err := Discover(pkg, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	// Order: user (lowest precedence) → project → directory (highest).
+	wantRoots := []string{home, repo, pkg}
+	wantLevels := []Level{LevelUser, LevelProject, LevelDirectory}
+	if len(scopes) != 3 {
+		t.Fatalf("got %d scopes, want 3: %+v", len(scopes), scopes)
+	}
+	for i := range scopes {
+		if scopes[i].Root != wantRoots[i] || scopes[i].Level != wantLevels[i] {
+			t.Errorf("scope[%d] = {%q, %v}, want {%q, %v}", i, scopes[i].Root, scopes[i].Level, wantRoots[i], wantLevels[i])
+		}
+	}
+	// User read-only by default; emit scopes set.
+	if scopes[0].Emit {
+		t.Error("user scope Emit = true without IncludeUser")
+	}
+	if !scopes[1].Emit || !scopes[2].Emit {
+		t.Error("project/directory scopes must have Emit = true")
+	}
+}
+
+func TestDiscoverIncludeUser(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	mkGit(t, repo)
+	writeManifest(t, home)
+	writeManifest(t, repo)
+
+	scopes, err := Discover(repo, Options{Home: home, IncludeUser: true})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(scopes) != 2 || scopes[0].Level != LevelUser || !scopes[0].Emit {
+		t.Fatalf("got %+v, want user(emit)+project", scopes)
+	}
+}
+
+func TestDiscoverNoGitFallbackIsCwdOnly(t *testing.T) {
+	home := t.TempDir()
+	notes := filepath.Join(home, "notes")
+	parent := filepath.Join(home, "notes") // parent of cwd; has a manifest but no .git anywhere
+	deep := filepath.Join(notes, "deep")
+	writeManifest(t, parent)   // would-be directory level, but no git → ignored
+	writeManifest(t, deep)     // cwd's own manifest
+	_ = parent
+
+	scopes, err := Discover(deep, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	// No .git anywhere → only cwd's own manifest, classified project.
+	if len(scopes) != 1 || scopes[0].Root != deep || scopes[0].Level != LevelProject {
+		t.Fatalf("got %+v, want single project scope at cwd %q", scopes, deep)
+	}
+}
+
+func TestDiscoverCwdIsHomeNoDuplicate(t *testing.T) {
+	home := t.TempDir()
+	writeManifest(t, home) // the only manifest; cwd == home, no .git
+
+	scopes, err := Discover(home, Options{Home: home, IncludeUser: true})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	// Must be exactly one scope (the user scope), not duplicated as a
+	// project fallback.
+	if len(scopes) != 1 || scopes[0].Level != LevelUser || scopes[0].Root != home {
+		t.Fatalf("got %+v, want single user scope at home", scopes)
+	}
+}
+
+func TestDiscoverNoManifestsIsEmpty(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	mkGit(t, repo) // git but no manifests anywhere
+
+	scopes, err := Discover(repo, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(scopes) != 0 {
+		t.Fatalf("got %+v, want no scopes", scopes)
+	}
+}
