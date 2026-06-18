@@ -3,7 +3,7 @@
   "checkpoint_id": "05ab9e58f2aa",
   "strategy": "manual-commit",
   "branch": "fix/claude-user-scope-paths",
-  "checkpoints_count": 0,
+  "checkpoints_count": 3,
   "files_touched": [
     "CHANGELOG.md",
     "docs/plans/2026-06-18-001-fix-claude-user-scope-paths-plan.md",
@@ -36,13 +36,20 @@
       "context": "/05/ab9e58f2aa/0/context.md",
       "content_hash": "/05/ab9e58f2aa/0/content_hash.txt",
       "prompt": "/05/ab9e58f2aa/0/prompt.txt"
+    },
+    {
+      "metadata": "/05/ab9e58f2aa/1/metadata.json",
+      "transcript": "/05/ab9e58f2aa/1/full.jsonl",
+      "context": "/05/ab9e58f2aa/1/context.md",
+      "content_hash": "/05/ab9e58f2aa/1/content_hash.txt",
+      "prompt": "/05/ab9e58f2aa/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 48928,
-    "cache_creation_tokens": 486476,
-    "cache_read_tokens": 45651150,
-    "output_tokens": 186201,
-    "api_call_count": 203
+    "input_tokens": 87362,
+    "cache_creation_tokens": 717327,
+    "cache_read_tokens": 51620508,
+    "output_tokens": 250915,
+    "api_call_count": 246
   }
 }
