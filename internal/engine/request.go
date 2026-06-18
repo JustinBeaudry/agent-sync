@@ -54,6 +54,11 @@ type Request struct {
 	// WorkspacePath is the absolute workspace path, for the report header.
 	WorkspacePath string
 
+	// Scope is the hierarchy level being emitted ("user", "project", or
+	// "directory"), passed to each adapter session so it can pick
+	// scope-appropriate output paths. Empty ⇒ "project" (back-compat).
+	Scope string
+
 	// Registry holds the discovered adapters.
 	Registry *adapter.Registry
 

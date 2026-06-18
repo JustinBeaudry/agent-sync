@@ -8,8 +8,13 @@
 //   - command -> .claude/commands/agent-sync/<id>.md
 //   - skill   -> .claude/skills/agent-sync-<id>/SKILL.md plus assets
 //   - mcp-server-entry -> .mcp.json (workspace root) via write_tool_owned
+//     (user scope: .claude.json, i.e. ~/.claude.json)
 //   - agents-md (companion overlay) -> CLAUDE.md (workspace root)
+//     (user scope: .claude/CLAUDE.md, i.e. ~/.claude/CLAUDE.md)
 //   - plugin-reference -> warning, unsupported by design
+//
+// The two tool-owned destinations are scope-aware: at user scope (sync --user)
+// they target Claude Code's real user-config paths. See resolvePathSet.
 //
 // Bundled() returns an *adapter.BundledAdapter ready for the runtime
 // to spawn over an in-process pipe; nothing else in this package is
@@ -77,14 +82,22 @@ func run(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 		Getenv: bundledGetenv,
 	})
 
-	server.OnInitialize(func(_ context.Context, _ adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+	// scope is captured at initialize and read at emit. The adapterkit Server
+	// processes initialize before emit on a single goroutine, so this needs no
+	// synchronization; each run() (one per session) has its own variable.
+	var scope string
+
+	server.OnInitialize(func(_ context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+		scope = params.Scope
 		return adapterkit.InitializeResult{
 			Capabilities:    capabilitiesForWire(),
-			DeclaredOutputs: declaredOutputs(),
+			DeclaredOutputs: declaredOutputs(scope),
 		}, nil
 	})
 
-	server.OnEmit(handleEmit)
+	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+		return handleEmit(ctx, params, scope)
+	})
 
 	if err := server.Run(ctx); err != nil {
 		return fmt.Errorf("claude bundled adapter: %w", err)

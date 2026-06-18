@@ -13,6 +13,7 @@
         "workspace_root": {"type": "string"},
         "reserved_prefix": {"type": "string"},
         "ir_version": {"type": "string"},
+        "scope": {"enum": ["user", "project", "directory"], "description": "Hierarchy level this emit targets; absent ⇒ project"},
         "_meta": {}
       },
       "required": ["client", "protocol_versions", "cookie", "workspace_root", "reserved_prefix", "ir_version"]

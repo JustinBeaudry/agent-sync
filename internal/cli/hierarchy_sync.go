@@ -62,7 +62,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		// coverage.Analyze / engine.Sync.
 		out := func() scopeOutcome {
 			out := scopeOutcome{Scope: sc}
-			prep, perr := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, now)
+			prep, perr := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now)
 			if perr != nil {
 				out.Err = perr
 				return out // continue-and-report

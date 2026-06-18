@@ -58,7 +58,8 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	if err != nil {
 		return prepared{}, fmt.Errorf("locate workspace: %w", err)
 	}
-	return prepareScope(ctx, rc, ws.Root, ws.ManifestPath, now)
+	// Single-scope path (explicit --workspace / validate): always project scope.
+	return prepareScope(ctx, rc, ws.Root, ws.ManifestPath, "project", now)
 }
 
 // prepareScope builds the per-invocation engine inputs for one already-located
@@ -69,7 +70,7 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 // This is the multi-scope-safe core: the hierarchy orchestrator calls it once
 // per discovered scope, each against that scope's own root, so each scope's
 // engine.Sync writes its own staging and ledger.
-func prepareScope(ctx context.Context, rc *runtimeContext, scopeRoot, manifestPath string, now time.Time) (prepared, error) {
+func prepareScope(ctx context.Context, rc *runtimeContext, scopeRoot, manifestPath, scope string, now time.Time) (prepared, error) {
 	if rc == nil {
 		return prepared{}, errors.New("cli: prepareScope called with nil runtime context")
 	}
@@ -107,6 +108,7 @@ func prepareScope(ctx context.Context, rc *runtimeContext, scopeRoot, manifestPa
 	req := engine.Request{
 		Root:          root,
 		WorkspacePath: scopeRoot,
+		Scope:         scope,
 		Registry:      reg,
 		Targets:       m.Targets,
 		Nodes:         mat.Nodes,

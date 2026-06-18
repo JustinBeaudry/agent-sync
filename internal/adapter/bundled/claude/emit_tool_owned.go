@@ -14,7 +14,36 @@ const (
 	claudeMDPath       = "CLAUDE.md"
 	claudeMDSidecar    = ".agent-sync-managed"
 	sectionIDPrefix    = "agent-sync:"
+
+	// scopeUser is the wire value (hierarchy.Level.String()) for the
+	// user-home scope. Any other value (incl. "" / "project" / "directory")
+	// is treated as project scope.
+	scopeUser = "user"
 )
+
+// pathSet holds the scope-resolved destinations for the Claude adapter's two
+// tool-owned-entry outputs and the strict-JSON sidecar. At project/directory
+// scope they are workspace-root files (the historical behavior). At user
+// scope they target Claude Code's real user-config paths — `~/.claude/CLAUDE.md`
+// and `~/.claude.json` (relative to the home scope root) — and the sidecar is
+// suppressed, because `~/.claude.json` is Claude's own shared file, not an
+// agent-sync-owned strict-JSON file the marker may claim.
+type pathSet struct {
+	claudeMD string
+	mcpJSON  string
+	sidecar  string // "" ⇒ do not declare/emit the sidecar (user scope)
+}
+
+// resolvePathSet maps the initialize scope to the adapter's tool-owned paths.
+// Declared outputs (capabilities.go) and emitted op paths (here) MUST resolve
+// from this one function so they never drift — a mismatch is rejected by the
+// runtime's path-safety gate.
+func resolvePathSet(scope string) pathSet {
+	if scope == scopeUser {
+		return pathSet{claudeMD: ".claude/CLAUDE.md", mcpJSON: ".claude.json", sidecar: ""}
+	}
+	return pathSet{claudeMD: claudeMDPath, mcpJSON: mcpJSONPath, sidecar: claudeMDSidecar}
+}
 
 // markerOpenBytes is the literal HTML-comment opener every agent-sync
 // section marker uses. Body content for an agents-md node is rejected
@@ -60,15 +89,18 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 	}
 
 	emitted.add(adapterkit.OpWriteToolOwned{
-		Path:    mcpJSONPath,
+		Path:    state.paths.mcpJSON,
 		Kind:    adapterkit.ToolOwnedKindJSONPointer,
 		Locator: mcpJSONPointerBase + node.ID,
 		Content: body,
 	})
 
-	if !state.sidecarEmitted {
+	// The sidecar advertises agent-sync ownership next to an agent-sync-owned
+	// strict-JSON file. At user scope the MCP target is `~/.claude.json` —
+	// Claude's own shared config — so paths.sidecar is empty and we suppress it.
+	if state.paths.sidecar != "" && !state.sidecarEmitted {
 		state.sidecarEmitted = true
-		sidecar, err := adapterkit.NewOpWriteFile(claudeMDSidecar, 0o644, jsonSidecarMarker())
+		sidecar, err := adapterkit.NewOpWriteFile(state.paths.sidecar, 0o644, jsonSidecarMarker())
 		if err != nil {
 			return wrapOpErr(node, err)
 		}
@@ -99,7 +131,7 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 // No managed-file header is added inside the section: the begin/end
 // markers serve as the equivalent ownership advertisement, and a
 // header inside a user-owned markdown file would be visually noisy.
-func emitAgentsMD(emitted *emittedOps, node irNode) error {
+func emitAgentsMD(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
@@ -112,7 +144,7 @@ func emitAgentsMD(emitted *emittedOps, node irNode) error {
 	}
 
 	emitted.add(adapterkit.OpWriteToolOwned{
-		Path:    claudeMDPath,
+		Path:    state.paths.claudeMD,
 		Kind:    adapterkit.ToolOwnedKindMarkdownSection,
 		Locator: sectionIDPrefix + node.ID,
 		Content: body,

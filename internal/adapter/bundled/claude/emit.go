@@ -90,7 +90,7 @@ func (e *emittedOps) wireOps() ([]json.RawMessage, error) {
 //
 // Context is checked between nodes so a runtime cancel during a
 // large IR is honored without waiting for the full iteration.
-func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string) (adapterkit.EmitResult, error) {
 	doc, err := decodeIRDocument(params.IR)
 	if err != nil {
 		return adapterkit.EmitResult{}, &adapterkit.Error{
@@ -118,6 +118,7 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.E
 		readmeEmitted:   map[string]bool{},
 		sidecarEmitted:  false,
 		emittedFilePath: map[string]struct{}{},
+		paths:           resolvePathSet(scope),
 	}
 
 	// Iterate in a deterministic order (sorted by kind, then id) so
@@ -172,6 +173,10 @@ type emitState struct {
 	readmeEmitted   map[string]bool
 	sidecarEmitted  bool
 	emittedFilePath map[string]struct{}
+	// paths are the scope-resolved tool-owned destinations (CLAUDE.md /
+	// .mcp.json at project scope; .claude/CLAUDE.md / .claude.json at user
+	// scope). Resolved once per emit from the initialize scope.
+	paths pathSet
 }
 
 // recordWritePath registers a write_file path in the per-emit dedup
@@ -208,7 +213,7 @@ func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	case ir.KindMCPServerEntry:
 		return emitMCPServerEntry(emitted, node, state)
 	case ir.KindAgentsMD:
-		return emitAgentsMD(emitted, node)
+		return emitAgentsMD(emitted, node, state)
 	case ir.KindPluginReference:
 		return emitPluginReferenceWarning(emitted, node)
 	default:

@@ -70,26 +70,35 @@ func capabilitiesForWire() adapterkit.Capabilities {
 // (internal/adapter/runtime.go pathInDeclaredOutputs) accepts an
 // emitted op only when its path falls inside one of these declared
 // outputs.
-func declaredOutputs() []adapterkit.DeclaredOutput {
+func declaredOutputs(scope string) []adapterkit.DeclaredOutput {
 	mcpPointer := "/mcpServers"
 	claudeMDSection := "agent-sync"
-	return []adapterkit.DeclaredOutput{
+	// The two tool-owned-entry paths and the sidecar are scope-resolved from
+	// the same source as the emit paths (emit_tool_owned.go resolvePathSet),
+	// so declared and emitted paths never drift — the path-safety gate
+	// (runtime.go pathInDeclaredOutputs) rejects any mismatch.
+	paths := resolvePathSet(scope)
+	outs := []adapterkit.DeclaredOutput{
 		{Path: ".claude/rules/agent-sync", Mode: adapterkit.OutputModeOwnedSubdir},
 		{Path: ".claude/commands/agent-sync", Mode: adapterkit.OutputModeOwnedSubdir},
 		// .claude/skills holds agent-sync-<id> leaf dirs alongside the user's own
 		// skills. shared-subdir → manage only our leaves, never the parent, so
 		// user skills survive a sync. (.claude/rules/agent-sync and
 		// .claude/commands/agent-sync are agent-sync-exclusive, so they stay
-		// owned-subdir and are swapped wholesale.)
+		// owned-subdir and are swapped wholesale.) These already land under
+		// .claude/ and so are correct at user scope too — unchanged here.
 		{Path: ".claude/skills", Mode: adapterkit.OutputModeSharedSubdir},
-		{Path: ".mcp.json", Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},
-		{Path: "CLAUDE.md", Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &claudeMDSection},
-		// The strict-JSON sidecar marker (.agent-sync-managed) is written
-		// next to .mcp.json at workspace root. Declared as
-		// owned-subdir on "." would over-broadly authorize the whole
-		// workspace, so we declare the sidecar file by exact path.
-		{Path: ".agent-sync-managed", Mode: adapterkit.OutputModeOwnedSubdir},
+		{Path: paths.mcpJSON, Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},
+		{Path: paths.claudeMD, Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &claudeMDSection},
 	}
+	// The strict-JSON sidecar marker is written next to an agent-sync-owned
+	// strict-JSON file at project/directory scope. At user scope the MCP target
+	// is Claude's own ~/.claude.json (paths.sidecar == ""), so it is neither
+	// declared nor emitted.
+	if paths.sidecar != "" {
+		outs = append(outs, adapterkit.DeclaredOutput{Path: paths.sidecar, Mode: adapterkit.OutputModeOwnedSubdir})
+	}
+	return outs
 }
 
 // parseCapabilitiesYAML decodes the embedded YAML. Used by the parity

@@ -311,6 +311,89 @@ func TestSyncCommandUserFlag(t *testing.T) {
 	mustExist(t, filepath.Join(home, ".claude", "skills", "agent-sync-user-skill", "SKILL.md"))
 }
 
+// TestSyncUserScope_ClaudeTargetsRealUserPaths is the U4 end-to-end proof:
+// a `sync --user` for the Claude target writes the agents-md overlay to
+// ~/.claude/CLAUDE.md and merges the mcp-server-entry into ~/.claude.json
+// (preserving foreign keys), and writes NONE of the dead project-scope paths
+// (~/CLAUDE.md, ~/.mcp.json, ~/.agent-sync-managed). Re-running is idempotent.
+func TestSyncUserScope_ClaudeTargetsRealUserPaths(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+
+	// User-level manifest + canonical content authored in-repo at home/.agents:
+	// one agents-md overlay and one mcp-server-entry.
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/AGENTS.md", "team standards body\n")
+	writeWS(t, home, ".agents/mcp/teamserver.json", `{"command":"echo","args":["hi"]}`+"\n")
+
+	// Seed ~/.claude.json with foreign content (a sibling MCP server and an
+	// unrelated top-level key) that the surgical merge must preserve byte-intact.
+	claudeJSON := filepath.Join(home, ".claude.json")
+	if err := os.WriteFile(claudeJSON, []byte(`{"existingKey":"keepme","mcpServers":{"other":{"command":"x","type":"stdio"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, errOut, err := runSyncHierarchy(t, nested, home, "--user"); err != nil {
+		t.Fatalf("sync --user failed: %v\nstderr: %s", err, errOut)
+	}
+
+	// R-US1: agents-md lands at ~/.claude/CLAUDE.md as a managed section.
+	claudeMD := filepath.Join(home, ".claude", "CLAUDE.md")
+	mustExist(t, claudeMD)
+	body, err := os.ReadFile(claudeMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(body, []byte("team standards body")) {
+		t.Errorf("~/.claude/CLAUDE.md missing managed body:\n%s", body)
+	}
+	if !bytes.Contains(body, []byte("agent-sync:begin")) {
+		t.Errorf("~/.claude/CLAUDE.md missing managed-section markers:\n%s", body)
+	}
+
+	// R-US2: mcp-server-entry merges into ~/.claude.json, foreign keys survive.
+	raw, err := os.ReadFile(claudeJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("~/.claude.json no longer valid JSON: %v\n%s", err, raw)
+	}
+	if doc["existingKey"] != "keepme" {
+		t.Errorf("foreign top-level key clobbered: %v", doc["existingKey"])
+	}
+	servers, _ := doc["mcpServers"].(map[string]any)
+	if _, ok := servers["other"]; !ok {
+		t.Errorf("foreign mcp server 'other' clobbered: %v", servers)
+	}
+	if _, ok := servers["agentsync_teamserver"]; !ok {
+		t.Errorf("agent-sync mcp entry not merged into ~/.claude.json: %v", servers)
+	}
+
+	// Dead-path guard: the project-scope outputs and sidecar are NOT written at home.
+	mustNotExist(t, filepath.Join(home, "CLAUDE.md"))
+	mustNotExist(t, filepath.Join(home, ".mcp.json"))
+	mustNotExist(t, filepath.Join(home, ".agent-sync-managed"))
+
+	// Idempotent re-run: succeeds and foreign content stays intact.
+	if _, errOut, err := runSyncHierarchy(t, nested, home, "--user"); err != nil {
+		t.Fatalf("second sync --user failed: %v\nstderr: %s", err, errOut)
+	}
+	raw2, err := os.ReadFile(claudeJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc2 map[string]any
+	if err := json.Unmarshal(raw2, &doc2); err != nil {
+		t.Fatalf("~/.claude.json invalid after re-sync: %v", err)
+	}
+	if doc2["existingKey"] != "keepme" {
+		t.Errorf("re-sync clobbered foreign key: %v", doc2["existingKey"])
+	}
+}
+
 func TestSyncCommandUserWithWorkspaceIsError(t *testing.T) {
 	ws := writeLocalDirWorkspace(t)
 	var out, errBuf bytes.Buffer
