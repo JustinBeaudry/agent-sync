@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "05ab9e58f2aa",
+  "strategy": "manual-commit",
+  "branch": "fix/claude-user-scope-paths",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "CHANGELOG.md",
+    "docs/plans/2026-06-18-001-fix-claude-user-scope-paths-plan.md",
+    "docs/spec/adapter-protocol-v1.md",
+    "internal/adapter/adapter.go",
+    "internal/adapter/bundled/claude/bundled.go",
+    "internal/adapter/bundled/claude/bundled_test.go",
+    "internal/adapter/bundled/claude/capabilities.go",
+    "internal/adapter/bundled/claude/capabilities_test.go",
+    "internal/adapter/bundled/claude/emit.go",
+    "internal/adapter/bundled/claude/emit_opcontent_test.go",
+    "internal/adapter/bundled/claude/emit_test.go",
+    "internal/adapter/bundled/claude/emit_tool_owned.go",
+    "internal/adapter/contract/protocol.go",
+    "internal/adapter/contract/schema/initialize.json",
+    "internal/adapter/runtime.go",
+    "internal/adapter/runtime_test.go",
+    "internal/cli/hierarchy_sync.go",
+    "internal/cli/hierarchy_sync_test.go",
+    "internal/cli/setup.go",
+    "internal/engine/capability.go",
+    "internal/engine/request.go",
+    "internal/engine/target.go",
+    "pkg/adapterkit/types.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/05/ab9e58f2aa/0/metadata.json",
+      "transcript": "/05/ab9e58f2aa/0/full.jsonl",
+      "context": "/05/ab9e58f2aa/0/context.md",
+      "content_hash": "/05/ab9e58f2aa/0/content_hash.txt",
+      "prompt": "/05/ab9e58f2aa/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 48928,
+    "cache_creation_tokens": 486476,
+    "cache_read_tokens": 45651150,
+    "output_tokens": 186201,
+    "api_call_count": 203
+  }
+}
