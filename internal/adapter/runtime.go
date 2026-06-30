@@ -41,6 +41,10 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 	id := s.ids.Next()
 	s.ids.MarkPending(id, contract.MethodInitialize)
 
+	scope := s.options.Scope
+	if scope == "" {
+		scope = "project" // back-compat default: absent ⇒ project scope
+	}
 	params := contract.InitializeParams{
 		Client:           "agent-sync",
 		ProtocolVersions: []string{ContractVersionV1},
@@ -48,6 +52,7 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 		WorkspaceRoot:    s.options.WorkspaceRoot,
 		ReservedPrefix:   s.adapter.Manifest.ReservedPrefix,
 		IRVersion:        s.options.IRVersion,
+		Scope:            scope,
 	}
 
 	resp, err := s.requestResponse(rctx, id, contract.MethodInitialize, params, contract.MethodInitialize, timeout)

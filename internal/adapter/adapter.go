@@ -19,6 +19,12 @@ type SessionOptions struct {
 	// PR 2; future versions ride additively under capabilities.
 	IRVersion string
 
+	// Scope is the hierarchy level this session emits for ("user",
+	// "project", or "directory"). Sent in InitializeParams so the adapter
+	// can pick scope-appropriate output paths. Empty ⇒ the runtime sends
+	// "project" (the back-compat default).
+	Scope string
+
 	// Timeouts overrides DefaultSubprocessTimeouts on a per-session
 	// basis. Zero fields fall back to defaults.
 	Timeouts SubprocessTimeouts

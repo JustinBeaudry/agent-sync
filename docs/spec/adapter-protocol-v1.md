@@ -206,6 +206,7 @@ Method summary:
 | `workspace_root` | string | yes | absolute workspace path |
 | `reserved_prefix` | string | yes | workspace-relative prefix the adapter owns |
 | `ir_version` | string | yes | IR schema version, currently `v1` |
+| `scope` | string | no | hierarchy level being emitted: `user`, `project`, or `directory`. Additive (omitempty); absent or unrecognized ⇒ `project`. Lets an adapter choose scope-appropriate output paths. |
 | `_meta` | any JSON | no | reserved |
 
 ### `initialize` result

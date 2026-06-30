@@ -46,6 +46,7 @@ func runAdapter(ctx context.Context, req Request, target string) (emitOutcome, e
 	session, err := a.NewSession(ctx, adapter.SessionOptions{
 		WorkspaceRoot: req.WorkspacePath,
 		IRVersion:     "v1",
+		Scope:         req.Scope,
 	})
 	if err != nil {
 		return emitOutcome{}, fmt.Errorf("engine: new session %q: %w", target, err)

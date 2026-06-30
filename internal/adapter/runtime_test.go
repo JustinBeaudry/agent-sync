@@ -211,6 +211,57 @@ func TestSession_HappyPathFullLifecycle(t *testing.T) {
 	}
 }
 
+// TestSession_SendsScopeInInitialize asserts the runtime forwards
+// SessionOptions.Scope on the initialize handshake, defaulting an empty
+// scope to "project" (the back-compat contract: absent ⇒ project).
+func TestSession_SendsScopeInInitialize(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		optScope  string
+		wantScope string
+	}{
+		{name: "empty defaults to project", optScope: "", wantScope: "project"},
+		{name: "user passed through", optScope: "user", wantScope: "user"},
+		{name: "directory passed through", optScope: "directory", wantScope: "directory"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := make(chan string, 1)
+			sa := &scriptedAdapter{
+				name:            "scopetest",
+				declaredOutputs: []contract.DeclaredOutput{{Path: ".scopetest/rules", Mode: contract.OutputModeOwnedSubdir}},
+				conceptKinds:    map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+			}
+			sa.respondToInit = func(received contract.InitializeParams) (json.RawMessage, *contract.Error) {
+				got <- received.Scope
+				return sa.defaultInitResult(received)
+			}
+
+			b := sa.bundled(t)
+			a := &adapter.Adapter{Manifest: b.Manifest, Source: adapter.SourceBundled, Bundled: b}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			t.Cleanup(cancel)
+			sess, err := a.NewSession(ctx, adapter.SessionOptions{WorkspaceRoot: "/tmp/ws", IRVersion: "v1", Scope: tc.optScope})
+			if err != nil {
+				t.Fatalf("NewSession: %v", err)
+			}
+			t.Cleanup(func() { _ = sess.Shutdown(context.Background()) })
+
+			if _, err := sess.Initialize(ctx); err != nil {
+				t.Fatalf("Initialize: %v", err)
+			}
+			if s := <-got; s != tc.wantScope {
+				t.Errorf("scope sent = %q, want %q", s, tc.wantScope)
+			}
+		})
+	}
+}
+
 func TestSession_RejectsCookieMismatch(t *testing.T) {
 	// Bundled adapters skip cookie validation in this PR (they share
 	// process). To exercise the cookie-mismatch path, we'd need a

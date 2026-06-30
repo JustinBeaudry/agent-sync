@@ -54,6 +54,7 @@ func captureOps(raw json.RawMessage) (*emittedOps, error) {
 		readmeEmitted:   map[string]bool{},
 		sidecarEmitted:  false,
 		emittedFilePath: map[string]struct{}{},
+		paths:           resolvePathSet("project"),
 	}
 	sort.Slice(doc.Nodes, func(i, j int) bool {
 		if doc.Nodes[i].Kind != doc.Nodes[j].Kind {
@@ -572,7 +573,7 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 	res, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     raw,
-	})
+	}, "project")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -605,7 +606,7 @@ func TestEmit_HandleEmit_RejectsMalformedIRJSON(t *testing.T) {
 	_, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{not json}`),
-	})
+	}, "project")
 	if err == nil {
 		t.Fatal("malformed IR JSON must be rejected")
 	}
@@ -624,7 +625,7 @@ func TestEmit_HandleEmit_HonorsContextCancellation(t *testing.T) {
 	_, err := handleEmit(ctx, adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{"nodes":[{"id":"x","kind":"rule","body":"x"}]}`),
-	})
+	}, "project")
 	if err == nil {
 		t.Fatal("cancelled context must abort emit")
 	}
@@ -663,12 +664,62 @@ func TestHasPathsFrontmatter(t *testing.T) {
 	}
 }
 
+// TestHandleEmit_UserScopePaths is the U3 characterization test: at user
+// scope the agents-md overlay emits at .claude/CLAUDE.md and the
+// mcp-server-entry at .claude.json, the .agent-sync-managed sidecar is
+// suppressed (OQ-1), and every emitted path is inside the user-scope declared
+// outputs (the path-safety gate-coupling invariant).
+func TestHandleEmit_UserScopePaths(t *testing.T) {
+	t.Parallel()
+
+	raw := json.RawMessage(`{"nodes":[
+		{"id":"team","kind":"agents-md","body":"# team standards"},
+		{"id":"actual-plane","kind":"mcp-server-entry","body":{"command":"uvx","args":["plane"]}}
+	]}`)
+
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: raw}, "user")
+	if err != nil {
+		t.Fatalf("handleEmit(user): %v", err)
+	}
+
+	var gotClaudeMD, gotMCP bool
+	for _, op := range res.OpsPerformed {
+		switch op.Path {
+		case ".claude/CLAUDE.md":
+			gotClaudeMD = true
+		case ".claude.json":
+			gotMCP = true
+		case ".agent-sync-managed", "CLAUDE.md", ".mcp.json":
+			t.Errorf("user scope emitted project/sidecar path %q (op=%s)", op.Path, op.Op)
+		}
+	}
+	if !gotClaudeMD {
+		t.Errorf("agents-md must emit at .claude/CLAUDE.md at user scope; got %+v", res.OpsPerformed)
+	}
+	if !gotMCP {
+		t.Errorf("mcp-server-entry must emit at .claude.json at user scope; got %+v", res.OpsPerformed)
+	}
+
+	// Gate-coupling invariant: emitted paths must be inside the user-scope
+	// declared outputs, else the runtime path-safety gate rejects the emit.
+	declared := declaredOutputs("user")
+	for _, op := range res.OpsPerformed {
+		if op.Op == adapterkit.OpKindWarning {
+			continue
+		}
+		if !pathInDeclaredOutputs(op.Path, declared) {
+			t.Errorf("user-scope emitted path %q (kind=%s) not inside any declared output", op.Path, op.Op)
+		}
+	}
+}
+
 // --- test helpers ----------------------------------------------------
 
 func newEmitState() *emitState {
 	return &emitState{
 		readmeEmitted:   map[string]bool{},
 		emittedFilePath: map[string]struct{}{},
+		paths:           resolvePathSet("project"),
 	}
 }
 

@@ -24,7 +24,7 @@ func writeCapabilityReport(ctx context.Context, req Request, now time.Time) erro
 		if !ok {
 			continue
 		}
-		caps, ok := readCapabilities(ctx, a, req.WorkspacePath)
+		caps, ok := readCapabilities(ctx, a, req.WorkspacePath, req.Scope)
 		if !ok {
 			continue
 		}
@@ -41,8 +41,8 @@ func writeCapabilityReport(ctx context.Context, req Request, now time.Time) erro
 
 // readCapabilities runs initialize then shutdown to capture an adapter's
 // declared capabilities. Returns ok=false if the handshake fails.
-func readCapabilities(ctx context.Context, a *adapter.Adapter, workspaceRoot string) (caps contract.Capabilities, ok bool) {
-	session, err := a.NewSession(ctx, adapter.SessionOptions{WorkspaceRoot: workspaceRoot, IRVersion: "v1"})
+func readCapabilities(ctx context.Context, a *adapter.Adapter, workspaceRoot, scope string) (caps contract.Capabilities, ok bool) {
+	session, err := a.NewSession(ctx, adapter.SessionOptions{WorkspaceRoot: workspaceRoot, IRVersion: "v1", Scope: scope})
 	if err != nil {
 		return contract.Capabilities{}, false
 	}

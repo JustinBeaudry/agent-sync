@@ -112,13 +112,20 @@ var (
 )
 
 type InitializeParams struct {
-	Client           string          `json:"client"`
-	ProtocolVersions []string        `json:"protocol_versions"`
-	Cookie           string          `json:"cookie"`
-	WorkspaceRoot    string          `json:"workspace_root"`
-	ReservedPrefix   string          `json:"reserved_prefix"`
-	IRVersion        string          `json:"ir_version"`
-	Meta             json.RawMessage `json:"_meta,omitempty"`
+	Client           string   `json:"client"`
+	ProtocolVersions []string `json:"protocol_versions"`
+	Cookie           string   `json:"cookie"`
+	WorkspaceRoot    string   `json:"workspace_root"`
+	ReservedPrefix   string   `json:"reserved_prefix"`
+	IRVersion        string   `json:"ir_version"`
+	// Scope is the hierarchy level this emit targets: "user", "project",
+	// or "directory". It lets an adapter choose scope-appropriate output
+	// paths (e.g. the Claude adapter writes ~/.claude/CLAUDE.md at user
+	// scope vs ./CLAUDE.md at project scope). Additive and optional under
+	// the "freeze the frame, grow capabilities" policy: an adapter that
+	// ignores it, or an absent value, MUST be treated as "project".
+	Scope string          `json:"scope,omitempty"`
+	Meta  json.RawMessage `json:"_meta,omitempty"`
 }
 
 type InitializeResult struct {

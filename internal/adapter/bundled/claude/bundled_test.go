@@ -42,7 +42,7 @@ func TestBundledAdapter_FullLifecycle(t *testing.T) {
 	if !initRes.Capabilities.WriteToolOwned {
 		t.Error("WriteToolOwned not echoed back")
 	}
-	if got, want := len(initRes.DeclaredOutputs), len(declaredOutputs()); got != want {
+	if got, want := len(initRes.DeclaredOutputs), len(declaredOutputs("project")); got != want {
 		t.Errorf("DeclaredOutputs len=%d want %d", got, want)
 	}
 	if err := client.Initialized(ctx); err != nil {
@@ -186,7 +186,7 @@ func TestBundled_OpsPathsMatchDeclaredOutputs(t *testing.T) {
 	t.Parallel()
 
 	res, _ := emitFixture(t, "mixed-everything.json")
-	declared := declaredOutputs()
+	declared := declaredOutputs("project")
 
 	for _, op := range res.OpsPerformed {
 		if op.Op == adapterkit.OpKindWarning {
@@ -203,13 +203,20 @@ func newServerForTest() *adapterkit.Server {
 		Name:    adapterName,
 		Version: adapterVersion,
 	})
-	server.OnInitialize(func(_ context.Context, _ adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+	// Mirror production wiring (bundled.go run): capture the init scope and
+	// resolve outputs/emit paths from it, so this helper can drive both
+	// project and user scope by varying InitializeParams.Scope.
+	var scope string
+	server.OnInitialize(func(_ context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+		scope = params.Scope
 		return adapterkit.InitializeResult{
 			Capabilities:    capabilitiesForWire(),
-			DeclaredOutputs: declaredOutputs(),
+			DeclaredOutputs: declaredOutputs(scope),
 		}, nil
 	})
-	server.OnEmit(handleEmit)
+	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+		return handleEmit(ctx, params, scope)
+	})
 	return server
 }
 

@@ -11,6 +11,25 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `sync --user` now targets Claude Code's real user-config paths. The Claude
+  adapter previously emitted its agents-md overlay to `~/CLAUDE.md` and its MCP
+  servers to `~/.mcp.json` at user scope — neither of which Claude Code reads —
+  so user-scope syncs were silently inert. The adapter is now scope-aware: at
+  user scope it writes the managed section to `~/.claude/CLAUDE.md` and merges
+  MCP entries into `~/.claude.json` (preserving all foreign keys), and suppresses
+  the `.agent-sync-managed` sidecar (the MCP target is Claude's own shared file,
+  not an agent-sync-owned one). Project and directory scope are unchanged.
+
+### Changed
+
+- Adapter protocol: the `initialize` params carry a new additive, optional
+  `scope` field (`"user"` | `"project"` | `"directory"`; absent ⇒ `project`).
+  Adapters use it to choose scope-appropriate output paths. Additive under the
+  "freeze the frame, grow capabilities" policy — no protocol version bump; an
+  adapter that ignores it behaves exactly as before.
+
 ## [0.3.0] - 2026-06-17
 
 ### Added

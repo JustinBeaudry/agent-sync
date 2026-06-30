@@ -25,7 +25,7 @@ func TestEmit_OpsCarryContent(t *testing.T) {
 	res, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: "claude",
 		IR:     json.RawMessage(raw),
-	})
+	}, "project")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}

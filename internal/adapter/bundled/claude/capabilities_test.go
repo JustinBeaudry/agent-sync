@@ -109,7 +109,7 @@ func TestCapabilitiesYAML_MatchesCodeMap(t *testing.T) {
 func TestDeclaredOutputs_Shape(t *testing.T) {
 	t.Parallel()
 
-	got := declaredOutputs()
+	got := declaredOutputs("project")
 	want := map[string]adapterkit.OutputMode{
 		".claude/rules/agent-sync":    adapterkit.OutputModeOwnedSubdir,
 		".claude/commands/agent-sync": adapterkit.OutputModeOwnedSubdir,
@@ -158,6 +158,77 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 	}
 }
 
+// TestDeclaredOutputs_UserScope asserts the user-scope declared outputs
+// target Claude Code's real user-config paths (.claude/CLAUDE.md, .claude.json),
+// keep the unchanged .claude/{rules,commands,skills} outputs, and omit the
+// sidecar (OQ-1: ~/.claude.json is Claude's own file). The tool-owned locators
+// (JSON pointer, section id) are scope-invariant.
+func TestDeclaredOutputs_UserScope(t *testing.T) {
+	t.Parallel()
+
+	got := declaredOutputs("user")
+	want := map[string]adapterkit.OutputMode{
+		".claude/rules/agent-sync":    adapterkit.OutputModeOwnedSubdir,
+		".claude/commands/agent-sync": adapterkit.OutputModeOwnedSubdir,
+		".claude/skills":              adapterkit.OutputModeSharedSubdir,
+		".claude.json":                adapterkit.OutputModeToolOwnedEntry,
+		".claude/CLAUDE.md":           adapterkit.OutputModeToolOwnedEntry,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("user-scope declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)
+	}
+	var sawMCPPointer, sawClaudeMDSection bool
+	for _, d := range got {
+		mode, ok := want[d.Path]
+		if !ok {
+			t.Errorf("unexpected user-scope declared output: %q (%v)", d.Path, d.Mode)
+			continue
+		}
+		if d.Mode != mode {
+			t.Errorf("user-scope declared output %q mode=%v want %v", d.Path, d.Mode, mode)
+		}
+		if d.Path == ".claude.json" && (d.JSONPointer == nil || *d.JSONPointer != "/mcpServers") {
+			t.Errorf(".claude.json JSONPointer = %v, want /mcpServers (scope-invariant)", d.JSONPointer)
+		} else if d.Path == ".claude.json" {
+			sawMCPPointer = true
+		}
+		if d.Path == ".claude/CLAUDE.md" && (d.SectionID == nil || *d.SectionID != "agent-sync") {
+			t.Errorf(".claude/CLAUDE.md SectionID = %v, want agent-sync (scope-invariant)", d.SectionID)
+		} else if d.Path == ".claude/CLAUDE.md" {
+			sawClaudeMDSection = true
+		}
+		if d.Path == ".agent-sync-managed" {
+			t.Error("user scope must not declare the .agent-sync-managed sidecar (OQ-1)")
+		}
+	}
+	if !sawMCPPointer {
+		t.Error(".claude.json locator not asserted")
+	}
+	if !sawClaudeMDSection {
+		t.Error(".claude/CLAUDE.md locator not asserted")
+	}
+}
+
+// TestDeclaredOutputs_UnknownScopeFallsBackToProject asserts an empty or
+// unrecognized scope produces the project-scope outputs (back-compat default).
+func TestDeclaredOutputs_UnknownScopeFallsBackToProject(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []string{"", "project", "directory", "bogus"} {
+		got := declaredOutputs(scope)
+		paths := map[string]bool{}
+		for _, d := range got {
+			paths[d.Path] = true
+		}
+		if !paths["CLAUDE.md"] || !paths[".mcp.json"] || !paths[".agent-sync-managed"] {
+			t.Errorf("scope %q: expected project-scope outputs (CLAUDE.md, .mcp.json, .agent-sync-managed), got %v", scope, paths)
+		}
+		if paths[".claude/CLAUDE.md"] || paths[".claude.json"] {
+			t.Errorf("scope %q: must not emit user-scope paths", scope)
+		}
+	}
+}
+
 func TestCapabilitiesForWire_ExposesAllKinds(t *testing.T) {
 	t.Parallel()
 
@@ -188,10 +259,12 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 	server.OnInitialize(func(_ context.Context, _ adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
 		return adapterkit.InitializeResult{
 			Capabilities:    capabilitiesForWire(),
-			DeclaredOutputs: declaredOutputs(),
+			DeclaredOutputs: declaredOutputs("project"),
 		}, nil
 	})
-	server.OnEmit(handleEmit)
+	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+		return handleEmit(ctx, params, "project")
+	})
 
 	client, cleanup := adapterkit.RunInprocServer(t, server)
 	defer cleanup()
@@ -211,7 +284,7 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 	if res.ProtocolVersion != adapterkit.ContractVersionV1 {
 		t.Errorf("ProtocolVersion=%q want %q", res.ProtocolVersion, adapterkit.ContractVersionV1)
 	}
-	if got, want := len(res.DeclaredOutputs), len(declaredOutputs()); got != want {
+	if got, want := len(res.DeclaredOutputs), len(declaredOutputs("project")); got != want {
 		t.Errorf("DeclaredOutputs len=%d want %d", got, want)
 	}
 	if !res.Capabilities.WriteToolOwned {

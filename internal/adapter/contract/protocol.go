@@ -126,13 +126,18 @@ var (
 
 // InitializeParams is the params object on the initialize request.
 type InitializeParams struct {
-	Client           string          `json:"client"`
-	ProtocolVersions []string        `json:"protocol_versions"`
-	Cookie           string          `json:"cookie"`
-	WorkspaceRoot    string          `json:"workspace_root"`
-	ReservedPrefix   string          `json:"reserved_prefix"`
-	IRVersion        string          `json:"ir_version"`
-	Meta             json.RawMessage `json:"_meta,omitempty"`
+	Client           string   `json:"client"`
+	ProtocolVersions []string `json:"protocol_versions"`
+	Cookie           string   `json:"cookie"`
+	WorkspaceRoot    string   `json:"workspace_root"`
+	ReservedPrefix   string   `json:"reserved_prefix"`
+	IRVersion        string   `json:"ir_version"`
+	// Scope is the hierarchy level this emit targets: "user", "project",
+	// or "directory". Additive/optional under "freeze the frame, grow
+	// capabilities"; absent or unknown ⇒ treated as "project". Mirrors
+	// adapterkit.InitializeParams.Scope and the initialize.json schema.
+	Scope string          `json:"scope,omitempty"`
+	Meta  json.RawMessage `json:"_meta,omitempty"`
 }
 
 // InitializeResult is the result object the adapter returns from
