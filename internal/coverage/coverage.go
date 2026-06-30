@@ -11,8 +11,8 @@
 // The native-support table is keyed by target NAME and is static: a read-only
 // analyzer cannot run an adapter Initialize handshake to learn declared
 // outputs, and external adapters cannot be queried at all. Unknown targets and
-// unknown kinds default to native (no false warnings). The directory-level
-// entries are the project's documented assumptions about each tool's nested-
+// unknown kinds default to native (no false warnings). The directory- and
+// user-level entries are the project's documented assumptions about each tool's
 // read behavior; correct them here if a tool's behavior is verified to differ.
 package coverage
 
@@ -34,8 +34,8 @@ type Warning struct {
 
 // nativeAtDirectory[target] is the set of kinds the target reads natively from
 // a NESTED directory. A kind absent from a target's set is non-native at the
-// directory level and warns. project/user levels are always native (the tool
-// reads its root config), so they are not represented here.
+// directory level and warns. The project level is always native (the tool reads
+// its workspace-root config), so it is not represented here.
 //
 // Documented assumptions (verify against current tool behavior, correct here):
 //   - claude reads nested CLAUDE.md (agents-md); it does NOT read rules,
@@ -48,6 +48,26 @@ var nativeAtDirectory = map[string]map[ir.Kind]bool{
 	"cursor": {ir.KindRule: true},
 }
 
+// nonNativeAtUser[target] is the set of kinds the target does NOT read from any
+// file-addressable user-global (home) location, so emitting them at user scope
+// is inert. This is an inverted table from nativeAtDirectory: only targets with
+// a user-scope gap appear, and an absent target/kind ⇒ native at user scope (no
+// warning). Most tools read every supported kind from their user-global config
+// (the user scope root is $HOME, so e.g. .codex/config.toml resolves to
+// ~/.codex/config.toml), so they have no entry.
+//
+// Documented assumptions (verified against official docs 2026-06-30):
+//   - cursor has no file-addressable user-global home for rules (User Rules
+//     live in app settings / cloud, not a writable file) or AGENTS.md; only
+//     ~/.cursor/mcp.json is file-addressable. So rule and agents-md are inert
+//     at user scope.
+//   - claude (scope-aware paths target ~/.claude/...) and codex (agents-md
+//     remaps to ~/.codex/AGENTS.md; mcp + skills already resolve under $HOME)
+//     read every supported kind from a user-global location → no entry.
+var nonNativeAtUser = map[string]map[ir.Kind]bool{
+	"cursor": {ir.KindRule: true, ir.KindAgentsMD: true},
+}
+
 // known reports whether we have a native-support table for target. Unknown
 // targets default to fully native (no warnings).
 func known(target string) bool {
@@ -57,29 +77,51 @@ func known(target string) bool {
 
 // Analyze returns the coverage warnings for emitting the given kinds to the
 // given targets at the given level. Results are deterministically ordered by
-// target then kind. project and user levels never warn; only the directory
-// level (nested scopes) can produce gaps. Targets with no table never warn.
+// target then kind. The project level never warns (every tool reads its
+// workspace-root config); the directory level warns for kinds not read from a
+// nested dir, and the user level warns for kinds with no file-addressable
+// user-global home. Targets with no table never warn.
 func Analyze(level hierarchy.Level, kinds []ir.Kind, targets []string) []Warning {
-	if level != hierarchy.LevelDirectory {
-		return nil
-	}
 	var out []Warning
-	for _, target := range targets {
-		if !known(target) {
-			continue
-		}
-		nativeKinds := nativeAtDirectory[target]
-		for _, k := range kinds {
-			if nativeKinds[k] {
+	switch level {
+	case hierarchy.LevelDirectory:
+		for _, target := range targets {
+			if !known(target) {
 				continue
 			}
-			out = append(out, Warning{
-				Target: target,
-				Kind:   k,
-				Level:  level,
-				Detail: target + " does not read " + string(k) + " from a nested directory; this will not take effect until per-tool runtime mapping is added",
-			})
+			nativeKinds := nativeAtDirectory[target]
+			for _, k := range kinds {
+				if nativeKinds[k] {
+					continue
+				}
+				out = append(out, Warning{
+					Target: target,
+					Kind:   k,
+					Level:  level,
+					Detail: target + " does not read " + string(k) + " from a nested directory; this will not take effect until per-tool runtime mapping is added",
+				})
+			}
 		}
+	case hierarchy.LevelUser:
+		for _, target := range targets {
+			gap := nonNativeAtUser[target]
+			if gap == nil {
+				continue
+			}
+			for _, k := range kinds {
+				if !gap[k] {
+					continue
+				}
+				out = append(out, Warning{
+					Target: target,
+					Kind:   k,
+					Level:  level,
+					Detail: target + " has no user-global location for " + string(k) + "; emitted content is inert at user scope (sync it at project scope instead)",
+				})
+			}
+		}
+	default:
+		return nil
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Target != out[j].Target {

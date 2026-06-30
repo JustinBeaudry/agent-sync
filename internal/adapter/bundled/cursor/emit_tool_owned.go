@@ -14,7 +14,39 @@ const (
 	mcpSidecarPath     = ".cursor/.agent-sync-managed"
 	agentsMDPath       = "AGENTS.md"
 	sectionIDPrefix    = "agent-sync:"
+
+	// scopeUser is the wire value (hierarchy.Level.String()) for the user-home
+	// scope. Any other value (incl. "" / "project" / "directory") is project
+	// scope.
+	scopeUser = "user"
 )
+
+// pathSet holds the scope-resolved destinations for Cursor's MCP output and
+// its strict-JSON sidecar. At user scope the MCP target is the same relative
+// path (`.cursor/mcp.json` resolves to `~/.cursor/mcp.json`, Cursor's own
+// global config), but the sidecar is suppressed because that file is Cursor's,
+// not agent-sync's — mirroring Claude's `~/.claude.json` handling.
+//
+// Cursor's other two concepts (rule, agents-md) have NO file-addressable
+// user-global home (User Rules are app-settings/cloud; there is no global
+// AGENTS.md), so they are not represented here — they are skipped at user
+// scope in dispatchNode and flagged by internal/coverage. See plan
+// docs/plans/2026-06-30-001.
+type pathSet struct {
+	mcpJSON string
+	sidecar string // "" ⇒ do not declare/emit the sidecar (user scope)
+}
+
+// resolvePathSet maps the initialize scope to Cursor's scope-dependent paths.
+// declaredOutputs (capabilities.go) and the emitted op paths (here) MUST both
+// resolve from this one function so they never drift — a mismatch is rejected
+// by the runtime's path-safety gate.
+func resolvePathSet(scope string) pathSet {
+	if scope == scopeUser {
+		return pathSet{mcpJSON: mcpJSONPath, sidecar: ""}
+	}
+	return pathSet{mcpJSON: mcpJSONPath, sidecar: mcpSidecarPath}
+}
 
 // markerOpenBytes is the literal HTML-comment opener every agent-sync
 // section marker uses. Body content for an agents-md node is rejected
@@ -49,7 +81,7 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 	if !json.Valid(body) {
 		return &adapterkit.Error{
 			Code:    adapterkit.CodeInvalidParams,
-			Message: fmt.Sprintf("cursor: mcp-server-entry %q body is not valid JSON; refusing to corrupt .cursor/mcp.json", node.ID),
+			Message: fmt.Sprintf("cursor: mcp-server-entry %q body is not valid JSON; refusing to corrupt %s", node.ID, state.paths.mcpJSON),
 		}
 	}
 	if !isJSONObject(body) {
@@ -60,15 +92,18 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 	}
 
 	emitted.add(adapterkit.OpWriteToolOwned{
-		Path:    mcpJSONPath,
+		Path:    state.paths.mcpJSON,
 		Kind:    adapterkit.ToolOwnedKindJSONPointer,
 		Locator: mcpJSONPointerBase + node.ID,
 		Content: body,
 	})
 
-	if !state.sidecarEmitted {
+	// The sidecar advertises agent-sync ownership next to an agent-sync-owned
+	// strict-JSON file. At user scope the MCP target is ~/.cursor/mcp.json —
+	// Cursor's own global config — so paths.sidecar is empty and we suppress it.
+	if state.paths.sidecar != "" && !state.sidecarEmitted {
 		state.sidecarEmitted = true
-		sidecar, err := adapterkit.NewOpWriteFile(mcpSidecarPath, 0o644, jsonSidecarMarker())
+		sidecar, err := adapterkit.NewOpWriteFile(state.paths.sidecar, 0o644, jsonSidecarMarker())
 		if err != nil {
 			return wrapOpErr(node, err)
 		}

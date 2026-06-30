@@ -48,6 +48,7 @@ func captureOps(raw json.RawMessage) (*emittedOps, error) {
 		readmeEmitted:   map[string]bool{},
 		sidecarEmitted:  false,
 		emittedFilePath: map[string]struct{}{},
+		paths:           resolvePathSet("project"),
 	}
 	sort.Slice(doc.Nodes, func(i, j int) bool {
 		if doc.Nodes[i].Kind != doc.Nodes[j].Kind {
@@ -430,7 +431,7 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 	res, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     raw,
-	})
+	}, "project")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -461,7 +462,7 @@ func TestEmit_HandleEmit_RejectsMalformedIRJSON(t *testing.T) {
 	_, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{not json}`),
-	})
+	}, "project")
 	if err == nil {
 		t.Fatal("malformed IR JSON must be rejected")
 	}
@@ -480,7 +481,7 @@ func TestEmit_HandleEmit_HonorsContextCancellation(t *testing.T) {
 	_, err := handleEmit(ctx, adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{"nodes":[{"id":"x","kind":"rule","body":"x"}]}`),
-	})
+	}, "project")
 	if err == nil {
 		t.Fatal("cancelled context must abort emit")
 	}
@@ -504,7 +505,7 @@ func TestEmit_HandleEmit_SkipsOffTargetNodes(t *testing.T) {
 		{"id":"mine","kind":"rule","targets":["cursor"],"body":"cursor rule"},
 		{"id":"theirs","kind":"rule","targets":["claude"],"body":"claude rule"}
 	]}`)
-	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir})
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "project")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -513,6 +514,41 @@ func TestEmit_HandleEmit_SkipsOffTargetNodes(t *testing.T) {
 	}
 	if containsPath(res.OpsPerformed, ".cursor/rules/agent-sync/theirs.mdc") {
 		t.Errorf("claude-targeted rule must be skipped; got %+v", res.OpsPerformed)
+	}
+}
+
+// TestEmit_HandleEmit_UserScopePaths pins the user-scope (sync --user)
+// behavior: MCP entries land at .cursor/mcp.json (→ ~/.cursor/mcp.json,
+// Cursor's own global config) with NO sidecar, while rule and agents-md are
+// silently skipped (Cursor has no file-addressable user-global home for
+// either; internal/coverage emits the user-facing warning).
+func TestEmit_HandleEmit_UserScopePaths(t *testing.T) {
+	t.Parallel()
+
+	ir := json.RawMessage(`{"nodes":[
+		{"id":"lsp","kind":"mcp-server-entry","body":"{\"command\":\"node\"}"},
+		{"id":"house-style","kind":"rule","body":"Use 2-space indents."},
+		{"id":"team","kind":"agents-md","body":"## Build"}
+	]}`)
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "user")
+	if err != nil {
+		t.Fatalf("handleEmit: %v", err)
+	}
+	if !containsPath(res.OpsPerformed, ".cursor/mcp.json") {
+		t.Errorf("user-scope mcp must emit to .cursor/mcp.json; got %+v", res.OpsPerformed)
+	}
+	if containsPath(res.OpsPerformed, ".cursor/.agent-sync-managed") {
+		t.Errorf("user-scope must not emit the sidecar (global mcp.json is Cursor's own file); got %+v", res.OpsPerformed)
+	}
+	if containsPath(res.OpsPerformed, ".cursor/rules/agent-sync/house-style.mdc") {
+		t.Errorf("user-scope rule has no home and must be skipped; got %+v", res.OpsPerformed)
+	}
+	if containsPath(res.OpsPerformed, "AGENTS.md") {
+		t.Errorf("user-scope agents-md has no home and must be skipped; got %+v", res.OpsPerformed)
+	}
+	// The skip is silent — coverage owns the warning, so no warning op here.
+	if containsKind(res.OpsPerformed, adapterkit.OpKindWarning) {
+		t.Errorf("user-scope rule/agents-md skip must be silent (coverage warns); got %+v", res.OpsPerformed)
 	}
 }
 
@@ -525,7 +561,7 @@ func TestEmit_HandleEmit_RejectsDuplicateNodes(t *testing.T) {
 		{"id":"x","kind":"rule","body":"first"},
 		{"id":"x","kind":"rule","body":"second"}
 	]}`)
-	_, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir})
+	_, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "project")
 	if err == nil {
 		t.Fatal("duplicate (kind, id) must be rejected through handleEmit")
 	}
@@ -565,6 +601,7 @@ func newEmitState() *emitState {
 	return &emitState{
 		readmeEmitted:   map[string]bool{},
 		emittedFilePath: map[string]struct{}{},
+		paths:           resolvePathSet("project"),
 	}
 }
 

@@ -74,7 +74,7 @@ func (e *emittedOps) wireOps() ([]json.RawMessage, error) {
 }
 
 // handleEmit is the OnEmit handler the bundled adapter registers.
-func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string) (adapterkit.EmitResult, error) {
 	doc, err := decodeIRDocument(params.IR)
 	if err != nil {
 		return adapterkit.EmitResult{}, &adapterkit.Error{
@@ -90,6 +90,7 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.E
 	emitted := &emittedOps{}
 	state := emitState{
 		emittedFilePath: map[string]struct{}{},
+		paths:           resolvePathSet(scope),
 	}
 
 	// Deterministic order (sorted by kind, then id) so op output is stable.
@@ -130,6 +131,10 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.E
 // dispatcher fails closed instead of letting the sync engine last-write-wins.
 type emitState struct {
 	emittedFilePath map[string]struct{}
+	// paths are the scope-resolved tool-owned destinations. Only agents-md is
+	// scope-dependent (AGENTS.md at project scope; .codex/AGENTS.md at user
+	// scope). Resolved once per emit from the initialize scope.
+	paths pathSet
 }
 
 // recordWritePath registers a write_file path in the per-emit dedup table.
@@ -164,7 +169,7 @@ func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	case ir.KindMCPServerEntry:
 		return emitMCPServerEntry(emitted, node)
 	case ir.KindAgentsMD:
-		return emitAgentsMD(emitted, node)
+		return emitAgentsMD(emitted, node, state)
 	case ir.KindRule, ir.KindCommand, ir.KindPluginReference:
 		return emitUnsupportedWarning(emitted, node)
 	default:

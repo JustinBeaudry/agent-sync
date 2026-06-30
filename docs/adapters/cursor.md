@@ -108,6 +108,26 @@ Cursor reads `AGENTS.md` at the project root natively, so the
 `agents-md` into a `CLAUDE.md` companion because Claude Code does not
 read project-level `AGENTS.md`.
 
+## User scope (`sync --user`)
+
+The adapter is scope-aware. At user scope the scope root is `$HOME`, and the
+destinations change because Cursor's user-global config differs from its
+project config:
+
+| IR kind | User-scope behavior |
+|---|---|
+| `mcp-server-entry` | Emitted to `~/.cursor/mcp.json` — Cursor's user-global MCP config, the same `{"mcpServers": {...}}` shape as the project file. The strict-JSON sidecar (`.agent-sync-managed`) is **suppressed**: `~/.cursor/mcp.json` is Cursor's own shared file, not an agent-sync-owned one. |
+| `rule` | **Skipped.** Cursor has no file-addressable user-global rules location — "User Rules" live in Cursor's settings/cloud (Customize → Rules), not a writable file. |
+| `agents-md` | **Skipped.** Cursor reads `AGENTS.md` at the project root and in subdirectories only; there is no user-global `~/AGENTS.md` or `~/.cursor/AGENTS.md`. |
+
+Skipped kinds are not silently lost: `internal/coverage` reports a per-scope
+warning ("cursor has no user-global location for <kind>; sync it at project
+scope instead") in the sync output and the JSON `coverage_warnings`. To apply
+rules or agents-md content broadly, sync them at **project** scope. (Verified
+against Cursor docs + a Cursor-staff statement, 2026-06-30; Cursor is reworking
+this area in 3.9 "Customize", so a future native `~/.cursor/rules/` could change
+this.)
+
 ## Multi-adapter ownership notes
 
 - `AGENTS.md` is shared by `cursor`, `codex`, and `pi`. The

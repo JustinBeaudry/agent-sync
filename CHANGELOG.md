@@ -21,6 +21,16 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
   MCP entries into `~/.claude.json` (preserving all foreign keys), and suppresses
   the `.agent-sync-managed` sidecar (the MCP target is Claude's own shared file,
   not an agent-sync-owned one). Project and directory scope are unchanged.
+- `sync --user` is now scope-aware for the Cursor and Codex adapters too. Codex
+  agents-md targets `~/.codex/AGENTS.md` (Codex's user-global instructions path,
+  not the inert `~/AGENTS.md`); its MCP (`~/.codex/config.toml`) and skills
+  (`~/.agents/skills/`) were already correct. Cursor syncs user-global MCP
+  servers to `~/.cursor/mcp.json` (sidecar suppressed); its `rule` and
+  `agents-md` outputs are skipped at user scope because Cursor has no
+  file-addressable user-global home for them (User Rules are app-settings/cloud;
+  there is no global `AGENTS.md`). The skipped Cursor kinds are surfaced as
+  per-scope coverage warnings rather than dead-path writes. Project and directory
+  scope are unchanged.
 
 ### Changed
 

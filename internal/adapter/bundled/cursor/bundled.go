@@ -75,14 +75,22 @@ func run(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 		Getenv: bundledGetenv,
 	})
 
-	server.OnInitialize(func(_ context.Context, _ adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+	// scope is captured at initialize and read at emit. The adapterkit Server
+	// processes initialize before emit on a single goroutine, so this needs no
+	// synchronization; each run() (one per session) has its own variable.
+	var scope string
+
+	server.OnInitialize(func(_ context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+		scope = params.Scope
 		return adapterkit.InitializeResult{
 			Capabilities:    capabilitiesForWire(),
-			DeclaredOutputs: declaredOutputs(),
+			DeclaredOutputs: declaredOutputs(scope),
 		}, nil
 	})
 
-	server.OnEmit(handleEmit)
+	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+		return handleEmit(ctx, params, scope)
+	})
 
 	if err := server.Run(ctx); err != nil {
 		return fmt.Errorf("cursor bundled adapter: %w", err)
