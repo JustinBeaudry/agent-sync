@@ -16,7 +16,42 @@ const (
 	mcpTOMLPathBase = "mcp_servers.agentsync_"
 	agentsMDPath    = "AGENTS.md"
 	sectionIDPrefix = "agent-sync:"
+
+	// scopeUser is the wire value (hierarchy.Level.String()) for the user-home
+	// scope. Any other value (incl. "" / "project" / "directory") is project
+	// scope.
+	scopeUser = "user"
+
+	// userAgentsMDPath is where Codex reads user-global agent instructions:
+	// ~/.codex/AGENTS.md (the scope root is $HOME at user scope). The
+	// project-root AGENTS.md is NOT read at user scope, so this is a genuine
+	// remap, not a directory-prefix coincidence — the direct analog of Claude's
+	// CLAUDE.md → .claude/CLAUDE.md. See plan docs/plans/2026-06-30-001.
+	//
+	// Caveats (documented in docs/adapters/codex.md, not handled here): Codex
+	// prefers ~/.codex/AGENTS.override.md over AGENTS.md, and the ~/.codex home
+	// can be relocated via CODEX_HOME.
+	userAgentsMDPath = ".codex/AGENTS.md"
 )
+
+// pathSet holds the scope-resolved destination for the agents-md overlay. The
+// MCP config (.codex/config.toml) and the skills tree (.agents/skills/) are
+// unconditional: their relative paths already resolve correctly under $HOME at
+// user scope, so only agents-md needs scope-dependent resolution.
+type pathSet struct {
+	agentsMD string
+}
+
+// resolvePathSet maps the initialize scope to Codex's scope-dependent paths.
+// declaredOutputs (capabilities.go) and the emitted op paths (here) MUST both
+// resolve from this one function so they never drift — a mismatch is rejected
+// by the runtime's path-safety gate.
+func resolvePathSet(scope string) pathSet {
+	if scope == scopeUser {
+		return pathSet{agentsMD: userAgentsMDPath}
+	}
+	return pathSet{agentsMD: agentsMDPath}
+}
 
 // markerOpenBytes is the literal HTML-comment opener every agent-sync section
 // marker uses. An agents-md body containing this sequence is rejected so a
@@ -84,7 +119,7 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode) error {
 // managed section between agent-sync:begin/end markers. AGENTS.md is tool-owned and
 // shared (codex, cursor, pi all write their own id-keyed sections); the merge
 // step preserves user content and other adapters' sections.
-func emitAgentsMD(emitted *emittedOps, node irNode) error {
+func emitAgentsMD(emitted *emittedOps, node irNode, state *emitState) error {
 	body, err := decodeBodyOrPassthrough(node.Body)
 	if err != nil {
 		return wrapBodyErr(node, err)
@@ -92,14 +127,14 @@ func emitAgentsMD(emitted *emittedOps, node irNode) error {
 	if bytes.Contains(body, markerOpenBytes) {
 		return &adapterkit.Error{
 			Code:    adapterkit.CodeInvalidParams,
-			Message: fmt.Sprintf("codex: agents-md %q body contains agent-sync marker syntax (%q); refusing to corrupt AGENTS.md", node.ID, string(markerOpenBytes)),
+			Message: fmt.Sprintf("codex: agents-md %q body contains agent-sync marker syntax (%q); refusing to corrupt %s", node.ID, string(markerOpenBytes), state.paths.agentsMD),
 		}
 	}
 	// The engine owns the begin/end markers (it renders the managed block from
 	// the locator during the markdown-section merge). The adapter passes the
 	// INNER body only — sending marker-wrapped content is rejected by the merge.
 	emitted.add(adapterkit.OpWriteToolOwned{
-		Path:    agentsMDPath,
+		Path:    state.paths.agentsMD,
 		Kind:    adapterkit.ToolOwnedKindMarkdownSection,
 		Locator: sectionIDPrefix + node.ID,
 		Content: body,

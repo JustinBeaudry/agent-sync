@@ -410,6 +410,123 @@ func TestSyncUserScope_ClaudeTargetsRealUserPaths(t *testing.T) {
 	}
 }
 
+// TestSyncUserScope_CursorCodexTargetRealUserPaths is the cursor+codex sibling
+// of the claude user-scope E2E. It exercises the full `sync --user` flow and
+// asserts the scope-aware destinations:
+//   - codex agents-md → ~/.codex/AGENTS.md (NOT ~/AGENTS.md), mcp → ~/.codex/config.toml
+//   - cursor mcp → ~/.cursor/mcp.json (foreign keys preserved), no sidecar
+//   - neither writes a user-global rule or a project-root AGENTS.md (no home for them)
+func TestSyncUserScope_CursorCodexTargetRealUserPaths(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+
+	// User-level manifest targeting cursor + codex, canonical content in home/.agents.
+	userManifest := "version: 1\n" +
+		"canonical:\n" +
+		"  local_dir: .agents\n" +
+		"targets:\n" +
+		"  - cursor\n" +
+		"  - codex\n"
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(userManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/AGENTS.md", "team standards body\n")
+	writeWS(t, home, ".agents/mcp/teamserver.json", `{"command":"echo","args":["hi"]}`+"\n")
+	writeWS(t, home, ".agents/rules/style.md", "use tabs\n")
+
+	// Seed ~/.cursor/mcp.json with foreign content the surgical merge must keep.
+	cursorMCP := filepath.Join(home, ".cursor", "mcp.json")
+	if err := os.MkdirAll(filepath.Join(home, ".cursor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cursorMCP, []byte(`{"existingKey":"keepme","mcpServers":{"other":{"command":"x"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, errOut, err := runSyncHierarchy(t, nested, home, "--user"); err != nil {
+		t.Fatalf("sync --user failed: %v\nstderr: %s", err, errOut)
+	}
+
+	// Codex agents-md → ~/.codex/AGENTS.md (the remap), as a managed section.
+	codexAgentsMD := filepath.Join(home, ".codex", "AGENTS.md")
+	mustExist(t, codexAgentsMD)
+	cBody, err := os.ReadFile(codexAgentsMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(cBody, []byte("team standards body")) {
+		t.Errorf("~/.codex/AGENTS.md missing managed body:\n%s", cBody)
+	}
+	if !bytes.Contains(cBody, []byte("agent-sync:begin")) || !bytes.Contains(cBody, []byte("agent-sync:end")) {
+		t.Errorf("~/.codex/AGENTS.md missing managed-section markers:\n%s", cBody)
+	}
+
+	// Codex mcp → ~/.codex/config.toml.
+	codexConfig := filepath.Join(home, ".codex", "config.toml")
+	mustExist(t, codexConfig)
+	tomlBody, err := os.ReadFile(codexConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(tomlBody, []byte("mcp_servers.agentsync_teamserver")) {
+		t.Errorf("~/.codex/config.toml missing agent-sync mcp table:\n%s", tomlBody)
+	}
+
+	// Cursor mcp → ~/.cursor/mcp.json, foreign keys survive.
+	raw, err := os.ReadFile(cursorMCP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("~/.cursor/mcp.json no longer valid JSON: %v\n%s", err, raw)
+	}
+	if doc["existingKey"] != "keepme" {
+		t.Errorf("cursor foreign top-level key clobbered: %v", doc["existingKey"])
+	}
+	servers, _ := doc["mcpServers"].(map[string]any)
+	if _, ok := servers["other"]; !ok {
+		t.Errorf("cursor foreign mcp server 'other' clobbered: %v", servers)
+	}
+	if _, ok := servers["agentsync_teamserver"]; !ok {
+		t.Errorf("agent-sync mcp entry not merged into ~/.cursor/mcp.json: %v", servers)
+	}
+
+	// Dead-path guards: no inert user-scope writes.
+	mustNotExist(t, filepath.Join(home, ".cursor", ".agent-sync-managed")) // sidecar suppressed
+	mustNotExist(t, filepath.Join(home, "AGENTS.md"))                      // cursor has no user-global AGENTS.md; codex remaps under .codex/
+	mustNotExist(t, filepath.Join(home, ".cursor", "rules", "agent-sync")) // cursor has no user-global rules home
+}
+
+// TestSyncUserScope_CursorRuleOnlyDoesNotFail is a regression test for the
+// capability-lied gate interaction (PR #31 review): a `sync --user` manifest
+// targeting Cursor with ONLY a rule node (no MCP entry) must succeed as an
+// honest no-op, not fail. Cursor skips rule at user scope and emits zero
+// non-warning ops; if the adapter still declared rule "supported" at user
+// scope, the runtime's capability-lied gate would reject the session. The fix
+// declares rule/agents-md unsupported at user scope, so this stays a clean
+// no-op surfaced via a coverage warning.
+func TestSyncUserScope_CursorRuleOnlyDoesNotFail(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+
+	userManifest := "version: 1\n" +
+		"canonical:\n" +
+		"  local_dir: .agents\n" +
+		"targets:\n" +
+		"  - cursor\n"
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(userManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Only a rule — no MCP entry, no agents-md. This is the exact gate-tripping shape.
+	writeWS(t, home, ".agents/rules/style.md", "use tabs\n")
+
+	if _, errOut, err := runSyncHierarchy(t, nested, home, "--user"); err != nil {
+		t.Fatalf("sync --user with cursor rule-only must not fail (capability-lied gate regression): %v\nstderr: %s", err, errOut)
+	}
+
+	// The rule has no user-global home, so nothing is written under ~/.cursor/rules.
+	mustNotExist(t, filepath.Join(home, ".cursor", "rules", "agent-sync"))
+}
+
 func TestSyncCommandUserWithWorkspaceIsError(t *testing.T) {
 	ws := writeLocalDirWorkspace(t)
 	var out, errBuf bytes.Buffer

@@ -67,9 +67,16 @@ func capabilitiesForWire() adapterkit.Capabilities {
 //
 // Codex owns no single reserved subdirectory: skills go under the shared
 // .agents/skills/ tree, MCP entries into the tool-owned .codex/config.toml,
-// and prose into the tool-owned workspace-root AGENTS.md.
-func declaredOutputs() []adapterkit.DeclaredOutput {
+// and prose into the tool-owned AGENTS.md.
+//
+// The agents-md path is scope-aware: at user scope Codex reads user-global
+// instructions from ~/.codex/AGENTS.md (not ~/AGENTS.md), so it is resolved via
+// resolvePathSet to keep declared and emitted paths in lockstep. The skills
+// tree and config.toml are unconditional — already correct at every scope. See
+// plan docs/plans/2026-06-30-001.
+func declaredOutputs(scope string) []adapterkit.DeclaredOutput {
 	agentsMDSection := "agent-sync"
+	paths := resolvePathSet(scope)
 	return []adapterkit.DeclaredOutput{
 		// .agents/skills is the shared cross-tool skills tree (codex, pi, and
 		// the user all place skills here). shared-subdir → the engine manages
@@ -77,7 +84,7 @@ func declaredOutputs() []adapterkit.DeclaredOutput {
 		// survive a sync.
 		{Path: ".agents/skills", Mode: adapterkit.OutputModeSharedSubdir},
 		{Path: ".codex/config.toml", Mode: adapterkit.OutputModeToolOwnedEntry},
-		{Path: "AGENTS.md", Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &agentsMDSection},
+		{Path: paths.agentsMD, Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &agentsMDSection},
 	}
 }
 

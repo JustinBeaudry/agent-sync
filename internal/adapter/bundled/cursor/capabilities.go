@@ -52,9 +52,24 @@ var conceptKinds = map[ir.Kind]capmatrix.CapabilityStatus{
 // echoes in its initialize response. WriteToolOwned is true because
 // the cursor adapter emits write_tool_owned ops for .cursor/mcp.json
 // and AGENTS.md.
-func capabilitiesForWire() adapterkit.Capabilities {
+//
+// The set is scope-aware. At user scope, rule and agents-md are declared
+// UNSUPPORTED: Cursor has no file-addressable user-global home for either
+// (User Rules are app-settings/cloud; there is no global AGENTS.md), so
+// dispatchNode skips them. Declaring them unsupported — rather than leaving
+// them "supported" while emitting nothing — is load-bearing: the runtime's
+// capability-lied gate (runtime.go) fails any session that declares a kind
+// supported, receives an in-target node of that kind, and emits zero
+// non-warning ops. A user-scope manifest targeting Cursor with only a rule
+// (no MCP entry) hits exactly that case, so the declaration must match the
+// emit reality. See dispatchNode + plan docs/plans/2026-06-30-001.
+func capabilitiesForWire(scope string) adapterkit.Capabilities {
 	builder := adapterkit.NewCapabilities().WithWriteToolOwned(true)
 	for kind, status := range conceptKinds {
+		if scope == scopeUser && (kind == ir.KindRule || kind == ir.KindAgentsMD) {
+			builder.Unsupported(string(kind))
+			continue
+		}
 		switch status {
 		case capmatrix.Supported:
 			builder.Supports(string(kind))
@@ -72,19 +87,34 @@ func capabilitiesForWire() adapterkit.Capabilities {
 // (internal/adapter/runtime.go pathInDeclaredOutputs) accepts an
 // emitted op only when its path falls inside one of these declared
 // outputs.
-func declaredOutputs() []adapterkit.DeclaredOutput {
+//
+// The set is scope-aware. At user scope only .cursor/mcp.json is declared:
+// it is the sole file-addressable user-global Cursor config (~/.cursor/mcp.json),
+// the sidecar is suppressed (the global mcp.json is Cursor's own file), and
+// rules / AGENTS.md have no user-global home so they are neither declared nor
+// emitted (see emit.go dispatchNode and coverage.nonNativeAtUser). Paths come
+// from resolvePathSet so declared and emitted paths never drift. See plan
+// docs/plans/2026-06-30-001.
+func declaredOutputs(scope string) []adapterkit.DeclaredOutput {
 	mcpPointer := "/mcpServers"
+	paths := resolvePathSet(scope)
+	outputs := []adapterkit.DeclaredOutput{
+		{Path: paths.mcpJSON, Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},
+	}
+	if scope == scopeUser {
+		return outputs
+	}
 	agentsMDSection := "agent-sync"
-	return []adapterkit.DeclaredOutput{
-		{Path: ".cursor/rules/agent-sync", Mode: adapterkit.OutputModeOwnedSubdir},
-		{Path: ".cursor/mcp.json", Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},
-		{Path: "AGENTS.md", Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &agentsMDSection},
+	outputs = append(outputs,
+		adapterkit.DeclaredOutput{Path: ".cursor/rules/agent-sync", Mode: adapterkit.OutputModeOwnedSubdir},
+		adapterkit.DeclaredOutput{Path: agentsMDPath, Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &agentsMDSection},
 		// The strict-JSON sidecar marker (.agent-sync-managed) is written
 		// next to .cursor/mcp.json under .cursor/. Declared by exact
 		// path (owned-subdir mode authorizes the path; the write_file
 		// op writes it) rather than over-broadly authorizing .cursor/.
-		{Path: ".cursor/.agent-sync-managed", Mode: adapterkit.OutputModeOwnedSubdir},
-	}
+		adapterkit.DeclaredOutput{Path: paths.sidecar, Mode: adapterkit.OutputModeOwnedSubdir},
+	)
+	return outputs
 }
 
 // parseCapabilitiesYAML decodes the embedded YAML. Used by the parity

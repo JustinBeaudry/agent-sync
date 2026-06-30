@@ -34,6 +34,29 @@ this is expected.
 Unsupported kinds surface as honest degradation warnings in the capability
 report — agent-sync never emits dead files into directories Codex doesn't read.
 
+## User scope (`sync --user`)
+
+The adapter is scope-aware. At user scope the scope root is `$HOME`:
+
+| IR kind | User-scope destination |
+|---|---|
+| `agents-md` | `~/.codex/AGENTS.md` — Codex's user-global instructions path. This is a genuine **remap**, not a directory coincidence: Codex does *not* read `~/AGENTS.md` at the user level. (Analog of Claude's `CLAUDE.md → ~/.claude/CLAUDE.md`.) |
+| `mcp-server-entry` | `~/.codex/config.toml` — already the relative path `.codex/config.toml`, and in fact Codex's *primary* config location. Unchanged. |
+| `skill` | `~/.agents/skills/agent-sync-<id>/SKILL.md` — the official user-global skills tree. Unchanged. |
+
+Caveats specific to user scope (not handled by the adapter — documented so you
+are not surprised):
+
+- **`AGENTS.override.md` precedence.** Codex prefers `~/.codex/AGENTS.override.md`
+  over `~/.codex/AGENTS.md`. If a stale override file exists, the synced managed
+  section is shadowed until it is removed or merged.
+- **`CODEX_HOME` relocation.** agent-sync assumes the default `~/.codex` (the
+  hierarchy layer sets the user scope root to `$HOME`). If you relocate Codex's
+  home via `CODEX_HOME`, the `config.toml` and `AGENTS.md` writes will not follow
+  it. The skills tree at `~/.agents/skills/` is unaffected by `CODEX_HOME`.
+
+(Verified against Codex official docs, 2026-06-30.)
+
 ## Caveats (version-dependent, June 2026)
 
 - **AGENTS.md size cap.** Codex stops adding context once the combined AGENTS.md

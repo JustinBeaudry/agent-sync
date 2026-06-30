@@ -130,7 +130,7 @@ func TestConceptKinds_UnsupportedSet(t *testing.T) {
 func TestDeclaredOutputs_Shape(t *testing.T) {
 	t.Parallel()
 
-	got := declaredOutputs()
+	got := declaredOutputs("project")
 	want := map[string]adapterkit.OutputMode{
 		".cursor/rules/agent-sync":    adapterkit.OutputModeOwnedSubdir,
 		".cursor/mcp.json":            adapterkit.OutputModeToolOwnedEntry,
@@ -177,10 +177,61 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 	}
 }
 
+// TestCapabilitiesForWire_UserScopeDemotesRuleAndAgentsMD pins the
+// scope-aware capability declaration. At user scope rule and agents-md must be
+// UNSUPPORTED (Cursor has no user-global home for them and the adapter emits
+// nothing) so the runtime's capability-lied gate treats a rule-only user-scope
+// manifest as an honest no-op rather than a sync failure. At project scope they
+// remain supported.
+func TestCapabilitiesForWire_UserScopeDemotesRuleAndAgentsMD(t *testing.T) {
+	t.Parallel()
+
+	user := capabilitiesForWire("user")
+	if got := user.ConceptKinds[string(ir.KindRule)]; got != adapterkit.CapabilityUnsupported {
+		t.Errorf("user-scope rule capability = %v, want unsupported", got)
+	}
+	if got := user.ConceptKinds[string(ir.KindAgentsMD)]; got != adapterkit.CapabilityUnsupported {
+		t.Errorf("user-scope agents-md capability = %v, want unsupported", got)
+	}
+	// mcp-server-entry stays supported at user scope (~/.cursor/mcp.json).
+	if got := user.ConceptKinds[string(ir.KindMCPServerEntry)]; got != adapterkit.CapabilitySupported {
+		t.Errorf("user-scope mcp capability = %v, want supported", got)
+	}
+	// Project scope is unchanged: rule and agents-md remain supported.
+	proj := capabilitiesForWire("project")
+	if got := proj.ConceptKinds[string(ir.KindRule)]; got != adapterkit.CapabilitySupported {
+		t.Errorf("project-scope rule capability = %v, want supported", got)
+	}
+	if got := proj.ConceptKinds[string(ir.KindAgentsMD)]; got != adapterkit.CapabilitySupported {
+		t.Errorf("project-scope agents-md capability = %v, want supported", got)
+	}
+}
+
+// TestDeclaredOutputs_UserScope_MCPOnly pins the user-scope declared-outputs
+// shape: only .cursor/mcp.json (the one file-addressable user-global Cursor
+// config). The sidecar, rules dir, and AGENTS.md are dropped because they have
+// no user-global home — keeping declared outputs in lockstep with what
+// emit.go actually emits at user scope.
+func TestDeclaredOutputs_UserScope_MCPOnly(t *testing.T) {
+	t.Parallel()
+
+	got := declaredOutputs("user")
+	if len(got) != 1 {
+		t.Fatalf("user-scope declaredOutputs must be MCP-only, got %d: %+v", len(got), got)
+	}
+	d := got[0]
+	if d.Path != ".cursor/mcp.json" || d.Mode != adapterkit.OutputModeToolOwnedEntry {
+		t.Errorf("user-scope declared output = %+v, want .cursor/mcp.json tool-owned-entry", d)
+	}
+	if d.JSONPointer == nil || *d.JSONPointer != "/mcpServers" {
+		t.Errorf("user-scope mcp declared output missing /mcpServers pointer: %+v", d)
+	}
+}
+
 func TestCapabilitiesForWire_ExposesAllKinds(t *testing.T) {
 	t.Parallel()
 
-	c := capabilitiesForWire()
+	c := capabilitiesForWire("project")
 	if !c.WriteToolOwned {
 		t.Error("WriteToolOwned must be true (cursor emits write_tool_owned ops)")
 	}
@@ -204,13 +255,17 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 		Name:    adapterName,
 		Version: adapterVersion,
 	})
-	server.OnInitialize(func(_ context.Context, _ adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+	var scope string
+	server.OnInitialize(func(_ context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+		scope = params.Scope
 		return adapterkit.InitializeResult{
-			Capabilities:    capabilitiesForWire(),
-			DeclaredOutputs: declaredOutputs(),
+			Capabilities:    capabilitiesForWire(scope),
+			DeclaredOutputs: declaredOutputs(scope),
 		}, nil
 	})
-	server.OnEmit(handleEmit)
+	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+		return handleEmit(ctx, params, scope)
+	})
 
 	client, cleanup := adapterkit.RunInprocServer(t, server)
 	t.Cleanup(cleanup)
@@ -230,7 +285,7 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 	if res.ProtocolVersion != adapterkit.ContractVersionV1 {
 		t.Errorf("ProtocolVersion=%q want %q", res.ProtocolVersion, adapterkit.ContractVersionV1)
 	}
-	if got, want := len(res.DeclaredOutputs), len(declaredOutputs()); got != want {
+	if got, want := len(res.DeclaredOutputs), len(declaredOutputs("project")); got != want {
 		t.Errorf("DeclaredOutputs len=%d want %d", got, want)
 	}
 	if !res.Capabilities.WriteToolOwned {

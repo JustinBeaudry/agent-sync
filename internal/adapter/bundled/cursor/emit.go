@@ -99,7 +99,7 @@ func (e *emittedOps) wireOps() ([]json.RawMessage, error) {
 //
 // Context is checked between nodes so a runtime cancel during a
 // large IR is honored without waiting for the full iteration.
-func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string) (adapterkit.EmitResult, error) {
 	doc, err := decodeIRDocument(params.IR)
 	if err != nil {
 		return adapterkit.EmitResult{}, &adapterkit.Error{
@@ -127,6 +127,8 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams) (adapterkit.E
 		readmeEmitted:   map[string]bool{},
 		sidecarEmitted:  false,
 		emittedFilePath: map[string]struct{}{},
+		paths:           resolvePathSet(scope),
+		atUserScope:     scope == scopeUser,
 	}
 
 	// Iterate in a deterministic order (sorted by kind, then id) so
@@ -179,6 +181,15 @@ type emitState struct {
 	readmeEmitted   map[string]bool
 	sidecarEmitted  bool
 	emittedFilePath map[string]struct{}
+	// paths are the scope-resolved tool-owned destinations (.cursor/mcp.json +
+	// sidecar at project scope; sidecar suppressed at user scope). Resolved once
+	// per emit from the initialize scope.
+	paths pathSet
+	// atUserScope is true when the initialize scope is the user-home scope.
+	// rule and agents-md have no file-addressable user-global home in Cursor, so
+	// dispatchNode skips them at user scope (internal/coverage emits the
+	// user-facing warning). See plan docs/plans/2026-06-30-001.
+	atUserScope bool
 }
 
 // recordWritePath registers a write_file path in the per-emit dedup
@@ -204,6 +215,21 @@ func (s *emitState) recordWritePath(path string) error {
 // degradation warning and emit no files. The capability matrix in
 // capabilities.go is the authoritative source for which kinds are
 // supported; this switch must stay in agreement with it.
+//
+// At user scope, rule and agents-md are skipped (no op): Cursor has no
+// file-addressable user-global home for either (User Rules live in app
+// settings / cloud; there is no global AGENTS.md), so writing them under
+// ~/.cursor/ or ~/AGENTS.md would be inert. internal/coverage emits the
+// user-facing warning for these (computed from the manifest), so the adapter
+// stays silent here to avoid a double warning.
+//
+// The silent skip is only safe because capabilitiesForWire declares rule and
+// agents-md UNSUPPORTED at user scope: the runtime's capability-lied gate fails
+// any session that declares a kind supported but emits zero non-warning ops for
+// an in-target node of that kind. A user-scope manifest with only a rule (no
+// MCP entry) is exactly that case — the unsupported declaration keeps it an
+// honest no-op instead of a sync failure. See capabilitiesForWire and plan
+// docs/plans/2026-06-30-001.
 func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	if !ir.IsValidID(node.ID) {
 		return &adapterkit.Error{
@@ -213,10 +239,16 @@ func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	}
 	switch ir.Kind(node.Kind) {
 	case ir.KindRule:
+		if state.atUserScope {
+			return nil // no user-global rules home; see coverage.nonNativeAtUser
+		}
 		return emitRule(emitted, node, state)
 	case ir.KindMCPServerEntry:
 		return emitMCPServerEntry(emitted, node, state)
 	case ir.KindAgentsMD:
+		if state.atUserScope {
+			return nil // no user-global AGENTS.md home; see coverage.nonNativeAtUser
+		}
 		return emitAgentsMD(emitted, node)
 	case ir.KindSkill, ir.KindCommand, ir.KindPluginReference:
 		return emitUnsupportedWarning(emitted, node)

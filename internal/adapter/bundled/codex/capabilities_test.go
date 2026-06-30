@@ -116,7 +116,7 @@ func TestConceptKinds_SupportSets(t *testing.T) {
 func TestDeclaredOutputs_Shape(t *testing.T) {
 	t.Parallel()
 
-	got := declaredOutputs()
+	got := declaredOutputs("project")
 	want := map[string]adapterkit.OutputMode{
 		".agents/skills":     adapterkit.OutputModeSharedSubdir,
 		".codex/config.toml": adapterkit.OutputModeToolOwnedEntry,
@@ -148,6 +148,40 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 	}
 }
 
+// TestDeclaredOutputs_UserScope_AgentsMDRemapped pins the user-scope shape:
+// agents-md is declared at .codex/AGENTS.md (Codex's user-global instructions
+// path, → ~/.codex/AGENTS.md), while the skills tree and config.toml are
+// unchanged (already correct under $HOME at user scope).
+func TestDeclaredOutputs_UserScope_AgentsMDRemapped(t *testing.T) {
+	t.Parallel()
+
+	got := declaredOutputs("user")
+	want := map[string]adapterkit.OutputMode{
+		".agents/skills":     adapterkit.OutputModeSharedSubdir,
+		".codex/config.toml": adapterkit.OutputModeToolOwnedEntry,
+		".codex/AGENTS.md":   adapterkit.OutputModeToolOwnedEntry,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("user-scope declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)
+	}
+	for _, d := range got {
+		mode, ok := want[d.Path]
+		if !ok {
+			t.Errorf("unexpected user-scope declared output: %q (%v)", d.Path, d.Mode)
+			continue
+		}
+		if d.Mode != mode {
+			t.Errorf("user-scope declared output %q mode=%v want %v", d.Path, d.Mode, mode)
+		}
+	}
+	// The project-scope AGENTS.md must NOT appear at user scope.
+	for _, d := range got {
+		if d.Path == "AGENTS.md" {
+			t.Errorf("user-scope must not declare project-root AGENTS.md; got %+v", got)
+		}
+	}
+}
+
 func TestCapabilitiesForWire_ExposesAllKinds(t *testing.T) {
 	t.Parallel()
 
@@ -175,13 +209,17 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 		Name:    adapterName,
 		Version: adapterVersion,
 	})
-	server.OnInitialize(func(_ context.Context, _ adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+	var scope string
+	server.OnInitialize(func(_ context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
+		scope = params.Scope
 		return adapterkit.InitializeResult{
 			Capabilities:    capabilitiesForWire(),
-			DeclaredOutputs: declaredOutputs(),
+			DeclaredOutputs: declaredOutputs(scope),
 		}, nil
 	})
-	server.OnEmit(handleEmit)
+	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
+		return handleEmit(ctx, params, scope)
+	})
 
 	client, cleanup := adapterkit.RunInprocServer(t, server)
 	t.Cleanup(cleanup)
@@ -201,7 +239,7 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 	if res.ProtocolVersion != adapterkit.ContractVersionV1 {
 		t.Errorf("ProtocolVersion=%q want %q", res.ProtocolVersion, adapterkit.ContractVersionV1)
 	}
-	if got, want := len(res.DeclaredOutputs), len(declaredOutputs()); got != want {
+	if got, want := len(res.DeclaredOutputs), len(declaredOutputs("project")); got != want {
 		t.Errorf("DeclaredOutputs len=%d want %d", got, want)
 	}
 	if !res.Capabilities.WriteToolOwned {

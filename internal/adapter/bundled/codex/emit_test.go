@@ -25,7 +25,7 @@ func captureOps(raw json.RawMessage) (*emittedOps, error) {
 		return nil, err
 	}
 	emitted := &emittedOps{}
-	state := &emitState{emittedFilePath: map[string]struct{}{}}
+	state := &emitState{emittedFilePath: map[string]struct{}{}, paths: resolvePathSet("project")}
 	sort.Slice(doc.Nodes, func(i, j int) bool {
 		if doc.Nodes[i].Kind != doc.Nodes[j].Kind {
 			return doc.Nodes[i].Kind < doc.Nodes[j].Kind
@@ -114,6 +114,38 @@ func TestEmitAgentsMD_HappyPath(t *testing.T) {
 	}
 	if !strings.Contains(content, "Use conventional commits.") {
 		t.Errorf("AGENTS.md content missing body; got %q", content)
+	}
+}
+
+// TestEmit_UserScope_AgentsMDRemapped pins the user-scope (sync --user)
+// behavior: agents-md is emitted to .codex/AGENTS.md (→ ~/.codex/AGENTS.md,
+// Codex's user-global instructions path — NOT ~/AGENTS.md), while MCP
+// (.codex/config.toml) and skills (.agents/skills/) are unchanged (already
+// correct under $HOME at user scope).
+func TestEmit_UserScope_AgentsMDRemapped(t *testing.T) {
+	t.Parallel()
+
+	raw := `{"nodes":[
+		{"id":"team","kind":"agents-md","body":"Use conventional commits."},
+		{"id":"lsp","kind":"mcp-server-entry","body":"{\"command\":\"node\"}"}
+	]}`
+	res, err := emitDocScope(t, raw, "user")
+	if err != nil {
+		t.Fatalf("handleEmit: %v", err)
+	}
+
+	paths := map[string]bool{}
+	for _, r := range res.OpsPerformed {
+		paths[r.Path] = true
+	}
+	if !paths[".codex/AGENTS.md"] {
+		t.Errorf("user-scope agents-md must emit to .codex/AGENTS.md; got %+v", res.OpsPerformed)
+	}
+	if paths["AGENTS.md"] {
+		t.Errorf("user-scope must NOT emit project-root AGENTS.md; got %+v", res.OpsPerformed)
+	}
+	if !paths[".codex/config.toml"] {
+		t.Errorf("user-scope mcp must still emit to .codex/config.toml; got %+v", res.OpsPerformed)
 	}
 }
 

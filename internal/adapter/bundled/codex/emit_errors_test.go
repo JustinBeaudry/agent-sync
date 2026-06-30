@@ -9,10 +9,17 @@ import (
 	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
-// emitDoc runs the production handleEmit over a raw IR document.
+// emitDoc runs the production handleEmit over a raw IR document at project scope.
 func emitDoc(t *testing.T, raw string) (adapterkit.EmitResult, error) {
 	t.Helper()
-	return handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: json.RawMessage(raw)})
+	return emitDocScope(t, raw, "project")
+}
+
+// emitDocScope runs the production handleEmit over a raw IR document at the
+// given initialize scope.
+func emitDocScope(t *testing.T, raw, scope string) (adapterkit.EmitResult, error) {
+	t.Helper()
+	return handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: json.RawMessage(raw)}, scope)
 }
 
 func TestHandleEmit_HappyMixed(t *testing.T) {

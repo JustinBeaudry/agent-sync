@@ -15,10 +15,40 @@ func TestAnalyzeProjectLevelNoWarnings(t *testing.T) {
 	}
 }
 
-func TestAnalyzeUserLevelNoWarnings(t *testing.T) {
-	kinds := []ir.Kind{ir.KindSkill, ir.KindCommand}
+func TestAnalyzeUserLevelClaudeCodexNative(t *testing.T) {
+	// Claude (after scope-aware paths) and Codex (after the agents-md remap)
+	// read every supported kind from a user-global location, so they have no
+	// user-scope gap.
+	kinds := []ir.Kind{ir.KindSkill, ir.KindCommand, ir.KindAgentsMD, ir.KindMCPServerEntry}
 	if got := Analyze(hierarchy.LevelUser, kinds, []string{"claude", "codex"}); len(got) != 0 {
-		t.Fatalf("user level should be native, got: %+v", got)
+		t.Fatalf("claude/codex user level should be native, got: %+v", got)
+	}
+}
+
+func TestAnalyzeUserLevelCursorRuleAndAgentsMDWarn(t *testing.T) {
+	// Cursor has no file-addressable user-global home for rules (User Rules are
+	// app-settings/cloud only) or AGENTS.md; only ~/.cursor/mcp.json is
+	// file-addressable. So rule and agents-md at user scope are inert and warn.
+	got := Analyze(hierarchy.LevelUser, []ir.Kind{ir.KindRule, ir.KindAgentsMD}, []string{"cursor"})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 cursor user-scope warnings, got %d: %+v", len(got), got)
+	}
+	for _, w := range got {
+		if w.Target != "cursor" || w.Level != hierarchy.LevelUser {
+			t.Errorf("warning = %+v, want cursor/user", w)
+		}
+	}
+	// Deterministic ordering by kind (agents-md < rule).
+	if got[0].Kind != ir.KindAgentsMD || got[1].Kind != ir.KindRule {
+		t.Errorf("warnings not ordered by kind: %+v", got)
+	}
+}
+
+func TestAnalyzeUserLevelCursorMCPNative(t *testing.T) {
+	// ~/.cursor/mcp.json is the one file-addressable global Cursor config, so
+	// mcp-server-entry at user scope is native and must not warn.
+	if got := Analyze(hierarchy.LevelUser, []ir.Kind{ir.KindMCPServerEntry}, []string{"cursor"}); len(got) != 0 {
+		t.Fatalf("cursor user-scope mcp should be native, got: %+v", got)
 	}
 }
 
