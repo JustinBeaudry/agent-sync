@@ -221,7 +221,15 @@ func (s *emitState) recordWritePath(path string) error {
 // settings / cloud; there is no global AGENTS.md), so writing them under
 // ~/.cursor/ or ~/AGENTS.md would be inert. internal/coverage emits the
 // user-facing warning for these (computed from the manifest), so the adapter
-// stays silent here to avoid a double warning. See plan docs/plans/2026-06-30-001.
+// stays silent here to avoid a double warning.
+//
+// The silent skip is only safe because capabilitiesForWire declares rule and
+// agents-md UNSUPPORTED at user scope: the runtime's capability-lied gate fails
+// any session that declares a kind supported but emits zero non-warning ops for
+// an in-target node of that kind. A user-scope manifest with only a rule (no
+// MCP entry) is exactly that case — the unsupported declaration keeps it an
+// honest no-op instead of a sync failure. See capabilitiesForWire and plan
+// docs/plans/2026-06-30-001.
 func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	if !ir.IsValidID(node.ID) {
 		return &adapterkit.Error{

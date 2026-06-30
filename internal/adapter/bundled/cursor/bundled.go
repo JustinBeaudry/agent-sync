@@ -83,7 +83,7 @@ func run(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	server.OnInitialize(func(_ context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
 		scope = params.Scope
 		return adapterkit.InitializeResult{
-			Capabilities:    capabilitiesForWire(),
+			Capabilities:    capabilitiesForWire(scope),
 			DeclaredOutputs: declaredOutputs(scope),
 		}, nil
 	})

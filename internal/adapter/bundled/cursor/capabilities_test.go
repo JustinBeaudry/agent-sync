@@ -177,6 +177,36 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 	}
 }
 
+// TestCapabilitiesForWire_UserScopeDemotesRuleAndAgentsMD pins the
+// scope-aware capability declaration. At user scope rule and agents-md must be
+// UNSUPPORTED (Cursor has no user-global home for them and the adapter emits
+// nothing) so the runtime's capability-lied gate treats a rule-only user-scope
+// manifest as an honest no-op rather than a sync failure. At project scope they
+// remain supported.
+func TestCapabilitiesForWire_UserScopeDemotesRuleAndAgentsMD(t *testing.T) {
+	t.Parallel()
+
+	user := capabilitiesForWire("user")
+	if got := user.ConceptKinds[string(ir.KindRule)]; got != adapterkit.CapabilityUnsupported {
+		t.Errorf("user-scope rule capability = %v, want unsupported", got)
+	}
+	if got := user.ConceptKinds[string(ir.KindAgentsMD)]; got != adapterkit.CapabilityUnsupported {
+		t.Errorf("user-scope agents-md capability = %v, want unsupported", got)
+	}
+	// mcp-server-entry stays supported at user scope (~/.cursor/mcp.json).
+	if got := user.ConceptKinds[string(ir.KindMCPServerEntry)]; got != adapterkit.CapabilitySupported {
+		t.Errorf("user-scope mcp capability = %v, want supported", got)
+	}
+	// Project scope is unchanged: rule and agents-md remain supported.
+	proj := capabilitiesForWire("project")
+	if got := proj.ConceptKinds[string(ir.KindRule)]; got != adapterkit.CapabilitySupported {
+		t.Errorf("project-scope rule capability = %v, want supported", got)
+	}
+	if got := proj.ConceptKinds[string(ir.KindAgentsMD)]; got != adapterkit.CapabilitySupported {
+		t.Errorf("project-scope agents-md capability = %v, want supported", got)
+	}
+}
+
 // TestDeclaredOutputs_UserScope_MCPOnly pins the user-scope declared-outputs
 // shape: only .cursor/mcp.json (the one file-addressable user-global Cursor
 // config). The sidecar, rules dir, and AGENTS.md are dropped because they have
@@ -201,7 +231,7 @@ func TestDeclaredOutputs_UserScope_MCPOnly(t *testing.T) {
 func TestCapabilitiesForWire_ExposesAllKinds(t *testing.T) {
 	t.Parallel()
 
-	c := capabilitiesForWire()
+	c := capabilitiesForWire("project")
 	if !c.WriteToolOwned {
 		t.Error("WriteToolOwned must be true (cursor emits write_tool_owned ops)")
 	}
@@ -229,7 +259,7 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 	server.OnInitialize(func(_ context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
 		scope = params.Scope
 		return adapterkit.InitializeResult{
-			Capabilities:    capabilitiesForWire(),
+			Capabilities:    capabilitiesForWire(scope),
 			DeclaredOutputs: declaredOutputs(scope),
 		}, nil
 	})

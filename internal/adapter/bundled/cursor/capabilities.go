@@ -52,9 +52,24 @@ var conceptKinds = map[ir.Kind]capmatrix.CapabilityStatus{
 // echoes in its initialize response. WriteToolOwned is true because
 // the cursor adapter emits write_tool_owned ops for .cursor/mcp.json
 // and AGENTS.md.
-func capabilitiesForWire() adapterkit.Capabilities {
+//
+// The set is scope-aware. At user scope, rule and agents-md are declared
+// UNSUPPORTED: Cursor has no file-addressable user-global home for either
+// (User Rules are app-settings/cloud; there is no global AGENTS.md), so
+// dispatchNode skips them. Declaring them unsupported — rather than leaving
+// them "supported" while emitting nothing — is load-bearing: the runtime's
+// capability-lied gate (runtime.go) fails any session that declares a kind
+// supported, receives an in-target node of that kind, and emits zero
+// non-warning ops. A user-scope manifest targeting Cursor with only a rule
+// (no MCP entry) hits exactly that case, so the declaration must match the
+// emit reality. See dispatchNode + plan docs/plans/2026-06-30-001.
+func capabilitiesForWire(scope string) adapterkit.Capabilities {
 	builder := adapterkit.NewCapabilities().WithWriteToolOwned(true)
 	for kind, status := range conceptKinds {
+		if scope == scopeUser && (kind == ir.KindRule || kind == ir.KindAgentsMD) {
+			builder.Unsupported(string(kind))
+			continue
+		}
 		switch status {
 		case capmatrix.Supported:
 			builder.Supports(string(kind))
