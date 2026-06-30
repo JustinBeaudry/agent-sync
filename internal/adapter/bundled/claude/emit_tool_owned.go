@@ -78,7 +78,7 @@ func emitMCPServerEntry(emitted *emittedOps, node irNode, state *emitState) erro
 	if !json.Valid(body) {
 		return &adapterkit.Error{
 			Code:    adapterkit.CodeInvalidParams,
-			Message: fmt.Sprintf("claude: mcp-server-entry %q body is not valid JSON; refusing to corrupt .mcp.json", node.ID),
+			Message: fmt.Sprintf("claude: mcp-server-entry %q body is not valid JSON; refusing to corrupt %s", node.ID, state.paths.mcpJSON),
 		}
 	}
 	if !isJSONObject(body) {

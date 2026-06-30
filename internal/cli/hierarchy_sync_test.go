@@ -377,7 +377,12 @@ func TestSyncUserScope_ClaudeTargetsRealUserPaths(t *testing.T) {
 	mustNotExist(t, filepath.Join(home, ".mcp.json"))
 	mustNotExist(t, filepath.Join(home, ".agent-sync-managed"))
 
-	// Idempotent re-run: succeeds and foreign content stays intact.
+	// Idempotent re-run: succeeds, foreign content stays intact, and the
+	// managed outputs are unchanged (no duplicated sections, no dropped entry).
+	claudeMDBefore, err := os.ReadFile(claudeMD)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, errOut, err := runSyncHierarchy(t, nested, home, "--user"); err != nil {
 		t.Fatalf("second sync --user failed: %v\nstderr: %s", err, errOut)
 	}
@@ -391,6 +396,17 @@ func TestSyncUserScope_ClaudeTargetsRealUserPaths(t *testing.T) {
 	}
 	if doc2["existingKey"] != "keepme" {
 		t.Errorf("re-sync clobbered foreign key: %v", doc2["existingKey"])
+	}
+	servers2, _ := doc2["mcpServers"].(map[string]any)
+	if _, ok := servers2["agentsync_teamserver"]; !ok {
+		t.Errorf("re-sync dropped agent-sync mcp entry: %v", servers2)
+	}
+	claudeMDAfter, err := os.ReadFile(claudeMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(claudeMDBefore, claudeMDAfter) {
+		t.Errorf("re-sync changed ~/.claude/CLAUDE.md unexpectedly:\nbefore:\n%s\nafter:\n%s", claudeMDBefore, claudeMDAfter)
 	}
 }
 
