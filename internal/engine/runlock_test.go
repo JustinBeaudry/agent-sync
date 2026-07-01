@@ -204,13 +204,14 @@ func TestSync_WarnsOrphanLedgerAndPreservesFiles(t *testing.T) {
 	}
 	defer func() { _ = root.Close() }()
 
-	// Seed a pi ledger + its file on disk; pi is NOT in the sync's manifest.
+	// Seed a pi ledger + its file on disk (through the workspace root); pi is
+	// NOT in the sync's manifest.
 	piSkill := ".agents/skills/agent-sync-x/SKILL.md"
 	if err := root.Inner().MkdirAll(filepath.Dir(piSkill), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(ws, piSkill), []byte("# pi skill\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if err := writeRootFile(root, piSkill, "# pi skill\n"); err != nil {
+		t.Fatalf("seed pi skill: %v", err)
 	}
 	if err := ledger.Write(root, ledger.Ledger{
 		SchemaVersion: ledger.SchemaVersionCurrent,
@@ -242,7 +243,22 @@ func TestSync_WarnsOrphanLedgerAndPreservesFiles(t *testing.T) {
 		t.Errorf("expected an orphan-ledger warning naming pi; got:\n%s", got)
 	}
 	// The dropped target's file must survive — sync warns, it does not reclaim.
-	if _, err := os.Stat(filepath.Join(ws, piSkill)); err != nil {
+	if _, err := root.Inner().Stat(piSkill); err != nil {
 		t.Errorf("dropped target's file must be preserved (unmanage reclaims, not sync): %v", err)
 	}
+}
+
+// writeRootFile writes content to a workspace-relative path through the fsroot
+// Root (os.Root, which refuses symlink traversal), matching how production
+// writes into a workspace — used by tests that seed workspace fixtures.
+func writeRootFile(root *fsroot.Root, rel, content string) error {
+	f, err := root.Inner().OpenFile(rel, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write([]byte(content)); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }

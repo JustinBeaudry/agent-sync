@@ -42,7 +42,7 @@ func TestRunLock_ContendedReturnsLocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
-	defer func() { _ = release() }()
+	t.Cleanup(func() { _ = release() })
 
 	second, err := NewRunLock(root)
 	if err != nil {
