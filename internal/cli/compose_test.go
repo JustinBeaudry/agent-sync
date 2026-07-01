@@ -345,10 +345,13 @@ func TestCompose_NoUserManifestIsNoOp(t *testing.T) {
 	mustExist(t, rulePath(repo, "c"))
 }
 
-// TestCompose_MalformedUserManifestIsSoftNoOp is U4/D8: a broken user manifest
-// must not fail the project sync — composition soft-no-ops with a warning and
-// the project still writes its own rules.
-func TestCompose_MalformedUserManifestIsSoftNoOp(t *testing.T) {
+// TestCompose_MalformedUserManifestDefersCursor is U4/D8: a broken user manifest
+// must not FAIL the project sync, but composition can't compute the full cursor
+// rule set, so the whole cursor sync is DEFERRED this run (its owned subdir is
+// left untouched) with a warning. The run still succeeds; other targets (if any)
+// are unaffected. This is the accepted tradeoff for the transient-failure guard:
+// a broken user source postpones cursor rules rather than syncing a partial set.
+func TestCompose_MalformedUserManifestDefersCursor(t *testing.T) {
 	home, repo := composeTree(t)
 	// Malformed YAML at the user scope. Discovery keys off presence, not
 	// validity, so the user scope is discovered; composeUserRules' LoadFile fails.
@@ -360,10 +363,81 @@ func TestCompose_MalformedUserManifestIsSoftNoOp(t *testing.T) {
 	}
 	writeWS(t, repo, ".agents/rules/c.md", "project rule c\n")
 
+	out, errOut, err := runSyncHierarchy(t, repo, home)
+	if err != nil {
+		t.Fatalf("malformed user manifest must not fail the project sync: %v\nstderr: %s", err, errOut)
+	}
+	// Cursor deferred → its subdir was not synced this run.
+	mustNotExist(t, rulePath(repo, "c"))
+	if combined := out + errOut; !bytes.Contains([]byte(combined), []byte("deferring cursor")) {
+		t.Errorf("expected a 'deferring cursor' warning; stdout+stderr:\n%s", combined)
+	}
+
+	// Recovery: a valid user manifest → next sync writes both project and user
+	// rules to cursor.
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/u.md", "user rule u\n")
 	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
-		t.Fatalf("malformed user manifest must not fail project sync: %v\nstderr: %s", err, errOut)
+		t.Fatalf("recovery sync: %v\nstderr: %s", err, errOut)
 	}
 	mustExist(t, rulePath(repo, "c"))
+	mustExist(t, rulePath(repo, "u"))
+}
+
+// TestCompose_TransientUserFailurePreservesComposedRules is the core
+// transient-failure guard: after a successful compose writes a user rule into
+// the project, a LATER sync that cannot read the user source must NOT wipe the
+// previously-composed rule. Deferring the cursor sync leaves its owned subdir
+// (composed + project rules) byte-intact; recovery re-syncs it fully.
+func TestCompose_TransientUserFailurePreservesComposedRules(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/a.md", "user rule a\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/c.md", "project rule c\n")
+
+	// Sync 1: composes user rule a alongside project rule c.
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync 1: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "a"))
+	mustExist(t, rulePath(repo, "c"))
+	aBefore, rerr := os.ReadFile(rulePath(repo, "a"))
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+
+	// Break the user source, then sync: cursor deferred → BOTH the composed rule
+	// a and the project rule c are preserved byte-intact (subdir untouched).
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(":\n  not: [valid"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync 2 (transient failure): %v\nstderr: %s", err, errOut)
+	}
+	aAfter, rerr := os.ReadFile(rulePath(repo, "a"))
+	if rerr != nil {
+		t.Fatalf("composed rule a must survive a deferred sync: %v", rerr)
+	}
+	if !bytes.Equal(aBefore, aAfter) {
+		t.Errorf("composed rule a changed on a deferred sync:\nbefore:\n%s\nafter:\n%s", aBefore, aAfter)
+	}
+	mustExist(t, rulePath(repo, "c"))
+
+	// Recovery: rule still present after a good sync.
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync 3 (recovery): %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "a"))
 }
 
 // TestCompose_OrphanReclaimOnDropAndOptOut is U4 integration: composed rules are

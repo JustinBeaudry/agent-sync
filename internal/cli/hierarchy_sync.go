@@ -121,11 +121,26 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 				prep.Manifest.Compose.CursorRulesFromUser &&
 				hasUserScope &&
 				slices.Contains(req.Targets, cursorTarget) {
-				if composed := composeUserRules(ctx, rc, userScope, cursorRuleIDsOf(req.Nodes), now); len(composed) > 0 {
-					// composeActive gates the U5 warning suppression below. Only set
-					// it when rules were actually composed: a soft-no-op (user source
-					// failed/offline, or produced zero cursor rules) must NOT suppress
-					// the user-scope "rule inert at user scope" warning — nothing took
+				composed, failed := composeUserRules(ctx, rc, userScope, cursorRuleIDsOf(req.Nodes), now)
+				switch {
+				case failed:
+					// The user source could not be read this run (offline URL,
+					// malformed user manifest). Defer the Cursor sync entirely rather
+					// than syncing it with project-only rules: .cursor/rules/agent-sync/
+					// is an owned subdir replaced by a wholesale swap, so a project-only
+					// sync would wipe the previously-composed rules. Dropping cursor from
+					// this run's targets leaves that subdir untouched; the next sync that
+					// can read the user source re-syncs cursor fully. Project cursor rule
+					// edits wait for that run — the conservative, data-preserving choice
+					// (plan D8, transient-failure guard).
+					req.Targets = withoutTarget(req.Targets, cursorTarget)
+					rc.Logger.Warn("compose: deferring cursor sync this run — user source unreadable; existing .cursor/rules left intact",
+						"user_manifest", userScope.ManifestPath)
+				case len(composed) > 0:
+					// composeActive gates the U5 warning suppression below. Only set it
+					// when rules were actually composed: an empty result (user has no
+					// cursor rules, or all were shadowed) must NOT suppress the
+					// user-scope "rule inert at user scope" warning — nothing took
 					// effect via the project, so the warning is still accurate.
 					composeActive = true
 					req.Nodes = append(req.Nodes, composed...)
@@ -194,7 +209,15 @@ func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hiera
 // A user rule whose id collides is dropped (project wins, matching Cursor's
 // Team>Project>User precedence) with a per-id warning: the id namespace is flat,
 // so a coincidental clash must be observable rather than a silent data loss.
-func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Scope, projectRuleIDs map[string]struct{}, now time.Time) []ir.Node {
+//
+// The returned failed flag distinguishes "could not read the user source"
+// (load/open/materialize error → failed=true) from "read fine, produced zero
+// composable rules" (failed=false). The caller defers the whole Cursor sync when
+// failed, so a transient read failure (offline URL, malformed user manifest)
+// leaves the previously-composed rules in the owned .cursor/rules/ subdir intact
+// rather than letting the subdir swap wipe them — see the deferral at the call
+// site (plan D8, transient-failure guard).
+func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Scope, projectRuleIDs map[string]struct{}, now time.Time) (nodes []ir.Node, failed bool) {
 	// Deliberately NOT prepareScope: this reads user IR only. prepareScope also
 	// runs DiscoverAdapters (which can launch adapter subprocesses) and builds a
 	// full emit Request — neither is wanted for a read-only compose. Keep the
@@ -203,13 +226,13 @@ func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Sc
 	log := rc.Logger
 	m, err := manifest.LoadFile(user.ManifestPath, manifest.LoadOptions{NonInteractive: true})
 	if err != nil {
-		log.Warn("compose: skipping user rules (load user manifest failed)", "path", user.ManifestPath, "err", err)
-		return nil
+		log.Warn("compose: cannot read user manifest", "path", user.ManifestPath, "err", err)
+		return nil, true
 	}
 	root, err := fsroot.OpenWorkspaceRoot(user.Root)
 	if err != nil {
-		log.Warn("compose: skipping user rules (open user root failed)", "root", user.Root, "err", err)
-		return nil
+		log.Warn("compose: cannot open user root", "root", user.Root, "err", err)
+		return nil, true
 	}
 	defer func() { _ = root.Close() }()
 
@@ -219,8 +242,8 @@ func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Sc
 	offline := rc.Flags.Offline || m.Canonical.URL != ""
 	mat, err := materialize(ctx, m, materializeOptions{Offline: offline, Now: now, Root: root})
 	if err != nil {
-		log.Warn("compose: skipping user rules (materialize user IR failed)", "path", user.ManifestPath, "err", err)
-		return nil
+		log.Warn("compose: cannot materialize user IR", "path", user.ManifestPath, "err", err)
+		return nil, true
 	}
 
 	var out []ir.Node
@@ -245,6 +268,21 @@ func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Sc
 	// the project's own nodes (whose order is left untouched). Keeps op/ledger
 	// output and the coverage kind set stable across runs.
 	slices.SortFunc(out, func(a, b ir.Node) int { return cmp.Compare(a.ID, b.ID) })
+	return out, false
+}
+
+// withoutTarget returns a copy of targets with drop removed. Used to defer the
+// Cursor sync for one run when composition cannot read the user source, so the
+// owned .cursor/rules/ subdir is not swapped (and previously-composed rules are
+// not wiped). Returns a fresh slice so the caller's other Request copies keep
+// the full target list.
+func withoutTarget(targets []string, drop string) []string {
+	out := make([]string, 0, len(targets))
+	for _, t := range targets {
+		if t != drop {
+			out = append(out, t)
+		}
+	}
 	return out
 }
 
