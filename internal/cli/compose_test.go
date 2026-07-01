@@ -2,10 +2,104 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/agent-sync/agent-sync/internal/engine"
+	"github.com/agent-sync/agent-sync/internal/hierarchy"
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/report"
 )
+
+// userWarnKinds returns the coverage-warning kinds recorded on the user-scope
+// outcome for the given target.
+func userWarnKinds(outcomes []scopeOutcome, target string) map[ir.Kind]bool {
+	got := map[ir.Kind]bool{}
+	for _, o := range outcomes {
+		if o.Scope.Level != hierarchy.LevelUser {
+			continue
+		}
+		for _, w := range o.Warnings {
+			if w.Target == target {
+				got[w.Kind] = true
+			}
+		}
+	}
+	return got
+}
+
+func composeEngineOpts(rc *runtimeContext, now time.Time) engine.Options {
+	return engine.Options{Mode: report.ModeAtomic, Now: func() time.Time { return now }, Logger: rc.Logger}
+}
+
+// TestCompose_SuppressesUserRuleWarningWhenActive is U5/D5: with composition
+// active, the user-scope Cursor `rule` warning is dropped (the rule now takes
+// effect via the project), while the agents-md warning — not composed — stays.
+func TestCompose_SuppressesUserRuleWarningWhenActive(t *testing.T) {
+	home, repo := composeTree(t)
+	// User manifest (cursor) carrying BOTH a rule and an agents-md.
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/a.md", "user rule a\n")
+	writeWS(t, home, ".agents/AGENTS.md", "user standards\n")
+	// Project opts in.
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/c.md", "project rule c\n")
+
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	outcomes, err := runHierarchySync(context.Background(), rc, repo, home,
+		hierarchySyncOptions{IncludeUser: true, EngineOpts: composeEngineOpts(rc, now)}, now)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+
+	got := userWarnKinds(outcomes, cursorTarget)
+	if got[ir.KindRule] {
+		t.Error("user-scope Cursor rule warning should be suppressed when composition is active")
+	}
+	if !got[ir.KindAgentsMD] {
+		t.Error("user-scope Cursor agents-md warning should remain (agents-md is not composed)")
+	}
+}
+
+// TestCompose_KeepsUserRuleWarningWhenInactive: without the opt-in, the
+// user-scope Cursor rule warning is unchanged (still surfaced).
+func TestCompose_KeepsUserRuleWarningWhenInactive(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/a.md", "user rule a\n")
+	writeWS(t, home, ".agents/AGENTS.md", "user standards\n")
+	// Project does NOT opt in.
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeCursorNoOptIn), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/c.md", "project rule c\n")
+
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	outcomes, err := runHierarchySync(context.Background(), rc, repo, home,
+		hierarchySyncOptions{IncludeUser: true, EngineOpts: composeEngineOpts(rc, now)}, now)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+
+	got := userWarnKinds(outcomes, cursorTarget)
+	if !got[ir.KindRule] {
+		t.Error("user-scope Cursor rule warning should remain when composition is inactive")
+	}
+	if !got[ir.KindAgentsMD] {
+		t.Error("user-scope Cursor agents-md warning should remain when composition is inactive")
+	}
+}
 
 // composeProjectManifest is a project manifest targeting cursor with the
 // hierarchy-composition opt-in enabled.

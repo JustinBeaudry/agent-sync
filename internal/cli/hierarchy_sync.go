@@ -73,6 +73,12 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		}
 	}
 
+	// composeActive records whether Cursor-rule composition fired for any
+	// project scope in this run. Under `sync --user` the user scope is emitted
+	// (and processed before the project scope), so its coverage warnings are
+	// post-filtered after the loop once composeActive is known. See U5/D5.
+	composeActive := false
+
 	var outcomes []scopeOutcome
 	for _, sc := range scopes {
 		if !sc.Emit {
@@ -102,6 +108,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 				prep.Manifest.Compose.CursorRulesFromUser &&
 				hasUserScope &&
 				targetsInclude(req.Targets, cursorTarget) {
+				composeActive = true
 				req.Nodes = append(req.Nodes, composeUserRules(ctx, rc, userScope, ruleIDsOf(req.Nodes), now)...)
 			}
 			// Coverage warnings are computed from the decoded IR (the distinct
@@ -119,7 +126,36 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		}()
 		outcomes = append(outcomes, out)
 	}
+
+	// U5/D5: once user rules compose into the project's .cursor/rules/, the
+	// user-scope "Cursor rule is inert at user scope" coverage warning is
+	// misleading — the rule DOES take effect, via the project. Under `sync
+	// --user` the user scope is emitted (and carries that warning), so drop just
+	// that one warning from its outcome when composition fired this run. The
+	// agents-md user warning is not composed and stays. Composition-off runs are
+	// untouched. Caller-side filter keeps coverage.Analyze pure.
+	if composeActive {
+		for i := range outcomes {
+			if outcomes[i].Scope.Level == hierarchy.LevelUser {
+				outcomes[i].Warnings = dropWarning(outcomes[i].Warnings, cursorTarget, ir.KindRule, hierarchy.LevelUser)
+			}
+		}
+	}
 	return outcomes, nil
+}
+
+// dropWarning returns ws without any warning matching (target, kind, level).
+// Used to suppress the user-scope Cursor rule warning when composition makes it
+// misleading (U5). The input slice is not mutated.
+func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hierarchy.Level) []coverage.Warning {
+	out := make([]coverage.Warning, 0, len(ws))
+	for _, w := range ws {
+		if w.Target == target && w.Kind == kind && w.Level == level {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
 }
 
 // composeUserRules materializes the user-scope manifest read-only and returns
