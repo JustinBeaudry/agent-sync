@@ -40,6 +40,12 @@ type Options struct {
 
 	// Logger receives structured progress. Defaults to a discard logger.
 	Logger *slog.Logger
+
+	// RunLockTimeout bounds how long Sync waits for the per-workspace run lock
+	// before yielding a blocked summary. 0 uses the locks package default
+	// (2m, matching the per-target lock). The post-merge git-hook path sets a
+	// short value so a contended `git pull` yields fast instead of stalling.
+	RunLockTimeout time.Duration
 }
 
 // Request is one sync/validate invocation. The caller is responsible for

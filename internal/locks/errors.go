@@ -23,6 +23,11 @@ var (
 	// --break-lock (AcquireOpts.BreakLock) is the only forced override.
 	ErrTargetLocked = errors.New("locks: target locked by another sync")
 
+	// ErrRunLocked means another live agent-sync sync holds the per-workspace
+	// run lock. Like ErrTargetLocked, a busy lock is a live holder (advisory
+	// flock releases on death); --break-lock is the only forced override.
+	ErrRunLocked = errors.New("locks: another agent-sync sync is running in this workspace")
+
 	// ErrFileLockTimeout means a per-external-file lock could not be
 	// acquired within the bounded deadline. It names the path and holder.
 	ErrFileLockTimeout = errors.New("locks: timed out acquiring file lock")

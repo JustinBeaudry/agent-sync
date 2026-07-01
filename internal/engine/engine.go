@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"log/slog"
+	"strings"
 	"time"
 
+	"github.com/agent-sync/agent-sync/internal/ledger"
+	"github.com/agent-sync/agent-sync/internal/locks"
 	"github.com/agent-sync/agent-sync/internal/report"
 	syncpkg "github.com/agent-sync/agent-sync/internal/sync"
 )
@@ -50,6 +54,57 @@ type statusResult struct {
 
 func fsModeOf(mode uint32) fs.FileMode { return fs.FileMode(mode) }
 
+// warnOrphanLedgers surfaces (without deleting) any on-disk per-target ledger
+// whose target is no longer in the manifest. Such a target's files are stranded
+// — nothing revisits its ledger (ADV-1 dropped-target leak) — until
+// `agent-sync unmanage <target>` reclaims them. Read-only and best-effort: a
+// missing state dir or unreadable ledger is silently skipped (never fails the
+// sync). Reclaiming is deliberately NOT done here: deleting a dropped target's
+// files as a side effect of an unrelated sync would be surprising data loss;
+// that is `unmanage`'s job.
+func warnOrphanLedgers(req Request, log *slog.Logger) {
+	configured := make(map[string]bool, len(req.Targets))
+	for _, t := range req.Targets {
+		configured[t] = true
+	}
+	d, err := req.Root.Inner().Open(".agent-sync/state")
+	if err != nil {
+		return // no state dir yet
+	}
+	defer func() { _ = d.Close() }()
+	entries, err := d.ReadDir(-1)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		target := strings.TrimSuffix(name, ".json")
+		if configured[target] {
+			continue
+		}
+		// Positively identify a real per-target ledger before warning: the state
+		// dir also holds non-ledger files (e.g. capability-report.json), which
+		// ledger.Load rejects via strict decode. A current-schema ledger loads
+		// cleanly; an old-schema orphan returns a populated, target-checked
+		// ledger alongside ErrLedgerSchemaTooOld (still a genuine orphan worth
+		// its count). Anything else (corrupt, foreign, schema-too-new) is skipped
+		// — never a spurious "unmanage capability-report" nag.
+		led, lerr := ledger.Load(req.Root, target)
+		switch {
+		case lerr == nil, errors.Is(lerr, ledger.ErrLedgerSchemaTooOld):
+			// real orphan ledger — warn below
+		default:
+			continue
+		}
+		log.Warn("orphan ledger: target not in the manifest; its emitted files are stranded until reclaimed",
+			"target", target, "owned_paths", len(led.Entries),
+			"hint", "run `agent-sync unmanage "+target+"` to remove them")
+	}
+}
+
 // resolvedTargets applies TargetsFilter (if any) to the manifest targets,
 // preserving manifest order.
 func resolvedTargets(all, filter []string) []string {
@@ -84,11 +139,45 @@ func Sync(ctx context.Context, req Request) (report.Summary, error) {
 	now := opts.now()
 	log := opts.logger()
 
+	// Per-workspace run lock: serialize concurrent syncs on this workspace so
+	// the cross-adapter shared-subdir read-decide-write (co-ownership, ADV-1) is
+	// atomic across processes, and recovery/swaps never interleave between two
+	// runs. Held for the whole run (recovery + every target), released on
+	// return. Acquired before Recover so recovery is serialized too.
+	runLock, err := locks.NewRunLock(req.Root)
+	if err != nil {
+		return report.Summary{}, err
+	}
+	release, err := runLock.Acquire(ctx, locks.AcquireOpts{Timeout: opts.RunLockTimeout})
+	if err != nil {
+		// Contention (another sync holds the workspace lock) must NOT be a hard
+		// error: mirror the per-target lock's StatusBlocked outcome so a
+		// post-merge hook sync yields cleanly (exit 0) and never breaks
+		// `git pull` (AGENTS invariant #3). A blocked summary carries no error;
+		// callers surface "blocked" (and the post-merge path writes its
+		// hook-skipped marker). Any other Acquire error is a real failure.
+		if errors.Is(err, locks.ErrRunLocked) {
+			blocked := make([]report.TargetReport, 0)
+			for _, t := range resolvedTargets(req.Targets, opts.TargetsFilter) {
+				blocked = append(blocked, report.TargetReport{Target: t, Status: report.StatusBlocked})
+			}
+			log.Warn("another agent-sync sync is running in this workspace; skipping", "err", err)
+			return report.Summarize(req.WorkspacePath, req.Commit, now.UTC().Format(time.RFC3339), opts.mode(), blocked), nil
+		}
+		return report.Summary{}, err
+	}
+	defer func() { _ = release() }()
+
 	// Recovery is idempotent and global; drive any half-finished swap to a
 	// clean state before touching anything.
 	if _, err := syncpkg.Recover(req.Root, "."); err != nil {
 		return report.Summary{}, err
 	}
+
+	// Surface (without deleting) any on-disk ledger for a target no longer in
+	// the manifest — its files are stranded until `agent-sync unmanage` reclaims
+	// them (ADV-1 dropped-target leak). Read-only, best-effort.
+	warnOrphanLedgers(req, log)
 
 	targets := resolvedTargets(req.Targets, opts.TargetsFilter)
 	var reports []report.TargetReport

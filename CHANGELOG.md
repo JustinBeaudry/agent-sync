@@ -40,6 +40,20 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ### Fixed
 
+- **ADV-1 hardening: per-workspace run lock + dropped-target warning.** `sync`
+  now takes one flock-backed run lock (`.agent-sync/state/.sync.lock`) held
+  across the whole run, so concurrent syncs on a workspace serialize. This
+  closes a cross-process race in shared-subdir co-ownership where two overlapping
+  `--target`-filtered syncs could each defer a co-owned-leaf delete to the other
+  and strand the file, and makes concurrent shared-leaf swaps orderly instead of
+  one failing with `ErrStale`. `validate` (read-only) stays lock-free. Run-lock
+  contention yields a clean *blocked* result (never a hard error), so a
+  `--post-merge` git-hook sync still exits 0 and never breaks `git pull` (the hook
+  caps its wait at a few seconds so a contended pull yields fast). Separately,
+  a sync now warns when an on-disk ledger exists for a target no longer in the
+  manifest (its files are stranded until `agent-sync unmanage` reclaims them) —
+  the warning is non-destructive; sync never deletes a dropped target's files.
+
 - `sync --user` now targets Claude Code's real user-config paths. The Claude
   adapter previously emitted its agents-md overlay to `~/CLAUDE.md` and its MCP
   servers to `~/.mcp.json` at user scope — neither of which Claude Code reads —
