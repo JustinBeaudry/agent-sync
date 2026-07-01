@@ -81,6 +81,12 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 
 	var outcomes []scopeOutcome
 	for _, sc := range scopes {
+		// Honor cancellation between scopes: a cancelled sync (Ctrl-C, deadline)
+		// must not keep emitting subsequent scopes. engine.Sync also respects ctx,
+		// but this stops the loop before the next scope's prepare/compose work.
+		if err := ctx.Err(); err != nil {
+			return outcomes, err
+		}
 		if !sc.Emit {
 			continue // read-only (user) scope shown elsewhere, not emitted
 		}
@@ -98,6 +104,13 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			defer prep.Close()
 			req := prep.Request
 			req.Options = opts.EngineOpts
+			// Composition only takes effect at project scope (directory composition
+			// is deferred, D1). Warn if a directory/user manifest sets the opt-in so
+			// it isn't a silent no-op.
+			if prep.Manifest.Compose.CursorRulesFromUser && sc.Level != hierarchy.LevelProject {
+				rc.Logger.Warn("compose: cursor-rules-from-user has no effect at this scope; set it on the project manifest",
+					"scope", sc.Level.String(), "root", sc.Root)
+			}
 			// Hierarchy composition (plan U4/D1/D2): when this project scope opts
 			// in and Cursor is a target, fold the user-scope rule layer into the
 			// project's node set so global Cursor rules take effect via the
@@ -108,8 +121,15 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 				prep.Manifest.Compose.CursorRulesFromUser &&
 				hasUserScope &&
 				slices.Contains(req.Targets, cursorTarget) {
-				composeActive = true
-				req.Nodes = append(req.Nodes, composeUserRules(ctx, rc, userScope, ruleIDsOf(req.Nodes), now)...)
+				if composed := composeUserRules(ctx, rc, userScope, cursorRuleIDsOf(req.Nodes), now); len(composed) > 0 {
+					// composeActive gates the U5 warning suppression below. Only set
+					// it when rules were actually composed: a soft-no-op (user source
+					// failed/offline, or produced zero cursor rules) must NOT suppress
+					// the user-scope "rule inert at user scope" warning — nothing took
+					// effect via the project, so the warning is still accurate.
+					composeActive = true
+					req.Nodes = append(req.Nodes, composed...)
+				}
 			}
 			// Coverage warnings are computed from the decoded IR (the distinct
 			// kinds this scope emits), the manifest's targets, and the scope's
@@ -212,6 +232,13 @@ func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Sc
 			log.Warn("compose: user rule shadowed by project rule of the same id", "id", n.ID)
 			continue
 		}
+		// Pin delivery to Cursor only (D1). A user rule with empty frontmatter
+		// targets means "all adapters"; once injected into the project node set it
+		// would otherwise also be written to other rule-supporting targets (e.g.
+		// claude's .claude/rules/). Constrain the injected copy so composition
+		// stays Cursor-only, matching the flag name and docs. n is a range copy;
+		// reassigning its Targets does not mutate the source IR.
+		n.Targets = []string{cursorTarget}
 		out = append(out, n)
 	}
 	// Deterministic injection: sort the composed subset by id and append it after
@@ -231,12 +258,15 @@ func nodeTargetsCursor(n ir.Node) bool {
 	return slices.Contains(n.Targets, cursorTarget)
 }
 
-// ruleIDsOf returns the set of ids of the `rule` nodes in nodes, for collision
-// detection against composed user rules.
-func ruleIDsOf(nodes []ir.Node) map[string]struct{} {
+// cursorRuleIDsOf returns the set of ids of the project's `rule` nodes that are
+// delivered to Cursor, for collision detection against composed user rules.
+// Restricting to cursor-targeted rules matches the real .cursor/rules namespace:
+// a project rule targeting only a non-cursor adapter never lands in
+// .cursor/rules, so it must not shadow (and suppress) a composable user rule.
+func cursorRuleIDsOf(nodes []ir.Node) map[string]struct{} {
 	ids := make(map[string]struct{})
 	for _, n := range nodes {
-		if n.Kind == ir.KindRule {
+		if n.Kind == ir.KindRule && nodeTargetsCursor(n) {
 			ids[n.ID] = struct{}{}
 		}
 	}

@@ -69,6 +69,88 @@ func TestCompose_SuppressesUserRuleWarningWhenActive(t *testing.T) {
 	}
 }
 
+// TestCompose_ComposedRuleDoesNotLeakToOtherAdapters is the regression guard for
+// the empty-Targets over-delivery bug: a user rule authored with no frontmatter
+// targets means "all adapters", but composition is Cursor-only (D1). In a
+// project targeting [cursor, claude], the composed user rule must land ONLY in
+// .cursor/rules/, never in claude's .claude/rules/.
+func TestCompose_ComposedRuleDoesNotLeakToOtherAdapters(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/u.md", "user rule u\n") // empty Targets => all adapters
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifestCursorClaude), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/c.md", "project rule c\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+
+	// Composed into cursor...
+	mustExist(t, rulePath(repo, "u"))
+	// ...but NOT into claude, even though claude supports rules and the user
+	// rule's empty Targets would otherwise mean "all adapters".
+	mustNotExist(t, claudeRulePath(repo, "u"))
+	// The project's own rule c still reaches both targets natively.
+	mustExist(t, rulePath(repo, "c"))
+	mustExist(t, claudeRulePath(repo, "c"))
+}
+
+// TestCompose_ExplicitNonCursorUserRuleNotComposed: a user rule explicitly
+// targeting a non-cursor adapter (targets: [codex]) is not a Cursor rule and
+// must not be composed; a sibling all-adapters rule is.
+func TestCompose_ExplicitNonCursorUserRuleNotComposed(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/keep.md", "compose me\n")
+	writeWS(t, home, ".agents/rules/codexonly.md", "---\ntargets: [codex]\n---\ncodex only\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/c.md", "project rule c\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "keep"))         // all-adapters user rule composed
+	mustNotExist(t, rulePath(repo, "codexonly")) // codex-only user rule not composed to cursor
+}
+
+// TestCompose_ColliyingUserRulesDoNotSuppressWarning is the regression guard for
+// the composeActive-set-too-early bug: when every user rule is shadowed by a
+// same-id project rule, composition injects nothing, so the user-scope Cursor
+// rule coverage warning must NOT be suppressed (nothing took effect via the
+// project). Contrast with TestCompose_SuppressesUserRuleWarningWhenActive, where
+// a non-colliding rule IS composed and the warning is correctly dropped.
+func TestCompose_CollidingUserRulesDoNotSuppressWarning(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/dup.md", "user dup\n") // collides with project 'dup'
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/dup.md", "project dup\n")
+
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	outcomes, err := runHierarchySync(context.Background(), rc, repo, home,
+		hierarchySyncOptions{IncludeUser: true, EngineOpts: composeEngineOpts(rc, now)}, now)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	got := userWarnKinds(outcomes, cursorTarget)
+	if !got[ir.KindRule] {
+		t.Error("user-scope Cursor rule warning must NOT be suppressed when composition injected nothing (all user rules shadowed)")
+	}
+}
+
 // TestCompose_KeepsUserRuleWarningWhenInactive: without the opt-in, the
 // user-scope Cursor rule warning is unchanged (still surfaced).
 func TestCompose_KeepsUserRuleWarningWhenInactive(t *testing.T) {
@@ -123,6 +205,22 @@ const composeUserManifestCursor = "version: 1\n" +
 	"  local_dir: .agents\n" +
 	"targets:\n" +
 	"  - cursor\n"
+
+// composeProjectManifestCursorClaude opts in with BOTH cursor and claude as
+// targets — the shape that exposes empty-Targets over-delivery of composed
+// user rules into claude's output.
+const composeProjectManifestCursorClaude = "version: 1\n" +
+	"canonical:\n" +
+	"  local_dir: .agents\n" +
+	"targets:\n" +
+	"  - cursor\n" +
+	"  - claude\n" +
+	"compose:\n" +
+	"  cursor-rules-from-user: true\n"
+
+func claudeRulePath(base, id string) string {
+	return filepath.Join(base, ".claude", "rules", "agent-sync", id+".md")
+}
 
 // composeTree builds home/repo with a cursor-targeted project (git root) and a
 // user manifest at home. Caller writes the rule files and the two manifests.

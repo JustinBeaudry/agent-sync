@@ -140,6 +140,12 @@ func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Opti
 	}
 	defer prep.Close()
 
+	// The single-scope path (explicit --workspace) does not run hierarchy
+	// composition. Warn if the manifest opts in so it is not a silent no-op.
+	if prep.Manifest.Compose.CursorRulesFromUser {
+		rc.Logger.Warn("compose: cursor-rules-from-user is ignored with --workspace (single scope); it applies only to a hierarchy `sync`")
+	}
+
 	req := prep.Request
 	req.Options = opts
 
