@@ -1,0 +1,34 @@
+{
+  "nodes": [
+    {
+      "id": "no-fri",
+      "kind": "rule",
+      "version": 1,
+      "body": "No PRs on Friday."
+    },
+    {
+      "id": "draftpr",
+      "kind": "command",
+      "version": 1,
+      "body": "Draft a PR."
+    },
+    {
+      "id": "lsp",
+      "kind": "mcp-server-entry",
+      "version": 1,
+      "body": "{\"command\":\"node\"}"
+    },
+    {
+      "id": "some-plugin",
+      "kind": "plugin-reference",
+      "version": 1,
+      "body": "{\"ref\":\"owner/repo\"}"
+    },
+    {
+      "id": "helper",
+      "kind": "skill",
+      "version": 1,
+      "body": "# Helper skill"
+    }
+  ]
+}

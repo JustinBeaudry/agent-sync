@@ -77,7 +77,7 @@ label records the support tier each will land at.
 | Claude Code | ✅ Bundled |
 | Cursor | ✅ Bundled |
 | Codex CLI | ✅ Bundled |
-| Pi (`@mariozechner/pi-coding-agent`) | Planned (primary) |
+| Pi (`@mariozechner/pi-coding-agent`) | ✅ Bundled (agents-md; skill & command planned) |
 | Gemini CLI | Planned (supported) |
 | Windsurf | Planned (experimental) |
 | LM Studio | Planned (experimental) |
