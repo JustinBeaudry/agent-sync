@@ -1,6 +1,6 @@
 ---
 title: "feat: hierarchy composition — merge user-scope Cursor rules into project .cursor/rules/"
-status: approved
+status: completed
 date: 2026-07-01
 type: feat
 origin: docs/handoffs/2026-07-01-001-hierarchy-composition-handoff.md
