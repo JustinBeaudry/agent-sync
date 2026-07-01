@@ -284,7 +284,7 @@ func TestDiscoverUserScopeCarriesManifestPathForComposition(t *testing.T) {
 	repo := filepath.Join(home, "work", "repo")
 	mkGit(t, repo)
 	userManifest := writeManifest(t, home) // user
-	writeManifest(t, repo)                  // project
+	writeManifest(t, repo)                 // project
 
 	scopes, err := Discover(repo, Options{Home: home, IncludeUser: false})
 	if err != nil {

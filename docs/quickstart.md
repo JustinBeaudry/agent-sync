@@ -120,6 +120,54 @@ so the next `sync` re-rendering it is never a surprise.
 
 ---
 
+## Composing user rules into projects (Cursor)
+
+Cursor has **no user-global rules file** — its "User Rules" live in Cursor's
+settings/cloud, not on disk. So a rule you author at the user scope
+(`~/.agent-sync.yaml`) can't take effect globally the way `~/.claude/CLAUDE.md`
+does for Claude. Cursor's own recommended pattern is to put the rule in each
+project's `.cursor/rules/`. agent-sync automates that with **composition**:
+opt a project in and its sync folds your user-scope Cursor rules into the
+project's `.cursor/rules/agent-sync/` alongside the project's own rules.
+
+Turn it on in the **project** manifest (`.agent-sync.yaml`):
+
+```yaml
+version: 1
+canonical:
+  local_dir: .agents
+targets: [cursor]
+compose:
+  cursor-rules-from-user: true   # opt-in; default off
+```
+
+With this set, `agent-sync sync` in the project also emits your user-scope
+Cursor rules into the project. On an id collision, the **project rule wins**
+(matching Cursor's Team > Project > User precedence) and the shadowed user rule
+is logged so the drop is never silent.
+
+**Three things to know before you commit:**
+
+1. **Composed files are per-developer, per-machine.** Their content is *your*
+   `~/.agent-sync` rules. If you commit `.cursor/rules/agent-sync/*.mdc`, you
+   push your personal global rules onto teammates and cause churn when another
+   machine re-syncs. Treat the composed output as local-only —
+   **gitignore it** (e.g. add `/.cursor/rules/agent-sync/` to `.gitignore`)
+   unless you deliberately want those rules shared.
+2. **Opting out needs one more sync.** Composed rules are reclaimed on the
+   *next* sync after you set the flag back to `false` (or drop the user rule) —
+   agent-sync removes what its ledger owns. If you opt out and never re-sync,
+   the files linger (and committed ones persist regardless).
+3. **`--workspace` does not compose.** An explicit
+   `agent-sync sync --workspace <dir>` runs a single scope and skips
+   composition; composition only fires on the normal hierarchy-discovery path.
+
+Composition is currently **Cursor `rule` only**. Other tools read their
+user-global configs directly (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`), so
+there is no gap to compose around.
+
+---
+
 ## Backing out
 
 A first-class `agent-sync unmanage <target>` command is planned but not yet
