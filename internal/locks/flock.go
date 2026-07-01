@@ -234,7 +234,24 @@ func (l *TargetLock) sidecarAge(sc sidecar) time.Duration {
 }
 
 func (l *TargetLock) readSidecar() (sidecar, bool) {
-	f, err := l.root.Inner().Open(l.sidecarRel)
+	return readSidecarFile(l.root, l.sidecarRel)
+}
+
+func (l *TargetLock) writeSidecar() error {
+	sc := sidecar{PID: os.Getpid(), MachineID: l.machineID, StartedAt: l.now().UTC()}
+	return writeSidecarFile(l.root, l.sidecarRel, sc)
+}
+
+func (l *TargetLock) removeSidecar() error {
+	return removeSidecarFile(l.root, l.sidecarRel)
+}
+
+// readSidecarFile / writeSidecarFile / removeSidecarFile are the shared sidecar
+// I/O used by both TargetLock and RunLock, routed through the fsroot Root
+// (os.Root refuses symlink traversal) so a symlinked sidecar leaf cannot
+// redirect a write outside the workspace.
+func readSidecarFile(root *fsroot.Root, sidecarRel string) (sidecar, bool) {
+	f, err := root.Inner().Open(sidecarRel)
 	if err != nil {
 		return sidecar{}, false
 	}
@@ -250,15 +267,13 @@ func (l *TargetLock) readSidecar() (sidecar, bool) {
 	return sc, true
 }
 
-func (l *TargetLock) writeSidecar() error {
-	sc := sidecar{PID: os.Getpid(), MachineID: l.machineID, StartedAt: l.now().UTC()}
+func writeSidecarFile(root *fsroot.Root, sidecarRel string, sc sidecar) error {
 	b, err := json.Marshal(sc)
 	if err != nil {
 		return fmt.Errorf("locks: marshal sidecar: %w", err)
 	}
-	// Route through os.Root (refuses symlinks); O_TRUNC so a reclaimed
-	// orphan sidecar is overwritten cleanly.
-	f, err := l.root.Inner().OpenFile(l.sidecarRel, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	// O_TRUNC so a reclaimed orphan sidecar is overwritten cleanly.
+	f, err := root.Inner().OpenFile(sidecarRel, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("locks: open sidecar: %w", err)
 	}
@@ -269,8 +284,8 @@ func (l *TargetLock) writeSidecar() error {
 	return f.Close()
 }
 
-func (l *TargetLock) removeSidecar() error {
-	err := l.root.Inner().Remove(l.sidecarRel)
+func removeSidecarFile(root *fsroot.Root, sidecarRel string) error {
+	err := root.Inner().Remove(sidecarRel)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
