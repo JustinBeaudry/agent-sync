@@ -116,6 +116,48 @@ all targets' ledgers; owned-subdir prefixes are unchanged (single-target).**
 - **Scope creep**: keep owned-subdir paths on the exact current code path; the
   union logic applies *only* when `leafUnder` matches a shared prefix.
 
+## Code review findings (4-persona ce-code-review, 2026-07-01)
+
+**No data loss** — the critical property. Adversarial confirmed the two
+destructive hypotheses are safe: `ScanDriftUnion` still catches a genuinely
+foreign file under a co-owned leaf (not masked by a sibling ledger), and
+concurrent staging into a shared generation dir fails closed with `ErrStale`.
+Correctness's leak/clobber findings require **divergent co-emission** (two
+co-owners owning *different* files in one leaf), which is unreachable today: a
+leaf is `agent-sync-<skill-id>`, one id = one IR node (dup kind+id forbidden),
+emitted byte-identically to every target it lists.
+
+**Applied in this PR:**
+- Drift loop walks each leaf once (was double-walking `ScanDrift` then
+  `ScanDriftUnion`).
+- Documented the identical-co-emission invariant on the release filter + a
+  **fail-closed guard**: if a co-owned leaf is ever released with a path no
+  sibling claims (the divergent case), the sync errors loudly instead of
+  silently stranding the file.
+- Doc note on `loadSiblingLedgerEntries` (must re-read fresh per target;
+  fail-closed on corrupt sibling ledger).
+- Tests: foreign-file-in-co-owned-leaf still trips drift; co-owned content
+  update lands v2; byte-content assertions (catch swap-empty truncation);
+  corrupt-sibling-ledger fails closed with the co-owned file intact.
+
+**Deferred hardening (leaks, NOT data loss — follow-up PR):** co-ownership is
+inferred from the union of independently-mutated per-target ledgers, correct
+when all co-owners run in one sequential process. Two edge cases can strand an
+undeletable orphan (a leaked file, never a deleted one):
+1. **Concurrent cross-process `--target` removal** (P1, rare — no daemon): two
+   overlapping `sync --target X` / `--target Y` processes each defer the
+   shared-leaf delete to the other. Needs a run-wide lock over shared trees
+   (per-target locks don't serialize cross-target ledger read/write).
+2. **Target dropped from the manifest** (P2): its ledger + any solely-its
+   co-owned leaf are stranded — there is no ledger GC for targets no longer in
+   `req.Targets` (a pre-existing gap). Needs state-dir ledger reconciliation/GC
+   or a loud warning.
+3. **Divergent co-emission** path-granular swap (future adapter that writes
+   tool-specific files into a shared skill dir) — guarded fail-closed today.
+
+These share one root cause and warrant a dedicated plan (run-wide shared-tree
+lock + ledger GC + first-class shared-leaf owner set).
+
 ## Out of Scope
 
 - pi `command` + file-leaf stage/swap (PR3).
