@@ -18,6 +18,12 @@ import (
 // in-progress manual sync (so it never breaks `git pull`).
 const hookSkippedMarker = ".agent-sync/state/hook-skipped"
 
+// postMergeRunLockTimeout caps how long a --post-merge (git-hook) sync waits
+// for the per-workspace run lock before yielding a blocked result and exiting
+// 0. Short so a contended `git pull` is never stalled by the default multi-minute
+// wait.
+const postMergeRunLockTimeout = 3 * time.Second
+
 func newSyncCommand(deps RootDeps) *cobra.Command {
 	var (
 		bestEffort      bool
@@ -55,6 +61,14 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			}
 			if cmd.Flags().Changed("expect-deletions") {
 				opts.ExpectDeletions = &expectDeletions
+			}
+			if postMerge {
+				// A git-hook sync must yield fast to a manual sync rather than
+				// stall `git pull`: cap the run-lock wait so contention becomes a
+				// quick blocked-and-yield (exit 0) instead of the multi-minute
+				// default. The engine reports blocked targets; the post-merge
+				// handlers below turn that into a clean exit 0.
+				opts.RunLockTimeout = postMergeRunLockTimeout
 			}
 
 			// An explicit --workspace override pins a single scope and disables

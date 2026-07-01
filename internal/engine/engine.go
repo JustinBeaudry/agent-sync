@@ -85,12 +85,22 @@ func warnOrphanLedgers(req Request, log *slog.Logger) {
 		if configured[target] {
 			continue
 		}
-		owned := 0
-		if led, lerr := ledger.Load(req.Root, target); lerr == nil {
-			owned = len(led.Entries)
+		// Positively identify a real per-target ledger before warning: the state
+		// dir also holds non-ledger files (e.g. capability-report.json), which
+		// ledger.Load rejects via strict decode. A current-schema ledger loads
+		// cleanly; an old-schema orphan returns a populated, target-checked
+		// ledger alongside ErrLedgerSchemaTooOld (still a genuine orphan worth
+		// its count). Anything else (corrupt, foreign, schema-too-new) is skipped
+		// — never a spurious "unmanage capability-report" nag.
+		led, lerr := ledger.Load(req.Root, target)
+		switch {
+		case lerr == nil, errors.Is(lerr, ledger.ErrLedgerSchemaTooOld):
+			// real orphan ledger — warn below
+		default:
+			continue
 		}
 		log.Warn("orphan ledger: target not in the manifest; its emitted files are stranded until reclaimed",
-			"target", target, "owned_paths", owned,
+			"target", target, "owned_paths", len(led.Entries),
 			"hint", "run `agent-sync unmanage "+target+"` to remove them")
 	}
 }
@@ -138,8 +148,22 @@ func Sync(ctx context.Context, req Request) (report.Summary, error) {
 	if err != nil {
 		return report.Summary{}, err
 	}
-	release, err := runLock.Acquire(ctx, locks.AcquireOpts{})
+	release, err := runLock.Acquire(ctx, locks.AcquireOpts{Timeout: opts.RunLockTimeout})
 	if err != nil {
+		// Contention (another sync holds the workspace lock) must NOT be a hard
+		// error: mirror the per-target lock's StatusBlocked outcome so a
+		// post-merge hook sync yields cleanly (exit 0) and never breaks
+		// `git pull` (AGENTS invariant #3). A blocked summary carries no error;
+		// callers surface "blocked" (and the post-merge path writes its
+		// hook-skipped marker). Any other Acquire error is a real failure.
+		if errors.Is(err, locks.ErrRunLocked) {
+			blocked := make([]report.TargetReport, 0)
+			for _, t := range resolvedTargets(req.Targets, opts.TargetsFilter) {
+				blocked = append(blocked, report.TargetReport{Target: t, Status: report.StatusBlocked})
+			}
+			log.Warn("another agent-sync sync is running in this workspace; skipping", "err", err)
+			return report.Summarize(req.WorkspacePath, req.Commit, now.UTC().Format(time.RFC3339), opts.mode(), blocked), nil
+		}
 		return report.Summary{}, err
 	}
 	defer func() { _ = release() }()

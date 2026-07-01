@@ -94,6 +94,34 @@ honoring a filtered-out sibling's ownership is intended behavior, not a bug.
    **`ce-code-review`** (touches the concurrency/locking + sync-entry path), then
    a real dogfood.
 
+## Code review findings (correctness + adversarial, 2026-07-01)
+
+Both verified the core safe: run-lock release-on-every-path (defer + `sync.Once`),
+`run → target → file` acquisition order (no deadlock), acquire-before-Recover
+correct, byte-equivalent sidecar refactor, and `warnOrphanLedgers` never deletes.
+Two real findings, both fixed:
+
+- **P1 (adversarial): the run lock broke the post-merge git-hook yield.** A hook
+  sync contending on the *target* lock used to get `StatusBlocked` (clean
+  summary, exit 0); the run lock returned `ErrRunLocked` as a hard error, so a
+  contended `git pull` would stall then fail (violating AGENTS invariant #3).
+  Fixed: on `ErrRunLocked`, `Sync` returns a clean summary with all targets
+  `StatusBlocked` (nil error) — the post-merge path yields and exits 0, matching
+  the target-lock behavior. Added a short `RunLockTimeout` (post-merge sets 3s)
+  so a contended hook yields fast instead of the multi-minute default. Regression
+  test: `TestSync_RunLockContendedReturnsBlockedNotError`.
+- **P1 (correctness): `warnOrphanLedgers` mis-fired on `capability-report.json`.**
+  The state dir also holds non-ledger `.json` files; the scan warned
+  "unmanage capability-report" on every sync after the first. Fixed: only warn
+  when `ledger.Load` positively identifies a real per-target ledger (`lerr == nil`
+  or a populated `ErrLedgerSchemaTooOld`); strict decode rejects
+  capability-report.json. Regression tests: `TestSync_SecondSyncNoOrphanWarningForStateFiles`,
+  `TestSync_FilteredTargetNoOrphanWarning`.
+- **P2/P3 (advisory):** `--break-lock` is not yet CLI-wired for either lock
+  (pre-existing) — softened the runlock comment + documented recovery (end the
+  holder pid); over-serialization of concurrent same-workspace syncs is the
+  accepted cost of closing the race (documented in Risks). Both deferred.
+
 ## Out of Scope
 
 - **Ledger GC / reclaiming a dropped target's files** — that is the `unmanage`

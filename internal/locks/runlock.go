@@ -29,11 +29,16 @@ const runLockRel = stateDirRel + "/.sync.lock"
 // whole run makes the cross-target read-decide-write atomic across processes.
 //
 // It deliberately reuses TargetLock's flock + sidecar + symlink-guard machinery
-// (advisory flock releases on process death; a sidecar records the holder for a
-// useful contention message and the --break-lock escape hatch). RunLock is kept
-// separate from TargetLock rather than folded in, to leave the data-loss-critical
-// per-target path untouched; if a third flock+sidecar user appears, extract a
-// shared core.
+// (advisory flock releases on process death, so a crashed holder never wedges a
+// future sync; a sidecar records the holder pid/machine for a useful contention
+// message). RunLock is kept separate from TargetLock rather than folded in, to
+// leave the data-loss-critical per-target path untouched; if a third
+// flock+sidecar user appears, extract a shared core.
+//
+// AcquireOpts.BreakLock supports force-clearing a stale sidecar (for a
+// stuck-but-alive holder), but note it is not yet surfaced as a CLI flag for
+// either lock — recover a genuinely wedged holder by ending the process named
+// in the sidecar. Wiring a `--break-lock` flag is tracked separately.
 type RunLock struct {
 	root       *fsroot.Root
 	lockRel    string
