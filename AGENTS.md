@@ -33,6 +33,13 @@ These are non-negotiable; violating them breaks v1:
    `~` under `sync --user`) — each opened via `fsroot.OpenWorkspaceRoot` and
    enforcing its own boundary independently. The home directory is a
    legitimate scope root, opened only on an explicit `--user` sync.
+   **Hierarchy composition** (`compose.cursor-rules-from-user`) is the one
+   case that opens the user-home root during a *project* sync — but strictly
+   **read-only**, to materialize the user's Cursor `rule` IR for injection
+   into the project's node set. The project root stays the only *write*
+   target; the composed rules are written there and owned by the project's
+   ledger. The user-root read is best-effort and never fetches a remote
+   source (`docs/plans/2026-07-01-002-...`, D8).
 2. **Adapters never write files directly.** They emit declarative ops
    over the v1 protocol; the CLI core performs the actual writes. This
    centralizes safe-write semantics and enforces declarative-only output.

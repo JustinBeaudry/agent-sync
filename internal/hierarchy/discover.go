@@ -112,6 +112,15 @@ func userScope(home string, includeUser bool) (Scope, bool) {
 	}, true
 }
 
+// UserScope returns the user-home scope when home holds a manifest, always
+// read-only (Emit=false). It lets callers on the single-scope path (validate,
+// watch, sync --workspace) locate the user manifest for composition without
+// running full hierarchy discovery from a cwd. ok is false when home has no
+// manifest.
+func UserScope(home string) (Scope, bool) {
+	return userScope(home, false)
+}
+
 // Discover returns every manifest that applies at cwd, ordered from
 // broadest (lowest precedence) to most specific (highest precedence):
 // the user-home scope first (if present), then the project scope, then any

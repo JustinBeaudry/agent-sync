@@ -60,8 +60,21 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	if err != nil {
 		return prepared{}, fmt.Errorf("locate workspace: %w", err)
 	}
-	// Single-scope path (explicit --workspace / validate): always project scope.
-	return prepareScope(ctx, rc, ws.Root, ws.ManifestPath, "project", now)
+	// Single-scope path (explicit --workspace / validate / watch): always project scope.
+	prep, err := prepareScope(ctx, rc, ws.Root, ws.ManifestPath, "project", now)
+	if err != nil {
+		return prepared{}, err
+	}
+	// Apply Cursor-rule composition here too, so validate, watch, and
+	// --workspace sync see the same composed desired state as a plain `sync`.
+	// Without it, a composed project reports false WouldDelete drift under
+	// validate and loses composed rules under watch/--workspace. Best-effort on
+	// home resolution: if it fails, composition simply no-ops (as it does when no
+	// user manifest exists).
+	if home, herr := resolveHome(); herr == nil {
+		applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, "project", home, now)
+	}
+	return prep, nil
 }
 
 // prepareScope builds the per-invocation engine inputs for one already-located

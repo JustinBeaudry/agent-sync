@@ -26,6 +26,24 @@ type Manifest struct {
 	TrustedSHA string `yaml:"trusted_sha,omitempty"`
 
 	Trust TrustConfig `yaml:"trust,omitempty"`
+
+	// Compose opts a project scope into hierarchy composition — folding a
+	// broader scope's layer into this scope's output. Absent ⇒ zero value ⇒
+	// no composition (current behavior). See plan
+	// docs/plans/2026-07-01-002-feat-hierarchy-composition-plan.md (D2).
+	Compose ComposeConfig `yaml:"compose,omitempty"`
+}
+
+// ComposeConfig is the opt-in block for hierarchy composition. Fields are
+// namespaced by <adapter>-<what>-from-<source-scope> so future compose modes
+// extend this block without a breaking rename.
+type ComposeConfig struct {
+	// CursorRulesFromUser, when true, folds the user-scope Cursor `rule` layer
+	// into this project's .cursor/rules/ during a project sync. Cursor has no
+	// file-addressable user-global rules location, so a user rule only takes
+	// effect when written into each project's rules dir; this flag requests
+	// that fold. Composed rules are owned by the project's ledger.
+	CursorRulesFromUser bool `yaml:"cursor-rules-from-user,omitempty"`
 }
 
 type CanonicalSource struct {

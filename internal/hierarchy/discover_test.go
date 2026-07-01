@@ -272,6 +272,46 @@ func TestDiscoverFullHierarchy(t *testing.T) {
 	}
 }
 
+// TestDiscoverUserScopeCarriesManifestPathForComposition guards the exact
+// contract hierarchy composition relies on (plan docs/plans/2026-07-01-002, U3):
+// when a project sync runs WITHOUT --user, Discover must still surface the
+// user scope carrying a non-empty ManifestPath and Emit=false, so the compose
+// step can materialize the user IR read-only without emitting the user scope.
+// A regression that dropped the user scope, or emptied its ManifestPath, would
+// silently disable composition rather than fail loudly.
+func TestDiscoverUserScopeCarriesManifestPathForComposition(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "work", "repo")
+	mkGit(t, repo)
+	userManifest := writeManifest(t, home) // user
+	writeManifest(t, repo)                 // project
+
+	scopes, err := Discover(repo, Options{Home: home, IncludeUser: false})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	var user *Scope
+	for i := range scopes {
+		if scopes[i].Level == LevelUser {
+			user = &scopes[i]
+			break
+		}
+	}
+	if user == nil {
+		t.Fatalf("no LevelUser scope in Discover output: %+v", scopes)
+	}
+	if user.Emit {
+		t.Error("user scope Emit = true without IncludeUser; want false")
+	}
+	if user.ManifestPath != userManifest {
+		t.Errorf("user scope ManifestPath = %q, want %q", user.ManifestPath, userManifest)
+	}
+	if user.Root != home {
+		t.Errorf("user scope Root = %q, want %q", user.Root, home)
+	}
+}
+
 func TestDiscoverIncludeUser(t *testing.T) {
 	home := t.TempDir()
 	repo := filepath.Join(home, "repo")
