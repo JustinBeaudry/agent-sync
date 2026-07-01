@@ -13,6 +13,22 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ### Added
 
+- **Cross-adapter shared-subdir co-ownership ("ADV-1")** + **pi `skill`
+  support**. codex and pi both read the shared `.agents/skills/` tree; with
+  per-target ledgers, a workspace targeting both previously failed because each
+  adapter's drift guard saw the other's skill file as a foreign hand-edit
+  (`ErrMidLifeDrift`). The engine's drift and orphan checks are now union-aware
+  for shared-subdir leaves: a file claimed by any configured target's ledger is
+  treated as managed, and a shared leaf a sibling still owns is neither
+  swap-emptied nor orphan-deleted when a target releases it (verified across
+  add / idempotent re-sync / full-remove, and a `--target`-filtered removal that
+  leaves the sibling's copy intact). Owned-subdir prefixes keep the exact
+  single-target behavior. The pi adapter now emits `skill` to
+  `.agents/skills/agent-sync-<id>/SKILL.md`, byte-identical to codex so a
+  co-emitted skill matches.
+
+### Added
+
 - Bundled **`pi` adapter** (`@mariozechner/pi-coding-agent`), the fourth bundled
   adapter. This first cut supports `agents-md`, section-merged into the
   workspace-root `AGENTS.md` (and `~/.pi/agent/AGENTS.md` at user scope) — it

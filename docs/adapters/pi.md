@@ -16,7 +16,7 @@ both place skills in the shared `.agents/skills/` tree.
 | IR kind | Status | Project destination | User-scope (`sync --user`) | Notes |
 |---|---|---|---|---|
 | `agents-md` | ✅ supported | `AGENTS.md` managed section `agent-sync:<id>` | `.pi/agent/AGENTS.md` (→ `~/.pi/agent/AGENTS.md`) | Pi reads `AGENTS.md` (root + parent-walk; `CLAUDE.md` accepted as an alias) and, at user scope, `~/.pi/agent/AGENTS.md`. Section markers `<!-- agent-sync:begin id=<id> -->` … `end`; user content outside the section is preserved. |
-| `skill` | ⏳ unsupported (planned) | — | — | Pi reads skills from the shared `.agents/skills/` tree (same as codex). Deferred: safe codex+pi co-ownership of that tree needs cross-adapter drift/orphan coordination in the engine (ADV-1). Surfaces a degradation warning today. |
+| `skill` | ✅ supported | `.agents/skills/agent-sync-<id>/SKILL.md` (+assets) | same relative path (→ `~/.agents/skills/…`) | Shared cross-tool tree (same as codex): one emitted skill serves both tools. codex+pi co-ownership of a leaf is made safe by the engine's union-aware drift/orphan checks (ADV-1). SKILL.md content is byte-identical to codex's. |
 | `command` | ⏳ unsupported (planned) | — | — | Pi runs `/<name>` prompt templates from `.pi/prompts/<name>.md` (flat, non-recursive). Deferred: that dir is shared with user prompts, so owning individual command files needs file-leaf swap support. Surfaces a degradation warning today. |
 | `mcp-server-entry` | ❌ unsupported (by design) | — | — | **Pi does not load MCP servers by design** — see the [no-MCP rationale](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/). Not a gap. Surfaces a degradation warning; build/install a Pi extension to wrap the capability. |
 | `rule` | ❌ unsupported | — | — | Pi has no per-tool rule concept distinct from `AGENTS.md`. Consolidate rule content into an `agents-md` node. |
@@ -29,11 +29,12 @@ not to support a concept, versus failing to).
 
 ## User scope (`sync --user`)
 
-Only `agents-md` is emitted today, and it is scope-aware: at user scope Pi
-reads user-global instructions from `~/.pi/agent/AGENTS.md` (not `~/AGENTS.md`),
-so the adapter targets `.pi/agent/AGENTS.md` — the direct analog of Claude's
-`CLAUDE.md → ~/.claude/CLAUDE.md` and Codex's `AGENTS.md → ~/.codex/AGENTS.md`
-remaps.
+`agents-md` is scope-aware: at user scope Pi reads user-global instructions from
+`~/.pi/agent/AGENTS.md` (not `~/AGENTS.md`), so the adapter targets
+`.pi/agent/AGENTS.md` — the direct analog of Claude's `CLAUDE.md →
+~/.claude/CLAUDE.md` and Codex's `AGENTS.md → ~/.codex/AGENTS.md` remaps.
+`skill` needs no remap: `.agents/skills/…` already resolves to
+`~/.agents/skills/…` under the home scope root, which Pi reads.
 
 ## Caveats (version-dependent, verified 2026-06-30)
 

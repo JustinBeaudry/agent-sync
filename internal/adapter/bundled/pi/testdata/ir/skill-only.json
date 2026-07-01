@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": "coder",
+      "kind": "skill",
+      "version": 1,
+      "body": "# Coder skill\n\nWrite production code."
+    }
+  ]
+}

@@ -16,14 +16,15 @@ concept_kinds:
       the cwd, and at user scope from ~/.pi/agent/AGENTS.md. At user scope the
       adapter targets .pi/agent/AGENTS.md (→ ~/.pi/agent/AGENTS.md).
   skill:
-    status: unsupported
+    status: supported
     note: |
-      Pi supports skills at the shared .agents/skills/ tree (the same tree codex
-      uses), but the agent-sync pi adapter does not emit them yet (planned).
-      Because codex and pi would share that tree with separate per-target
-      ledgers, safe co-ownership needs cross-adapter drift/orphan coordination in
-      the engine (ADV-1) — tracked as a follow-up. Targeting skill at pi
-      surfaces a degradation warning today.
+      Emitted at .agents/skills/agent-sync-<id>/SKILL.md (plus assets). Pi scans
+      the shared .agents/skills/ tree (parent-walked from cwd to repo root) — a
+      cross-tool convention shared with codex, so one emitted skill tree serves
+      both tools. codex+pi co-ownership of a leaf is made safe by the engine's
+      union-aware drift/orphan checks (ADV-1). SKILL.md requires name +
+      description frontmatter; Pi permits the skill name to differ from the
+      folder name.
   command:
     status: unsupported
     note: |

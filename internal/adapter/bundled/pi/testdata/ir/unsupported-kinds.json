@@ -23,12 +23,6 @@
       "kind": "plugin-reference",
       "version": 1,
       "body": "{\"ref\":\"owner/repo\"}"
-    },
-    {
-      "id": "helper",
-      "kind": "skill",
-      "version": 1,
-      "body": "# Helper skill"
     }
   ]
 }
