@@ -44,6 +44,29 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 	// sibling content under a shared tree.
 	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.ops, old.Entries)
 
+	// Cross-adapter co-ownership (ADV-1): mirror applyTarget so validate's
+	// WouldDelete matches what sync actually does. A shared-subdir leaf path a
+	// sibling target still claims is NOT deleted by sync (the release filter /
+	// orphan guard skip it), so it must not be reported as a deletion here —
+	// otherwise `validate --target codex` reports false drift for a leaf co-owned
+	// by pi that the sync preserves. Loaded from req.Targets (the manifest set)
+	// like the sync path.
+	var siblingKnown map[string]bool
+	if len(out.sharedPrefixes) > 0 {
+		siblingEntries, serr := loadSiblingLedgerEntries(req.Root, req.Targets, target)
+		if serr != nil {
+			change.Error = serr.Error()
+			return change
+		}
+		siblingKnown = make(map[string]bool, len(siblingEntries))
+		for _, e := range siblingEntries {
+			siblingKnown[e.Path] = true
+		}
+	}
+	underSharedLeaf := func(p string) bool {
+		return len(out.sharedPrefixes) > 0 && leafUnder(out.sharedPrefixes, p) != ""
+	}
+
 	desired := map[string]string{}     // path -> sha256 (write_file only)
 	toolOwnedSeen := map[string]bool{} // tool-owned paths already classified
 	for _, op := range out.ops {
@@ -113,9 +136,15 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 		if ownerOf(effective, e.Path) == "" {
 			continue
 		}
-		if _, stillWanted := desired[e.Path]; !stillWanted {
-			change.WouldDelete = append(change.WouldDelete, e.Path)
+		if _, stillWanted := desired[e.Path]; stillWanted {
+			continue
 		}
+		// A sibling target still owns this shared-leaf path, so sync won't
+		// delete it — don't report a phantom deletion (mirrors applyTarget).
+		if underSharedLeaf(e.Path) && siblingKnown[e.Path] {
+			continue
+		}
+		change.WouldDelete = append(change.WouldDelete, e.Path)
 	}
 
 	change.WouldCreate = sortedStrings(change.WouldCreate)
