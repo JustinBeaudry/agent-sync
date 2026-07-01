@@ -107,7 +107,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			if sc.Level == hierarchy.LevelProject &&
 				prep.Manifest.Compose.CursorRulesFromUser &&
 				hasUserScope &&
-				targetsInclude(req.Targets, cursorTarget) {
+				slices.Contains(req.Targets, cursorTarget) {
 				composeActive = true
 				req.Nodes = append(req.Nodes, composeUserRules(ctx, rc, userScope, ruleIDsOf(req.Nodes), now)...)
 			}
@@ -175,6 +175,11 @@ func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hiera
 // Team>Project>User precedence) with a per-id warning: the id namespace is flat,
 // so a coincidental clash must be observable rather than a silent data loss.
 func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Scope, projectRuleIDs map[string]struct{}, now time.Time) []ir.Node {
+	// Deliberately NOT prepareScope: this reads user IR only. prepareScope also
+	// runs DiscoverAdapters (which can launch adapter subprocesses) and builds a
+	// full emit Request — neither is wanted for a read-only compose. Keep the
+	// minimal LoadFile + OpenWorkspaceRoot + materialize path here (D8); do not
+	// "consolidate" it back into prepareScope.
 	log := rc.Logger
 	m, err := manifest.LoadFile(user.ManifestPath, manifest.LoadOptions{NonInteractive: true})
 	if err != nil {
@@ -236,12 +241,6 @@ func ruleIDsOf(nodes []ir.Node) map[string]struct{} {
 		}
 	}
 	return ids
-}
-
-// targetsInclude reports whether target appears in the manifest target list.
-// An empty list means "no targets" (not "all"), matching the manifest schema.
-func targetsInclude(targets []string, target string) bool {
-	return slices.Contains(targets, target)
 }
 
 // kindsOf returns the distinct IR kinds present in nodes, preserving
