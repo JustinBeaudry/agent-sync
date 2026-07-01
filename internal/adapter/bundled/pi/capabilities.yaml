@@ -1,0 +1,54 @@
+name: pi
+version: "0.1"
+contract_version: agent-sync/v1
+reserved_prefix: .pi
+
+# concept_kinds is the authoritative per-IR-kind support declaration for the
+# pi adapter. The in-code map in capabilities.go must match this file
+# kind-for-kind; capabilities_test.go enforces the parity.
+concept_kinds:
+  agents-md:
+    status: supported
+    note: |
+      Section-merged into the workspace-root AGENTS.md as a managed section
+      between agent-sync:begin / agent-sync:end markers. Pi reads AGENTS.md
+      (CLAUDE.md is also accepted) by walking from the repository root down to
+      the cwd, and at user scope from ~/.pi/agent/AGENTS.md. At user scope the
+      adapter targets .pi/agent/AGENTS.md (→ ~/.pi/agent/AGENTS.md).
+  skill:
+    status: unsupported
+    note: |
+      Pi supports skills at the shared .agents/skills/ tree (the same tree codex
+      uses), but the agent-sync pi adapter does not emit them yet (planned).
+      Because codex and pi would share that tree with separate per-target
+      ledgers, safe co-ownership needs cross-adapter drift/orphan coordination in
+      the engine (ADV-1) — tracked as a follow-up. Targeting skill at pi
+      surfaces a degradation warning today.
+  command:
+    status: unsupported
+    note: |
+      Pi supports prompt-template slash commands at .pi/prompts/<name>.md, but
+      the agent-sync pi adapter does not emit them yet (planned). Pi's prompt
+      directory is flat and shared with user prompts, so owning individual
+      command files needs file-leaf swap support in the engine — tracked as a
+      follow-up. Targeting command at pi surfaces a degradation warning today.
+  mcp-server-entry:
+    status: unsupported
+    note: |
+      Pi does not load MCP servers by design (a product position, not a gap) —
+      see https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/.
+      Targeting mcp-server-entry at pi surfaces a degradation warning and emits
+      no files. To expose this capability to Pi, build or install a Pi extension
+      that wraps it.
+  rule:
+    status: unsupported
+    note: |
+      Pi has no per-tool rule concept distinct from AGENTS.md. Targeting rule at
+      pi surfaces a degradation warning and emits no files; consolidate rule
+      content into an agents-md node or a skill instead.
+  plugin-reference:
+    status: unsupported
+    note: |
+      Pi packages/extensions install via `pi install` (npm/git) into settings,
+      not from a project-level plugin-reference registry file. Targeting
+      plugin-reference at pi surfaces a degradation warning and emits no files.
