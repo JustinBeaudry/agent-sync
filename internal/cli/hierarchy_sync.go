@@ -1,20 +1,29 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/agent-sync/agent-sync/internal/coverage"
 	"github.com/agent-sync/agent-sync/internal/engine"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/report"
 )
+
+// cursorTarget is the adapter name Cursor-rule composition keys on. Kept as a
+// local literal rather than importing the cursor adapter: composition is a
+// CLI-orchestration concern and must not couple to adapter internals.
+const cursorTarget = "cursor"
 
 // scopeOutcome is one discovered scope's sync result. Exactly one of Summary
 // (Err == nil) or Err (a prepare/sync failure for this scope) is meaningful.
@@ -51,6 +60,19 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		return nil, fmt.Errorf("discover hierarchy: %w", err)
 	}
 
+	// Composition source: the user scope is returned even when Emit=false, so a
+	// project sync (no --user) can still fold in the user rule layer. Selected
+	// inline (no helper — Rule of Three); a non-empty ManifestPath means a user
+	// manifest exists to compose from. See plan U3/U4.
+	var userScope hierarchy.Scope
+	var hasUserScope bool
+	for _, sc := range scopes {
+		if sc.Level == hierarchy.LevelUser && sc.ManifestPath != "" {
+			userScope, hasUserScope = sc, true
+			break
+		}
+	}
+
 	var outcomes []scopeOutcome
 	for _, sc := range scopes {
 		if !sc.Emit {
@@ -70,6 +92,18 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			defer prep.Close()
 			req := prep.Request
 			req.Options = opts.EngineOpts
+			// Hierarchy composition (plan U4/D1/D2): when this project scope opts
+			// in and Cursor is a target, fold the user-scope rule layer into the
+			// project's node set so global Cursor rules take effect via the
+			// project's .cursor/rules/. Narrow to the project level (directory
+			// composition is deferred) and to Cursor rules only. Injected nodes are
+			// owned by this project's ledger, so removal reclaims them normally.
+			if sc.Level == hierarchy.LevelProject &&
+				prep.Manifest.Compose.CursorRulesFromUser &&
+				hasUserScope &&
+				targetsInclude(req.Targets, cursorTarget) {
+				req.Nodes = append(req.Nodes, composeUserRules(ctx, rc, userScope, ruleIDsOf(req.Nodes), now)...)
+			}
 			// Coverage warnings are computed from the decoded IR (the distinct
 			// kinds this scope emits), the manifest's targets, and the scope's
 			// level. Computed after a successful prepare (nodes exist);
@@ -86,6 +120,92 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		outcomes = append(outcomes, out)
 	}
 	return outcomes, nil
+}
+
+// composeUserRules materializes the user-scope manifest read-only and returns
+// its Cursor `rule` nodes for injection into a project sync (plan D1). The
+// project root remains the only write target; the user root is opened solely to
+// read IR.
+//
+// It is best-effort (plan D8): any failure — load, open, materialize, offline
+// or uncached remote source, decode — yields nil plus a warning and never
+// propagates. A project sync must not fail, block on a trust prompt, or hit the
+// network because of the user's global manifest. Remote (URL) user sources are
+// materialized OFFLINE (cache-only) so composition never fetches; a user who
+// wants a remote source composed pre-populates the cache with `sync --user`.
+//
+// projectRuleIDs is the set of `rule` ids already present in the project scope.
+// A user rule whose id collides is dropped (project wins, matching Cursor's
+// Team>Project>User precedence) with a per-id warning: the id namespace is flat,
+// so a coincidental clash must be observable rather than a silent data loss.
+func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Scope, projectRuleIDs map[string]struct{}, now time.Time) []ir.Node {
+	log := rc.Logger
+	m, err := manifest.LoadFile(user.ManifestPath, manifest.LoadOptions{NonInteractive: true})
+	if err != nil {
+		log.Warn("compose: skipping user rules (load user manifest failed)", "path", user.ManifestPath, "err", err)
+		return nil
+	}
+	root, err := fsroot.OpenWorkspaceRoot(user.Root)
+	if err != nil {
+		log.Warn("compose: skipping user rules (open user root failed)", "root", user.Root, "err", err)
+		return nil
+	}
+	defer func() { _ = root.Close() }()
+
+	// Never fetch a remote user source during a project sync: force offline for
+	// URL canonicals so an uncached remote soft-no-ops instead of hitting the
+	// network. Local sources are unaffected; an explicit --offline still applies.
+	offline := rc.Flags.Offline || m.Canonical.URL != ""
+	mat, err := materialize(ctx, m, materializeOptions{Offline: offline, Now: now, Root: root})
+	if err != nil {
+		log.Warn("compose: skipping user rules (materialize user IR failed)", "path", user.ManifestPath, "err", err)
+		return nil
+	}
+
+	var out []ir.Node
+	for _, n := range mat.Nodes {
+		if n.Kind != ir.KindRule || !nodeTargetsCursor(n) {
+			continue
+		}
+		if _, clash := projectRuleIDs[n.ID]; clash {
+			log.Warn("compose: user rule shadowed by project rule of the same id", "id", n.ID)
+			continue
+		}
+		out = append(out, n)
+	}
+	// Deterministic injection: sort the composed subset by id and append it after
+	// the project's own nodes (whose order is left untouched). Keeps op/ledger
+	// output and the coverage kind set stable across runs.
+	slices.SortFunc(out, func(a, b ir.Node) int { return cmp.Compare(a.ID, b.ID) })
+	return out
+}
+
+// nodeTargetsCursor reports whether an IR node is delivered to the Cursor
+// adapter: an empty Targets list means "all adapters", otherwise it must name
+// cursor. Mirrors the cursor adapter's own predicate without importing it.
+func nodeTargetsCursor(n ir.Node) bool {
+	if len(n.Targets) == 0 {
+		return true
+	}
+	return slices.Contains(n.Targets, cursorTarget)
+}
+
+// ruleIDsOf returns the set of ids of the `rule` nodes in nodes, for collision
+// detection against composed user rules.
+func ruleIDsOf(nodes []ir.Node) map[string]struct{} {
+	ids := make(map[string]struct{})
+	for _, n := range nodes {
+		if n.Kind == ir.KindRule {
+			ids[n.ID] = struct{}{}
+		}
+	}
+	return ids
+}
+
+// targetsInclude reports whether target appears in the manifest target list.
+// An empty list means "no targets" (not "all"), matching the manifest schema.
+func targetsInclude(targets []string, target string) bool {
+	return slices.Contains(targets, target)
 }
 
 // kindsOf returns the distinct IR kinds present in nodes, preserving
