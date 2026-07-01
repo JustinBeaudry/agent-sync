@@ -89,7 +89,8 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string)
 
 	emitted := &emittedOps{}
 	state := emitState{
-		paths: resolvePathSet(scope),
+		emittedFilePath: map[string]struct{}{},
+		paths:           resolvePathSet(scope),
 	}
 
 	// Deterministic order (sorted by kind, then id) so op output is stable.
@@ -125,20 +126,35 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string)
 	return adapterkit.EmitResult{OpsPerformed: emitted.records(), Ops: wire}, nil
 }
 
-// emitState carries the scope-resolved paths for one emit call. Only agents-md
-// is scope-dependent (AGENTS.md at project scope; .pi/agent/AGENTS.md at user
-// scope); paths are resolved once per emit from the initialize scope.
+// emitState carries per-emit dedup state and the scope-resolved paths.
+// emittedFilePath records every workspace-relative path emitted as a write_file
+// so the dispatcher fails closed instead of letting the sync engine
+// last-write-wins. paths hold the scope-resolved tool-owned destinations (only
+// agents-md is scope-dependent).
 type emitState struct {
-	paths pathSet
+	emittedFilePath map[string]struct{}
+	paths           pathSet
+}
+
+// recordWritePath registers a write_file path in the per-emit dedup table.
+func (s *emitState) recordWritePath(path string) error {
+	if _, exists := s.emittedFilePath[path]; exists {
+		return &adapterkit.Error{
+			Code:    adapterkit.CodeInvalidParams,
+			Message: fmt.Sprintf("pi: duplicate write_file path %q in single emit", path),
+		}
+	}
+	s.emittedFilePath[path] = struct{}{}
+	return nil
 }
 
 // dispatchNode routes one IR node to its kind-specific emitter.
 //
-// Supported kinds (agents-md) produce ops; unsupported kinds (skill,
-// mcp-server-entry, rule, command, plugin-reference) produce a degradation
+// Supported kinds (agents-md, skill) produce ops; unsupported kinds
+// (mcp-server-entry, rule, command, plugin-reference) produce a degradation
 // warning and emit no files. The capability matrix in capabilities.go is the
 // authoritative source for which kinds are supported; this switch must stay in
-// agreement with it. (skill and command are planned — see capabilities.yaml.)
+// agreement with it. (command is planned — see capabilities.yaml.)
 func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	if !ir.IsValidID(node.ID) {
 		return &adapterkit.Error{
@@ -149,7 +165,9 @@ func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	switch ir.Kind(node.Kind) {
 	case ir.KindAgentsMD:
 		return emitAgentsMD(emitted, node, state)
-	case ir.KindSkill, ir.KindMCPServerEntry, ir.KindRule, ir.KindCommand, ir.KindPluginReference:
+	case ir.KindSkill:
+		return emitSkill(emitted, node, state)
+	case ir.KindMCPServerEntry, ir.KindRule, ir.KindCommand, ir.KindPluginReference:
 		return emitUnsupportedWarning(emitted, node)
 	default:
 		return &adapterkit.Error{
@@ -223,5 +241,13 @@ func wrapBodyErr(node irNode, err error) error {
 	return &adapterkit.Error{
 		Code:    adapterkit.CodeInvalidParams,
 		Message: fmt.Sprintf("pi: node %q (%s) body: %s", node.ID, node.Kind, err.Error()),
+	}
+}
+
+// wrapOpErr converts an op-construction error into a structured JSON-RPC error.
+func wrapOpErr(node irNode, err error) error {
+	return &adapterkit.Error{
+		Code:    adapterkit.CodeInvalidParams,
+		Message: fmt.Sprintf("pi: node %q (%s) op: %s", node.ID, node.Kind, err.Error()),
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/adapter"
 	claudeadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/claude"
 	codexadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/codex"
+	piadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/pi"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
 	"github.com/agent-sync/agent-sync/internal/ir"
 )
@@ -180,6 +181,341 @@ func TestSync_SharedSubdir_UpdatePreservesForeignSkill(t *testing.T) {
 		t.Errorf("skill not updated to v2; got %q", body)
 	}
 	assertFileBytes(t, foreign, foreignBody, "after update sync")
+}
+
+// TestSync_SharedSubdir_CodexAndPiCoOwn is the ADV-1 fix validation: codex and
+// pi both declare the shared .agents/skills tree with separate per-target
+// ledgers. A single sync targeting both co-owns the same leaf. Before the fix,
+// pi's drift scan flagged codex's file as foreign (ErrMidLifeDrift); the
+// union-aware drift/orphan checks make co-ownership correct across
+// add/idempotent-resync/remove, and a foreign skill survives throughout.
+func TestSync_SharedSubdir_CodexAndPiCoOwn(t *testing.T) {
+	ws := t.TempDir()
+
+	foreign := filepath.Join(ws, ".agents", "skills", "user-thing", "SKILL.md")
+	const foreignBody = "# User's own skill\n\nKeep me.\n"
+	if err := os.MkdirAll(filepath.Dir(foreign), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(foreign, []byte(foreignBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	skillPath := filepath.Join(ws, ".agents", "skills", "agent-sync-greeter", "SKILL.md")
+
+	codexPiReq := func(nodes []ir.Node) (Request, func()) {
+		root, err := fsroot.OpenWorkspaceRoot(ws)
+		if err != nil {
+			t.Fatalf("OpenWorkspaceRoot: %v", err)
+		}
+		reg, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+			Bundled: []*adapter.BundledAdapter{codexadapter.Bundled(), piadapter.Bundled()},
+		})
+		if err != nil {
+			t.Fatalf("DiscoverAdapters: %v", err)
+		}
+		return Request{
+			Root: root, WorkspacePath: ws, Registry: reg,
+			Targets: []string{"codex", "pi"},
+			Nodes:   nodes,
+			Commit:  testCommit, Options: Options{Now: fixedNow()},
+		}, func() { _ = root.Close() }
+	}
+
+	greeter := []ir.Node{{ID: "greeter", Kind: ir.KindSkill, Version: 1, Body: []byte("# Greeter")}}
+
+	// Sync 1: both codex and pi emit the same skill into the same leaf.
+	req1, done1 := codexPiReq(greeter)
+	if summary, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("[codex,pi] sync 1: %v", err)
+	} else if summary.Outcome.ExitCode != 0 {
+		t.Fatalf("[codex,pi] sync 1 exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
+	}
+	done1()
+	// Assert CONTENT, not just existence: the swap-empty data-loss vector this
+	// fix guards against leaves the file present but truncated.
+	assertSkillContent(t, skillPath, "# Greeter", "after [codex,pi] sync 1")
+	assertFileBytes(t, foreign, foreignBody, "after [codex,pi] sync 1")
+
+	// Sync 2: idempotent re-run stays clean.
+	req2, done2 := codexPiReq(greeter)
+	if summary, err := Sync(context.Background(), req2); err != nil {
+		t.Fatalf("[codex,pi] sync 2 (idempotent): %v", err)
+	} else if summary.Outcome.ExitCode != 0 {
+		t.Fatalf("[codex,pi] sync 2 exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
+	}
+	done2()
+	assertSkillContent(t, skillPath, "# Greeter", "after [codex,pi] sync 2")
+	assertFileBytes(t, foreign, foreignBody, "after [codex,pi] sync 2")
+
+	// Sync 3: remove from BOTH → leaf orphan-removed once both ledgers release it.
+	req3, done3 := codexPiReq(nil)
+	if summary, err := Sync(context.Background(), req3); err != nil {
+		t.Fatalf("[codex,pi] sync 3 (remove): %v", err)
+	} else if summary.Outcome.ExitCode != 0 {
+		t.Fatalf("[codex,pi] sync 3 exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
+	}
+	done3()
+	if _, err := os.Stat(skillPath); !os.IsNotExist(err) {
+		t.Fatalf("co-owned skill should be orphan-removed after [codex,pi] remove; stat err = %v", err)
+	}
+	assertFileBytes(t, foreign, foreignBody, "after [codex,pi] sync 3 (remove)")
+}
+
+// TestSync_SharedSubdir_OneTargetRemovePreservesSiblingSkill verifies the
+// orphan cross-delete guard: removing the skill from codex only, while pi still
+// owns it, must NOT delete the shared leaf.
+func TestSync_SharedSubdir_OneTargetRemovePreservesSiblingSkill(t *testing.T) {
+	ws := t.TempDir()
+	skillPath := filepath.Join(ws, ".agents", "skills", "agent-sync-greeter", "SKILL.md")
+	greeter := []ir.Node{{ID: "greeter", Kind: ir.KindSkill, Version: 1, Body: []byte("# Greeter")}}
+
+	// Both codex and pi are configured (manifest targets). filter narrows which
+	// actually run this invocation (models `sync --target codex`).
+	mkReq := func(filter []string, nodes []ir.Node) (Request, func()) {
+		root, err := fsroot.OpenWorkspaceRoot(ws)
+		if err != nil {
+			t.Fatalf("OpenWorkspaceRoot: %v", err)
+		}
+		reg, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+			Bundled: []*adapter.BundledAdapter{codexadapter.Bundled(), piadapter.Bundled()},
+		})
+		if err != nil {
+			t.Fatalf("DiscoverAdapters: %v", err)
+		}
+		return Request{
+			Root: root, WorkspacePath: ws, Registry: reg,
+			Targets: []string{"codex", "pi"}, Nodes: nodes,
+			Commit: testCommit, Options: Options{Now: fixedNow(), TargetsFilter: filter},
+		}, func() { _ = root.Close() }
+	}
+
+	// Both own the skill (full sync, no filter).
+	req1, done1 := mkReq(nil, greeter)
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("sync 1: %v", err)
+	}
+	done1()
+
+	// Run codex ONLY (filter) with the skill removed. pi still owns it (in the
+	// manifest target set + its ledger), so codex must not delete the shared leaf.
+	req2, done2 := mkReq([]string{"codex"}, nil)
+	if summary, err := Sync(context.Background(), req2); err != nil {
+		t.Fatalf("codex-only remove: %v", err)
+	} else if summary.Outcome.ExitCode != 0 {
+		t.Fatalf("codex-only remove exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
+	}
+	done2()
+
+	// pi still claims the leaf, so the shared skill file must survive intact
+	// (content, not just presence — swap-empty would truncate it).
+	assertSkillContent(t, skillPath, "# Greeter", "after codex-only removal while pi owns it")
+}
+
+// TestPlan_SharedSubdir_CoOwnedRelease_NoFalseDelete pins that validate
+// (dry-run) matches sync for co-owned leaves: `validate --target codex` on a
+// leaf pi still owns must NOT report a deletion, or CI validation would exit
+// with drift even though the sync preserves the file (Codex review, P2).
+func TestPlan_SharedSubdir_CoOwnedRelease_NoFalseDelete(t *testing.T) {
+	ws := t.TempDir()
+	skillRel := ".agents/skills/agent-sync-greeter/SKILL.md"
+	greeter := []ir.Node{{ID: "greeter", Kind: ir.KindSkill, Version: 1, Body: []byte("# Greeter")}}
+	mk := func(filter []string, nodes []ir.Node) (Request, func()) {
+		root, err := fsroot.OpenWorkspaceRoot(ws)
+		if err != nil {
+			t.Fatalf("OpenWorkspaceRoot: %v", err)
+		}
+		reg, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+			Bundled: []*adapter.BundledAdapter{codexadapter.Bundled(), piadapter.Bundled()},
+		})
+		if err != nil {
+			t.Fatalf("DiscoverAdapters: %v", err)
+		}
+		return Request{
+			Root: root, WorkspacePath: ws, Registry: reg,
+			Targets: []string{"codex", "pi"}, Nodes: nodes,
+			Commit: testCommit, Options: Options{Now: fixedNow(), TargetsFilter: filter},
+		}, func() { _ = root.Close() }
+	}
+
+	req1, done1 := mk(nil, greeter)
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("sync 1: %v", err)
+	}
+	done1()
+
+	// validate --target codex with the skill removed. pi still owns the leaf, so
+	// the plan must not list the co-owned SKILL.md as a deletion.
+	req2, done2 := mk([]string{"codex"}, nil)
+	plan, err := Plan(context.Background(), req2)
+	done2()
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	for _, tc := range plan.Targets {
+		for _, d := range tc.WouldDelete {
+			if d == skillRel {
+				t.Errorf("validate reported a phantom deletion of a pi-co-owned leaf: target=%s WouldDelete=%v", tc.Target, tc.WouldDelete)
+			}
+		}
+	}
+}
+
+// TestSync_SharedSubdir_CoOwnedLeaf_ForeignFileStillDrift is the drift-masking
+// guard: the union-aware drift scan must still catch a genuinely-foreign file
+// dropped INSIDE a co-owned leaf (in neither ledger). If a sibling ledger ever
+// masked it, the next swap would clobber the hand-edit — silent data loss.
+func TestSync_SharedSubdir_CoOwnedLeaf_ForeignFileStillDrift(t *testing.T) {
+	ws := t.TempDir()
+	greeter := []ir.Node{{ID: "greeter", Kind: ir.KindSkill, Version: 1, Body: []byte("# Greeter")}}
+	mk := func(nodes []ir.Node) (Request, func()) {
+		root, err := fsroot.OpenWorkspaceRoot(ws)
+		if err != nil {
+			t.Fatalf("OpenWorkspaceRoot: %v", err)
+		}
+		reg, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+			Bundled: []*adapter.BundledAdapter{codexadapter.Bundled(), piadapter.Bundled()},
+		})
+		if err != nil {
+			t.Fatalf("DiscoverAdapters: %v", err)
+		}
+		return Request{
+			Root: root, WorkspacePath: ws, Registry: reg,
+			Targets: []string{"codex", "pi"}, Nodes: nodes,
+			Commit: testCommit, Options: Options{Now: fixedNow()},
+		}, func() { _ = root.Close() }
+	}
+
+	req1, done1 := mk(greeter)
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("sync 1: %v", err)
+	}
+	done1()
+
+	// Drop an un-ledgered foreign file into the co-owned leaf.
+	foreignInLeaf := filepath.Join(ws, ".agents", "skills", "agent-sync-greeter", "HAND_EDIT.md")
+	const handEdit = "# Hand edit\n\nkeep me or fail loudly\n"
+	if err := os.WriteFile(foreignInLeaf, []byte(handEdit), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-sync: the foreign file (in neither ledger) must trip drift, not be
+	// silently masked by the co-owner's ledger.
+	req2, done2 := mk(greeter)
+	summary, err := Sync(context.Background(), req2)
+	done2()
+	if err == nil && summary.Outcome.ExitCode == 0 {
+		t.Fatalf("foreign file inside a co-owned leaf must trip drift, but sync succeeded (%+v)", summary.Outcome)
+	}
+	// The hand-edit and the managed skill must both survive the refused sync.
+	assertFileBytes(t, foreignInLeaf, handEdit, "after drift-refused co-owned sync")
+	assertSkillContent(t, filepath.Join(ws, ".agents", "skills", "agent-sync-greeter", "SKILL.md"), "# Greeter", "after drift-refused co-owned sync")
+}
+
+// TestSync_SharedSubdir_CoOwnedUpdate covers a changed skill body re-synced
+// while codex+pi co-own the leaf: the second target's swap must land the new
+// content, and the emit-this-run "stays in effective" branch must not drop the
+// leaf.
+func TestSync_SharedSubdir_CoOwnedUpdate(t *testing.T) {
+	ws := t.TempDir()
+	skillPath := filepath.Join(ws, ".agents", "skills", "agent-sync-greeter", "SKILL.md")
+	mk := func(body string) (Request, func()) {
+		root, err := fsroot.OpenWorkspaceRoot(ws)
+		if err != nil {
+			t.Fatalf("OpenWorkspaceRoot: %v", err)
+		}
+		reg, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+			Bundled: []*adapter.BundledAdapter{codexadapter.Bundled(), piadapter.Bundled()},
+		})
+		if err != nil {
+			t.Fatalf("DiscoverAdapters: %v", err)
+		}
+		return Request{
+			Root: root, WorkspacePath: ws, Registry: reg,
+			Targets: []string{"codex", "pi"},
+			Nodes:   []ir.Node{{ID: "greeter", Kind: ir.KindSkill, Version: 1, Body: []byte(body)}},
+			Commit:  testCommit, Options: Options{Now: fixedNow()},
+		}, func() { _ = root.Close() }
+	}
+
+	req1, done1 := mk("# Greeter v1")
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("sync v1: %v", err)
+	}
+	done1()
+	assertSkillContent(t, skillPath, "# Greeter v1", "after co-owned sync v1")
+
+	req2, done2 := mk("# Greeter v2 CHANGED")
+	if summary, err := Sync(context.Background(), req2); err != nil {
+		t.Fatalf("sync v2 (update): %v", err)
+	} else if summary.Outcome.ExitCode != 0 {
+		t.Fatalf("co-owned update exit = %d, want 0 (%+v)", summary.Outcome.ExitCode, summary.Outcome)
+	}
+	done2()
+	assertSkillContent(t, skillPath, "# Greeter v2 CHANGED", "after co-owned update")
+}
+
+// TestSync_SharedSubdir_CorruptSiblingLedgerFailsClosed verifies the
+// data-loss-adjacent fail-closed decision: a corrupt sibling ledger must abort
+// the sync (not proceed with an empty sibling set that would orphan-delete the
+// sibling's co-owned file). The co-owned file must survive the refused sync.
+func TestSync_SharedSubdir_CorruptSiblingLedgerFailsClosed(t *testing.T) {
+	ws := t.TempDir()
+	skillPath := filepath.Join(ws, ".agents", "skills", "agent-sync-greeter", "SKILL.md")
+	greeter := []ir.Node{{ID: "greeter", Kind: ir.KindSkill, Version: 1, Body: []byte("# Greeter")}}
+	mk := func(filter []string, nodes []ir.Node) (Request, func()) {
+		root, err := fsroot.OpenWorkspaceRoot(ws)
+		if err != nil {
+			t.Fatalf("OpenWorkspaceRoot: %v", err)
+		}
+		reg, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+			Bundled: []*adapter.BundledAdapter{codexadapter.Bundled(), piadapter.Bundled()},
+		})
+		if err != nil {
+			t.Fatalf("DiscoverAdapters: %v", err)
+		}
+		return Request{
+			Root: root, WorkspacePath: ws, Registry: reg,
+			Targets: []string{"codex", "pi"}, Nodes: nodes,
+			Commit: testCommit, Options: Options{Now: fixedNow(), TargetsFilter: filter},
+		}, func() { _ = root.Close() }
+	}
+
+	req1, done1 := mk(nil, greeter)
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("sync 1: %v", err)
+	}
+	done1()
+
+	// Corrupt pi's ledger, then run codex-only with the skill removed. codex
+	// must fail closed (not delete pi's co-owned file on an empty sibling set).
+	if err := os.WriteFile(filepath.Join(ws, ".agent-sync", "state", "pi.json"), []byte("{not valid json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req2, done2 := mk([]string{"codex"}, nil)
+	summary, err := Sync(context.Background(), req2)
+	done2()
+	if err == nil && summary.Outcome.ExitCode == 0 {
+		t.Fatalf("corrupt sibling ledger must fail the sync closed, but it succeeded (%+v)", summary.Outcome)
+	}
+	assertSkillContent(t, skillPath, "# Greeter", "after corrupt-sibling fail-closed sync")
+}
+
+// assertSkillContent asserts a managed SKILL.md exists AND contains both the
+// managed-file header and the expected body — catching the swap-empty
+// truncation vector (a present-but-emptied file) that a bare os.Stat misses.
+func assertSkillContent(t *testing.T, path, wantBody, when string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("co-owned skill must exist %s: %v", when, err)
+	}
+	if !strings.Contains(string(got), "Managed by agent-sync") {
+		t.Fatalf("co-owned skill missing managed header %s (swap-emptied?):\n%q", when, got)
+	}
+	if !strings.Contains(string(got), wantBody) {
+		t.Fatalf("co-owned skill missing body %q %s:\n%q", wantBody, when, got)
+	}
 }
 
 func assertFileBytes(t *testing.T, path, want, when string) {

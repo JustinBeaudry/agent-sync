@@ -92,17 +92,20 @@ func TestCapabilitiesYAML_MatchesCodeMap(t *testing.T) {
 	}
 }
 
-// TestConceptKinds_SupportSets pins the pi PR1 capability mapping: agents-md is
-// supported; skill, mcp-server-entry, rule, command, and plugin-reference are
-// unsupported (MCP and rule by Pi product design; skill and command planned).
+// TestConceptKinds_SupportSets pins the pi capability mapping: agents-md and
+// skill are supported; mcp-server-entry, rule, command, and plugin-reference
+// are unsupported (MCP and rule by Pi product design; command planned).
 // See docs/adapters/pi.md.
 func TestConceptKinds_SupportSets(t *testing.T) {
 	t.Parallel()
 
-	if got := conceptKinds[ir.KindAgentsMD]; got != capmatrix.Supported {
-		t.Errorf("kind %q status=%q want %q", ir.KindAgentsMD, got, capmatrix.Supported)
+	supported := []ir.Kind{ir.KindAgentsMD, ir.KindSkill}
+	for _, kind := range supported {
+		if got := conceptKinds[kind]; got != capmatrix.Supported {
+			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Supported)
+		}
 	}
-	unsupported := []ir.Kind{ir.KindSkill, ir.KindMCPServerEntry, ir.KindRule, ir.KindCommand, ir.KindPluginReference}
+	unsupported := []ir.Kind{ir.KindMCPServerEntry, ir.KindRule, ir.KindCommand, ir.KindPluginReference}
 	for _, kind := range unsupported {
 		if got := conceptKinds[kind]; got != capmatrix.Unsupported {
 			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Unsupported)
@@ -115,7 +118,8 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 
 	got := declaredOutputs("project")
 	want := map[string]adapterkit.OutputMode{
-		"AGENTS.md": adapterkit.OutputModeToolOwnedEntry,
+		".agents/skills": adapterkit.OutputModeSharedSubdir,
+		"AGENTS.md":      adapterkit.OutputModeToolOwnedEntry,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)
@@ -152,6 +156,7 @@ func TestDeclaredOutputs_UserScope_AgentsMDRemapped(t *testing.T) {
 
 	got := declaredOutputs("user")
 	want := map[string]adapterkit.OutputMode{
+		".agents/skills":      adapterkit.OutputModeSharedSubdir,
 		".pi/agent/AGENTS.md": adapterkit.OutputModeToolOwnedEntry,
 	}
 	if len(got) != len(want) {

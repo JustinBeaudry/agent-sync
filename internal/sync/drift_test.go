@@ -46,6 +46,51 @@ func TestScanDrift_AllManagedPasses(t *testing.T) {
 	}
 }
 
+func TestScanDriftUnion_SiblingOwnedFileNotDrift(t *testing.T) {
+	t.Parallel()
+	root, ws := newWS(t)
+	if err := os.MkdirAll(filepath.Join(ws, testPrefix), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	mine := testPrefix + "/mine.md"
+	sibling := testPrefix + "/sibling.md"
+	for _, p := range []string{mine, sibling} {
+		if err := os.WriteFile(filepath.Join(ws, p), []byte("x"), 0o644); err != nil {
+			t.Fatalf("seed %s: %v", p, err)
+		}
+	}
+	// My ledger knows only mine.md; a sibling target owns sibling.md. Under
+	// shared co-ownership, sibling.md must NOT be flagged as drift.
+	extra := led(sibling).Entries
+	if err := ScanDriftUnion(root, testPrefix, led(mine), extra); err != nil {
+		t.Errorf("sibling-owned file must not be drift under union scan: %v", err)
+	}
+}
+
+func TestScanDriftUnion_TrulyForeignFileStillRefused(t *testing.T) {
+	t.Parallel()
+	root, ws := newWS(t)
+	if err := os.MkdirAll(filepath.Join(ws, testPrefix), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	mine := testPrefix + "/mine.md"
+	rogue := testPrefix + "/rogue.md"
+	for _, p := range []string{mine, rogue} {
+		if err := os.WriteFile(filepath.Join(ws, p), []byte("x"), 0o644); err != nil {
+			t.Fatalf("seed %s: %v", p, err)
+		}
+	}
+	// Neither my ledger nor the sibling's knows rogue.md — still real drift.
+	extra := led(testPrefix + "/sibling.md").Entries
+	err := ScanDriftUnion(root, testPrefix, led(mine), extra)
+	if !errors.Is(err, ErrMidLifeDrift) {
+		t.Fatalf("err = %v want ErrMidLifeDrift", err)
+	}
+	if !strings.Contains(err.Error(), "rogue.md") {
+		t.Errorf("error should name the rogue file: %v", err)
+	}
+}
+
 func TestScanDrift_LedgerEntryMissingOnDiskIsNotDrift(t *testing.T) {
 	t.Parallel()
 	root, ws := newWS(t)

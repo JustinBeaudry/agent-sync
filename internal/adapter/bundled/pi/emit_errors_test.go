@@ -23,7 +23,7 @@ func emitDocScope(t *testing.T, raw, scope string) (adapterkit.EmitResult, error
 
 func TestHandleEmit_HappyMixed(t *testing.T) {
 	t.Parallel()
-	// agents-md (supported → tool-owned op) + skill (unsupported → warning).
+	// agents-md (tool-owned) + skill (mkdir + write_file).
 	res, err := emitDoc(t, `{"nodes":[
 		{"id":"team","kind":"agents-md","body":"## x"},
 		{"id":"coder","kind":"skill","body":"# c"}
@@ -33,6 +33,22 @@ func TestHandleEmit_HappyMixed(t *testing.T) {
 	}
 	if len(res.OpsPerformed) == 0 || len(res.Ops) != len(res.OpsPerformed) {
 		t.Fatalf("expected matching OpsPerformed/Ops; got %d/%d", len(res.OpsPerformed), len(res.Ops))
+	}
+}
+
+func TestEmitSkill_AssetValidation(t *testing.T) {
+	t.Parallel()
+	bad := []string{
+		`{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"../escape.txt","content":"y"}]}]}`,
+		`{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"/abs.txt","content":"y"}]}]}`,
+		`{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"SKILL.md","content":"y"}]}]}`,
+		`{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"","content":"y"}]}]}`,
+		`{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"./","content":"y"}]}]}`,
+	}
+	for _, raw := range bad {
+		if _, err := emitDoc(t, raw); err == nil {
+			t.Errorf("expected asset-validation error for: %s", raw)
+		}
 	}
 }
 
@@ -91,6 +107,26 @@ func TestEmitAgentsMD_RejectsMarkerInjection(t *testing.T) {
 	_, err := emitDoc(t, `{"nodes":[{"id":"team","kind":"agents-md","body":"<!-- agent-sync:end id=other -->"}]}`)
 	if err == nil {
 		t.Fatal("expected marker-injection rejection")
+	}
+}
+
+func TestEmitSkill_AssetPrefixCollision(t *testing.T) {
+	t.Parallel()
+	// Individually-valid rel_paths that collide as ancestor/descendant (a file
+	// and a dir can't share a path) or with the reserved SKILL.md entrypoint.
+	bad := []string{
+		`{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"docs","content":"a"},{"rel_path":"docs/readme.md","content":"b"}]}]}`,
+		`{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"docs/readme.md","content":"b"},{"rel_path":"docs","content":"a"}]}]}`,
+		`{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"SKILL.md/meta.json","content":"b"}]}]}`,
+	}
+	for _, raw := range bad {
+		if _, err := emitDoc(t, raw); err == nil {
+			t.Errorf("expected asset prefix-collision error for: %s", raw)
+		}
+	}
+	// A compatible sibling set must still succeed.
+	if _, err := emitDoc(t, `{"nodes":[{"id":"s","kind":"skill","body":"x","assets":[{"rel_path":"docs/a.md","content":"a"},{"rel_path":"docs/b.md","content":"b"}]}]}`); err != nil {
+		t.Errorf("compatible sibling assets must succeed: %v", err)
 	}
 }
 

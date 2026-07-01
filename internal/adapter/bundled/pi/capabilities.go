@@ -31,14 +31,15 @@ type conceptKindDeclaration struct {
 // conceptKinds is the in-code mirror of capabilities.yaml. The unit test
 // asserts the two are kept in sync.
 //
-// Pi (PR1) declares one kind supported (agents-md) and five unsupported. MCP
-// and rule are deliberate Pi product exclusions; skill is planned (shared
-// .agents/skills co-ownership with codex needs the ADV-1 cross-adapter drift
-// fix); command is planned (Pi's prompt dir is flat + shared, needing file-leaf
-// swap support). See capabilities.yaml notes and docs/adapters/pi.md.
+// Pi declares two kinds supported (agents-md, skill) and four unsupported. MCP
+// and rule are deliberate Pi product exclusions; command is planned (Pi's
+// prompt dir is flat + shared, needing file-leaf swap support). Skills land in
+// the shared .agents/skills tree, co-owned with codex — made safe by the
+// engine's union-aware drift/orphan checks (ADV-1). See capabilities.yaml notes
+// and docs/adapters/pi.md.
 var conceptKinds = map[ir.Kind]capmatrix.CapabilityStatus{
 	ir.KindAgentsMD:        capmatrix.Supported,
-	ir.KindSkill:           capmatrix.Unsupported,
+	ir.KindSkill:           capmatrix.Supported,
 	ir.KindCommand:         capmatrix.Unsupported,
 	ir.KindMCPServerEntry:  capmatrix.Unsupported,
 	ir.KindRule:            capmatrix.Unsupported,
@@ -49,9 +50,9 @@ var conceptKinds = map[ir.Kind]capmatrix.CapabilityStatus{
 // its initialize response. WriteToolOwned is true because pi emits a
 // write_tool_owned op for the AGENTS.md managed section.
 //
-// Unlike cursor, pi's capability set does not vary by scope: the one supported
-// kind (agents-md) has a user-global home, so nothing is demoted at user scope.
-// Only the output path is scope-aware (see declaredOutputs).
+// Unlike cursor, pi's capability set does not vary by scope: every supported
+// kind (agents-md, skill) has a user-global home, so nothing is demoted at user
+// scope. Only the agents-md output path is scope-aware (see declaredOutputs).
 func capabilitiesForWire() adapterkit.Capabilities {
 	builder := adapterkit.NewCapabilities().WithWriteToolOwned(true)
 	for kind, status := range conceptKinds {
@@ -71,16 +72,21 @@ func capabilitiesForWire() adapterkit.Capabilities {
 // response. The runtime path-safety gate (pathInDeclaredOutputs) accepts an
 // emitted op only when its path falls inside one of these declared outputs.
 //
-// Pi owns no reserved subdirectory in PR1: prose goes into the tool-owned
-// AGENTS.md. The agents-md path is scope-aware — at user scope Pi reads
-// ~/.pi/agent/AGENTS.md, so the adapter targets .pi/agent/AGENTS.md there. Both
-// declared and emitted paths resolve from resolvePathSet so they never drift.
-// (Skills at the shared .agents/skills/ tree land in PR2 with the ADV-1
-// cross-adapter drift fix.) See plan docs/plans/2026-06-30-002.
+// Pi owns no single reserved subdirectory: skills go under the shared
+// .agents/skills/ tree, and prose into the tool-owned AGENTS.md. The agents-md
+// path is scope-aware — at user scope Pi reads ~/.pi/agent/AGENTS.md, so the
+// adapter targets .pi/agent/AGENTS.md there. Both declared and emitted paths
+// resolve from resolvePathSet so they never drift. See plan
+// docs/plans/2026-06-30-003.
 func declaredOutputs(scope string) []adapterkit.DeclaredOutput {
 	agentsMDSection := "agent-sync"
 	paths := resolvePathSet(scope)
 	return []adapterkit.DeclaredOutput{
+		// .agents/skills is the shared cross-tool skills tree (pi, codex, and
+		// the user all place skills here). shared-subdir → the engine manages
+		// only the agent-sync-<id> leaf dirs, never the parent, so foreign
+		// skills and sibling-adapter skills survive a sync (ADV-1 co-ownership).
+		{Path: skillsParent, Mode: adapterkit.OutputModeSharedSubdir},
 		{Path: paths.agentsMD, Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &agentsMDSection},
 	}
 }

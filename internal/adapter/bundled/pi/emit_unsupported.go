@@ -16,8 +16,7 @@ import (
 // project-level file shape in Pi.
 var unsupportedNotes = map[ir.Kind]string{
 	ir.KindMCPServerEntry:  "Pi does not load MCP servers by design — see https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/. The MCP entry was not installed. To expose this capability to Pi, build or install a Pi extension that wraps it.",
-	ir.KindRule:            "Pi has no per-tool rule concept distinct from AGENTS.md; the rule was not installed. Consolidate rule content into an agents-md node.",
-	ir.KindSkill:           "The agent-sync pi adapter does not emit skills yet (planned); the skill was not installed. Pi reads skills from the shared .agents/skills/ tree; safe co-ownership with codex needs the ADV-1 cross-adapter drift fix.",
+	ir.KindRule:            "Pi has no per-tool rule concept distinct from AGENTS.md; the rule was not installed. Consolidate rule content into an agents-md node or a skill.",
 	ir.KindCommand:         "The agent-sync pi adapter does not emit prompt-template commands yet (planned); the command was not installed. Pi itself supports prompt templates at .pi/prompts/.",
 	ir.KindPluginReference: "Pi packages install via `pi install` (npm/git), not a project-level plugin-reference registry; the reference was not installed.",
 }

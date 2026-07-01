@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -22,7 +23,7 @@ func captureOps(raw json.RawMessage) (*emittedOps, error) {
 		return nil, err
 	}
 	emitted := &emittedOps{}
-	state := &emitState{paths: resolvePathSet("project")}
+	state := &emitState{emittedFilePath: map[string]struct{}{}, paths: resolvePathSet("project")}
 	sort.Slice(doc.Nodes, func(i, j int) bool {
 		if doc.Nodes[i].Kind != doc.Nodes[j].Kind {
 			return doc.Nodes[i].Kind < doc.Nodes[j].Kind
@@ -53,6 +54,42 @@ func emitFixture(t *testing.T, name string) (adapterkit.EmitResult, []adapterkit
 	return adapterkit.EmitResult{OpsPerformed: emitted.records()}, emitted.ops
 }
 
+func TestEmitSkill_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	res, ops := emitFixture(t, "skill-only.json")
+	wantRecords := []adapterkit.OpRecord{
+		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
+	}
+	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
+		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
+	}
+	skillOp := findWriteFile(t, ops, ".agents/skills/agent-sync-coder/SKILL.md")
+	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by agent-sync") {
+		t.Errorf("SKILL.md missing managed header; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "Write production code.") {
+		t.Errorf("SKILL.md missing body; got %q", skillOp.Content)
+	}
+}
+
+func TestEmitSkill_WithAssets(t *testing.T) {
+	t.Parallel()
+
+	res, _ := emitFixture(t, "skill-with-assets.json")
+	// Assets sorted by rel_path: examples/usage.md before templates/foo.txt.
+	wantRecords := []adapterkit.OpRecord{
+		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/examples/usage.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/templates/foo.txt"},
+	}
+	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
+		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
+	}
+}
+
 func TestEmitAgentsMD_HappyPath(t *testing.T) {
 	t.Parallel()
 
@@ -68,7 +105,6 @@ func TestEmitAgentsMD_HappyPath(t *testing.T) {
 		t.Errorf("AGENTS.md locator=%q want agent-sync:team", op.Locator)
 	}
 	content := string(op.Content)
-	// The engine owns the begin/end markers; the adapter sends inner body only.
 	if strings.Contains(content, "<!-- agent-sync:") {
 		t.Errorf("AGENTS.md content must be inner body without markers; got %q", content)
 	}
@@ -79,16 +115,19 @@ func TestEmitAgentsMD_HappyPath(t *testing.T) {
 
 // TestEmit_UserScope_AgentsMDRemapped pins the user-scope (sync --user)
 // behavior: agents-md is emitted to .pi/agent/AGENTS.md (→ ~/.pi/agent/AGENTS.md,
-// Pi's user-global instructions path — NOT ~/AGENTS.md).
+// Pi's user-global instructions path — NOT ~/AGENTS.md), while skills
+// (.agents/skills/) are unchanged (already correct under $HOME at user scope).
 func TestEmit_UserScope_AgentsMDRemapped(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"nodes":[{"id":"team","kind":"agents-md","body":"Use conventional commits."}]}`
+	raw := `{"nodes":[
+		{"id":"team","kind":"agents-md","body":"Use conventional commits."},
+		{"id":"coder","kind":"skill","body":"# c"}
+	]}`
 	res, err := emitDocScope(t, raw, "user")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
-
 	paths := map[string]bool{}
 	for _, r := range res.OpsPerformed {
 		paths[r.Path] = true
@@ -99,19 +138,21 @@ func TestEmit_UserScope_AgentsMDRemapped(t *testing.T) {
 	if paths["AGENTS.md"] {
 		t.Errorf("user-scope must NOT emit project-root AGENTS.md; got %+v", res.OpsPerformed)
 	}
+	if !paths[".agents/skills/agent-sync-coder/SKILL.md"] {
+		t.Errorf("user-scope skill must still emit under .agents/skills/; got %+v", res.OpsPerformed)
+	}
 }
 
 func TestEmitUnsupported_WarnsNoFiles(t *testing.T) {
 	t.Parallel()
 
 	res, ops := emitFixture(t, "unsupported-kinds.json")
-	// No file/mkdir/tool-owned ops — only warnings.
 	for _, r := range res.OpsPerformed {
 		if r.Op != adapterkit.OpKindWarning {
 			t.Errorf("unsupported kinds must emit only warnings; got op %q path %q", r.Op, r.Path)
 		}
 	}
-	for _, conceptID := range []string{"no-fri", "draftpr", "lsp", "some-plugin", "helper"} {
+	for _, conceptID := range []string{"no-fri", "draftpr", "lsp", "some-plugin"} {
 		w, ok := findWarning(ops, conceptID)
 		if !ok {
 			t.Errorf("expected degradation warning for %q", conceptID)
@@ -148,49 +189,43 @@ func TestEmit_NoMCPWarningCitesRationale(t *testing.T) {
 	}
 }
 
-// TestEmit_SkillWarnsAndEmitsNoFile pins that skill is unsupported in PR1: it
-// degrades to a warning (planned for PR2 with the ADV-1 fix) and writes no file
-// into the shared .agents/skills tree.
-func TestEmit_SkillWarnsAndEmitsNoFile(t *testing.T) {
-	t.Parallel()
-
-	raw := json.RawMessage(`{"nodes":[{"id":"helper","kind":"skill","body":"# Helper"}]}`)
-	emitted, err := captureOps(raw)
-	if err != nil {
-		t.Fatalf("captureOps: %v", err)
-	}
-	w, ok := findWarning(emitted.ops, "helper")
-	if !ok {
-		t.Fatal("expected degradation warning for unsupported skill")
-	}
-	if !strings.Contains(w.Note, "does not emit skills yet") {
-		t.Errorf("skill warning should note it is planned; got %q", w.Note)
-	}
-	for _, op := range emitted.ops {
-		if _, isWarn := op.(adapterkit.OpWarning); !isWarn {
-			t.Errorf("skill node must emit only a warning, no file op; got %T", op)
-		}
-	}
-}
-
-func TestEmitMixed_EmitsAgentsMDWarnsUnsupported(t *testing.T) {
+func TestEmitMixed_EmitsSupportedAndWarnsUnsupported(t *testing.T) {
 	t.Parallel()
 
 	res, ops := emitFixture(t, "mixed-everything.json")
-	if _, ok := findToolOwned(ops, "AGENTS.md"); !ok {
-		t.Error("mixed emit must produce the AGENTS.md tool-owned op")
-	}
-	// The skill and mcp-server-entry nodes degrade to warnings, not files.
-	for _, conceptID := range []string{"coder", "lsp"} {
-		if _, ok := findWarning(ops, conceptID); !ok {
-			t.Errorf("mixed emit must warn for unsupported node %q", conceptID)
-		}
+	wantPaths := map[string]bool{
+		".agents/skills/agent-sync-coder":          false,
+		".agents/skills/agent-sync-coder/SKILL.md": false,
+		"AGENTS.md": false,
 	}
 	for _, r := range res.OpsPerformed {
-		if r.Op == adapterkit.OpKindWriteFile || r.Op == adapterkit.OpKindMkdir {
-			t.Errorf("pi PR1 must not emit files/mkdirs (only AGENTS.md tool-owned + warnings); got %q %q", r.Op, r.Path)
+		if _, ok := wantPaths[r.Path]; ok {
+			wantPaths[r.Path] = true
 		}
 	}
+	for p, seen := range wantPaths {
+		if !seen {
+			t.Errorf("mixed emit missing op for %q", p)
+		}
+	}
+	// The mcp-server-entry node degrades to a warning, not a file.
+	if _, ok := findWarning(ops, "lsp"); !ok {
+		t.Error("mixed emit must warn for the unsupported mcp-server-entry node")
+	}
+	if _, ok := findToolOwned(ops, ".codex/config.toml"); ok {
+		t.Error("pi must not emit a codex MCP config file")
+	}
+}
+
+func findWriteFile(t *testing.T, ops []adapterkit.Op, path string) adapterkit.OpWriteFile {
+	t.Helper()
+	for _, op := range ops {
+		if wf, ok := op.(adapterkit.OpWriteFile); ok && wf.Path == path {
+			return wf
+		}
+	}
+	t.Fatalf("no write_file op for %q", path)
+	return adapterkit.OpWriteFile{}
 }
 
 func findToolOwned(ops []adapterkit.Op, path string) (adapterkit.OpWriteToolOwned, bool) {

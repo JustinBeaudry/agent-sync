@@ -236,11 +236,104 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	// foreign sibling content under a shared tree is invisible to the engine.
 	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.ops, oldLedger.Entries)
 
+	// Cross-adapter co-ownership (ADV-1): a shared-subdir leaf (e.g.
+	// .agents/skills/agent-sync-<id>) may be legitimately owned by a sibling
+	// target too (codex + pi both use .agents/skills). Ledgers are per-target,
+	// so the drift and orphan checks must treat files claimed by ANY configured
+	// target's ledger as managed for shared-subdir leaves — otherwise this
+	// target flags a sibling's file as foreign drift, or deletes a leaf a
+	// sibling still owns. siblingEntries is the union of the other configured
+	// targets' current on-disk ledgers (req.Targets = the manifest's declared
+	// set, independent of any --target run filter). Only loaded when this
+	// adapter actually declares a shared subdir; owned-subdir prefixes keep the
+	// exact single-target path below.
+	var siblingEntries []ledger.Entry
+	if len(out.sharedPrefixes) > 0 {
+		siblingEntries, err = loadSiblingLedgerEntries(root, req.Targets, target)
+		if err != nil {
+			return statusResult{}, err
+		}
+	}
+	siblingKnown := make(map[string]bool, len(siblingEntries))
+	siblingLeaves := map[string]bool{} // shared leaves any sibling target still claims
+	for _, e := range siblingEntries {
+		siblingKnown[e.Path] = true
+		if leaf := leafUnder(out.sharedPrefixes, e.Path); leaf != "" {
+			siblingLeaves[leaf] = true
+		}
+	}
+	isSharedLeaf := func(pre string) bool {
+		return len(out.sharedPrefixes) > 0 && leafUnder(out.sharedPrefixes, pre) == pre
+	}
+	underSharedLeaf := func(p string) bool {
+		return len(out.sharedPrefixes) > 0 && leafUnder(out.sharedPrefixes, p) != ""
+	}
+
+	// Cross-adapter release: a shared leaf this target no longer emits but a
+	// sibling still owns must be dropped from the effective set entirely — not
+	// swap-emptied and not orphan-deleted. This target simply releases it from
+	// its own ledger (the leaf isn't in newEntries); the file stays for the
+	// sibling. Without this, the stage+swap loop would empty the leaf (w==nil,
+	// oldHadUnder) and destroy the sibling's content. A leaf this target DOES
+	// emit this run stays in effective (normal swap), even if co-owned.
+	//
+	// INVARIANT (identical co-emission): the release is decided at leaf
+	// granularity (siblingLeaves) while the orphan guard below is path
+	// granular (siblingKnown). That is only safe when co-owners emit the SAME
+	// file set into a shared leaf. This holds by construction today: a shared
+	// leaf is `.agents/skills/agent-sync-<id>`, one <id> maps to exactly one IR
+	// skill node (the IR forbids duplicate kind+id), and that node emits a
+	// byte-identical SKILL.md (+ identical assets) to every target it lists. So
+	// two co-owners can never own DIFFERENT paths within one leaf. The guard
+	// below fails closed if that ever stops being true (e.g. a future adapter
+	// that writes tool-specific files into a shared skill dir), converting a
+	// would-be silent leak (a released path no sibling re-owns) into a loud
+	// error rather than stranding a file. A full fix for divergent co-emission
+	// (path-granular staging of the union) is future work — see
+	// docs/plans/2026-06-30-003.
+	if len(siblingLeaves) > 0 {
+		emittedSharedLeaves := map[string]bool{}
+		for _, op := range out.ops {
+			if leaf := leafUnder(out.sharedPrefixes, op.OpPath()); leaf != "" {
+				emittedSharedLeaves[leaf] = true
+			}
+		}
+		kept := effective[:0]
+		for _, pre := range effective {
+			if isSharedLeaf(pre) && !emittedSharedLeaves[pre] && siblingLeaves[pre] {
+				// Fail-closed guard: every path this target is releasing under
+				// the leaf must be claimed by a sibling. If any is not, dropping
+				// the leaf would leak that path (no ledger would own it, nothing
+				// would delete it). Unreachable under the identical-co-emission
+				// invariant above; a loud error beats a silent strand.
+				for _, e := range oldLedger.Entries {
+					if leafUnder(out.sharedPrefixes, e.Path) == pre && !siblingKnown[e.Path] {
+						return statusResult{}, fmt.Errorf(
+							"engine: shared leaf %s co-owned but path %q is released by %s and claimed by no sibling (divergent co-emission is unsupported; would leak)",
+							pre, e.Path, target)
+					}
+				}
+				continue // released to sibling; leave files untouched
+			}
+			kept = append(kept, pre)
+		}
+		effective = kept
+	}
+
 	// Drift gate per owned subdir (per managed leaf for shared subdirs),
-	// unless adopting.
+	// unless adopting. Shared-subdir leaves scan against the union of this
+	// target's ledger and sibling ledgers (co-ownership); owned-subdir prefixes
+	// scan against this target's ledger alone. One walk per leaf: pick the scan,
+	// don't run both (ScanDrift already delegates to ScanDriftUnion with nil).
 	adoptedAny := false
 	for _, pre := range effective {
-		if scanErr := syncpkg.ScanDrift(root, pre, oldLedger); scanErr != nil {
+		var scanErr error
+		if isSharedLeaf(pre) {
+			scanErr = syncpkg.ScanDriftUnion(root, pre, oldLedger, siblingEntries)
+		} else {
+			scanErr = syncpkg.ScanDrift(root, pre, oldLedger)
+		}
+		if scanErr != nil {
 			if adopting(req.Options.AdoptPrefixes, pre) {
 				if _, aerr := syncpkg.AdoptEntries(root, pre, now); aerr != nil {
 					return statusResult{}, fmt.Errorf("engine: adopt %s: %w", pre, aerr)
@@ -378,9 +471,19 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 		if ownerOf(effective, e.Path) == "" {
 			continue
 		}
-		if _, wanted := newEntries[e.Path]; !wanted {
-			deletable = append(deletable, e.Path)
+		if _, wanted := newEntries[e.Path]; wanted {
+			continue
 		}
+		// Cross-adapter co-ownership (ADV-1): never orphan-delete a shared-subdir
+		// leaf path a sibling target's ledger still claims. In a run that
+		// removes the leaf from every target, the last target to run sees the
+		// earlier targets' ledgers already emptied and performs the delete; a
+		// run that removes it from this target only leaves a sibling's copy
+		// intact.
+		if underSharedLeaf(e.Path) && siblingKnown[e.Path] {
+			continue
+		}
+		deletable = append(deletable, e.Path)
 	}
 	sort.Strings(deletable)
 	expectedDeletions := -1 // -1 = unspecified, always passes
@@ -531,6 +634,44 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 		st = statusUnchanged
 	}
 	return statusResult{status: st, counts: counts, paths: paths, warnings: out.warnings}, nil
+}
+
+// loadSiblingLedgerEntries returns the union of the on-disk ledger entries of
+// every configured target other than current. Used for cross-adapter
+// shared-subdir co-ownership (ADV-1): a shared leaf owned by a sibling target
+// must not be seen as drift or orphaned by this target. A sibling with no
+// ledger yet contributes nothing (not an error); a corrupt/unreadable sibling
+// ledger fails the sync closed (loadLedger surfaces the error) — the right call
+// for a data-loss-adjacent decision, since an empty sibling set would let this
+// target orphan-delete a leaf the sibling still owns.
+//
+// MUST be re-read fresh per target-sync — do NOT hoist or cache this across
+// targets in one run. Targets run sequentially (engine.Sync), and the
+// remove-from-all-targets convergence depends on each target observing the
+// ledger writes committed by earlier targets in the SAME run: the last target
+// to release a co-owned leaf sees the others' ledgers already emptied and is
+// the one that performs the delete. Caching would break that ordering.
+//
+// allTargets is req.Targets (the manifest's configured set), independent of any
+// --target run filter, so a filtered run still respects a non-running sibling's
+// ownership. Known limitations (leaks, not data loss; see
+// docs/plans/2026-06-30-003): a target dropped from the manifest strands its
+// ledger + any solely-its co-owned leaf (no ledger GC), and two concurrent
+// --target-filtered processes can each defer a shared-leaf delete to the other
+// (no run-wide lock over shared trees). Both are follow-up hardening.
+func loadSiblingLedgerEntries(root *fsroot.Root, allTargets []string, current string) ([]ledger.Entry, error) {
+	var entries []ledger.Entry
+	for _, t := range allTargets {
+		if t == current {
+			continue
+		}
+		led, err := loadLedger(root, t)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, led.Entries...)
+	}
+	return entries, nil
 }
 
 func loadLedger(root *fsroot.Root, target string) (ledger.Ledger, error) {
