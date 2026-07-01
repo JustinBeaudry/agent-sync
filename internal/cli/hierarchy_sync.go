@@ -60,19 +60,6 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		return nil, fmt.Errorf("discover hierarchy: %w", err)
 	}
 
-	// Composition source: the user scope is returned even when Emit=false, so a
-	// project sync (no --user) can still fold in the user rule layer. Selected
-	// inline (no helper — Rule of Three); a non-empty ManifestPath means a user
-	// manifest exists to compose from. See plan U3/U4.
-	var userScope hierarchy.Scope
-	var hasUserScope bool
-	for _, sc := range scopes {
-		if sc.Level == hierarchy.LevelUser && sc.ManifestPath != "" {
-			userScope, hasUserScope = sc, true
-			break
-		}
-	}
-
 	// composeActive records whether Cursor-rule composition fired for any
 	// project scope in this run. Under `sync --user` the user scope is emitted
 	// (and processed before the project scope), so its coverage warnings are
@@ -104,47 +91,12 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			defer prep.Close()
 			req := prep.Request
 			req.Options = opts.EngineOpts
-			// Composition only takes effect at project scope (directory composition
-			// is deferred, D1). Warn if a directory/user manifest sets the opt-in so
-			// it isn't a silent no-op.
-			if prep.Manifest.Compose.CursorRulesFromUser && sc.Level != hierarchy.LevelProject {
-				rc.Logger.Warn("compose: cursor-rules-from-user has no effect at this scope; set it on the project manifest",
-					"scope", sc.Level.String(), "root", sc.Root)
-			}
-			// Hierarchy composition (plan U4/D1/D2): when this project scope opts
-			// in and Cursor is a target, fold the user-scope rule layer into the
-			// project's node set so global Cursor rules take effect via the
-			// project's .cursor/rules/. Narrow to the project level (directory
-			// composition is deferred) and to Cursor rules only. Injected nodes are
-			// owned by this project's ledger, so removal reclaims them normally.
-			if sc.Level == hierarchy.LevelProject &&
-				prep.Manifest.Compose.CursorRulesFromUser &&
-				hasUserScope &&
-				slices.Contains(req.Targets, cursorTarget) {
-				composed, failed := composeUserRules(ctx, rc, userScope, cursorRuleIDsOf(req.Nodes), now)
-				switch {
-				case failed:
-					// The user source could not be read this run (offline URL,
-					// malformed user manifest). Defer the Cursor sync entirely rather
-					// than syncing it with project-only rules: .cursor/rules/agent-sync/
-					// is an owned subdir replaced by a wholesale swap, so a project-only
-					// sync would wipe the previously-composed rules. Dropping cursor from
-					// this run's targets leaves that subdir untouched; the next sync that
-					// can read the user source re-syncs cursor fully. Project cursor rule
-					// edits wait for that run — the conservative, data-preserving choice
-					// (plan D8, transient-failure guard).
-					req.Targets = withoutTarget(req.Targets, cursorTarget)
-					rc.Logger.Warn("compose: deferring cursor sync this run — user source unreadable; existing .cursor/rules left intact",
-						"user_manifest", userScope.ManifestPath)
-				case len(composed) > 0:
-					// composeActive gates the U5 warning suppression below. Only set it
-					// when rules were actually composed: an empty result (user has no
-					// cursor rules, or all were shadowed) must NOT suppress the
-					// user-scope "rule inert at user scope" warning — nothing took
-					// effect via the project, so the warning is still accurate.
-					composeActive = true
-					req.Nodes = append(req.Nodes, composed...)
-				}
+			// Fold the user-scope Cursor rule layer into this project scope's node
+			// set (plan U4/D1/D2), via the shared entry point also used by the
+			// single-scope path. composeActive gates the U5 coverage-warning
+			// suppression below — set only when rules were actually composed.
+			if applyCursorComposition(ctx, rc, &req, prep.Manifest, sc.Level.String(), home, now) {
+				composeActive = true
 			}
 			// Coverage warnings are computed from the decoded IR (the distinct
 			// kinds this scope emits), the manifest's targets, and the scope's
@@ -191,6 +143,62 @@ func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hiera
 		out = append(out, w)
 	}
 	return out
+}
+
+// applyCursorComposition folds the user-scope Cursor rule layer into a
+// project-scope request when the project manifest opts in. It is the single
+// composition entry point shared by the hierarchy sync loop AND the single-scope
+// path (validate, watch, sync --workspace), so every command that builds a
+// project request sees the same composed desired state. Without this, a composed
+// project would report false `WouldDelete` drift under validate and lose its
+// composed rules under watch / --workspace sync (the owned-subdir swap wipes
+// anything not in the freshly-staged set).
+//
+// It mutates req in place and returns whether rules were composed. All paths are
+// gated on m.Compose.CursorRulesFromUser:
+//   - scope != project: composition is project-only (D1) — warn that the opt-in
+//     has no effect at this scope, return false.
+//   - cursor not a target, or no user manifest at home: silent no-op, false.
+//   - user source unreadable: defer cursor (drop it from req.Targets) so a
+//     transient failure can't wipe previously-composed rules; warn; false.
+//   - rules composed: append to req.Nodes; true.
+func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine.Request, m *manifest.Manifest, scope, home string, now time.Time) bool {
+	if !m.Compose.CursorRulesFromUser {
+		return false
+	}
+	if scope != hierarchy.LevelProject.String() {
+		// Directory/user manifest set the opt-in; composition only applies at
+		// project scope. Warn so it isn't a silent no-op.
+		rc.Logger.Warn("compose: cursor-rules-from-user has no effect at this scope; set it on the project manifest", "scope", scope)
+		return false
+	}
+	if !slices.Contains(req.Targets, cursorTarget) {
+		return false
+	}
+	user, ok := hierarchy.UserScope(home)
+	if !ok {
+		return false // no user manifest to compose from
+	}
+	composed, failed := composeUserRules(ctx, rc, user, cursorRuleIDsOf(req.Nodes), now)
+	switch {
+	case failed:
+		// The user source could not be read this run (offline URL, malformed user
+		// manifest). Defer the Cursor sync rather than syncing project-only rules:
+		// .cursor/rules/agent-sync/ is an owned subdir replaced by a wholesale
+		// swap, so a project-only sync would wipe the previously-composed rules.
+		// Dropping cursor from this run's targets leaves that subdir untouched; the
+		// next sync that can read the user source re-syncs cursor fully. Project
+		// cursor rule edits wait for that run — the conservative, data-preserving
+		// choice (plan D8, transient-failure guard).
+		req.Targets = withoutTarget(req.Targets, cursorTarget)
+		rc.Logger.Warn("compose: deferring cursor this run — user source unreadable; existing .cursor/rules left intact",
+			"user_manifest", user.ManifestPath)
+		return false
+	case len(composed) > 0:
+		req.Nodes = append(req.Nodes, composed...)
+		return true
+	}
+	return false
 }
 
 // composeUserRules materializes the user-scope manifest read-only and returns
@@ -242,6 +250,12 @@ func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Sc
 	offline := rc.Flags.Offline || m.Canonical.URL != ""
 	mat, err := materialize(ctx, m, materializeOptions{Offline: offline, Now: now, Root: root})
 	if err != nil {
+		if ctx.Err() != nil {
+			// Cancellation (Ctrl-C, deadline) — not an unreadable user source. The
+			// sync is aborting anyway; don't defer cursor or log a misleading
+			// "source unreadable" warning. Return not-failed so no deferral fires.
+			return nil, false
+		}
 		log.Warn("compose: cannot materialize user IR", "path", user.ManifestPath, "err", err)
 		return nil, true
 	}

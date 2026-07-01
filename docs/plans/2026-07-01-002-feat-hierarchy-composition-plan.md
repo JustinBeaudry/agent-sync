@@ -363,6 +363,22 @@ own node ordering is left unchanged. This keeps op/ledger output and the
 `coverage.Analyze` kind set stable across runs (the Cursor adapter re-sorts
 too, but a stable CLI-side order keeps fixtures and idempotency deterministic).
 
+**Implementation note (as shipped — the seam grew during review):**
+- Composition is a single shared entry point, `applyCursorComposition`, called
+  from **both** `runHierarchySync` (hierarchy path) **and** `prepareEngine`
+  (single-scope path). This is required so `validate`, `watch`, and `sync
+  --workspace` see the same composed desired state — otherwise a composed
+  project reports false `WouldDelete` drift under `validate` and loses composed
+  rules under `watch`/`--workspace` (owned-subdir swap). Surfaced by the PR's
+  code review (Codex P1/P2).
+- `composeUserRules` deliberately does **not** reuse `prepareScope`: it hand-rolls
+  the minimal `LoadFile` + `OpenWorkspaceRoot` + `materialize` read so it never
+  runs `DiscoverAdapters` (no adapter subprocess) on the read-only user scope.
+- On a user-source read failure the whole Cursor sync is **deferred** (cursor
+  dropped from `req.Targets` for that run), not synced with project-only rules —
+  because the owned-subdir swap would otherwise wipe previously-composed rules
+  (D8 transient-failure guard).
+
 **Patterns to follow:** `prepareScope` lifecycle + `defer prep.Close()` in the
 existing per-scope closure; `kindsOf` for kind extraction; the Cursor adapter's
 `nodeTargetsCursor` for target filtering (mirror the predicate, don't import the
@@ -528,7 +544,7 @@ update, provenance de-risk, docs.
 
 Run before declaring done (per AGENTS.md / CLAUDE.md):
 
-```
+```bash
 go vet ./... && go test -race ./... && golangci-lint run
 ```
 

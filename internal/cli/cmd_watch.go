@@ -43,11 +43,6 @@ func newWatchCommand(deps RootDeps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("watch: load manifest: %w", err)
 			}
-			// watch runs the single-scope sync path, which never composes. Warn
-			// once at startup so an opted-in manifest is not a silent no-op here.
-			if m.Compose.CursorRulesFromUser {
-				rc.Logger.Warn("compose: cursor-rules-from-user is ignored by watch; it applies only to a hierarchy `sync` (not --workspace/watch)")
-			}
 
 			paths := []string{ws.ManifestPath}
 			switch {

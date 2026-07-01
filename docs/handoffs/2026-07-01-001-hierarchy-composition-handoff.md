@@ -166,7 +166,7 @@ changelog before designing.
 
 ## Verification gate (run before declaring done, per CLAUDE.md/AGENTS.md)
 
-```
+```bash
 go vet ./... && go test -race ./... && golangci-lint run
 ```
 

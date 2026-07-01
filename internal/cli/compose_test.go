@@ -239,6 +239,23 @@ func rulePath(base, id string) string {
 	return filepath.Join(base, ".cursor", "rules", "agent-sync", id+".mdc")
 }
 
+// runInTree runs an arbitrary command from cwd with the home seam swapped, so
+// the single-scope path (validate, sync --workspace) resolves the test's user
+// scope for composition. Mirrors runSyncHierarchy but for any subcommand.
+func runInTree(t *testing.T, cwd, home string, args ...string) (string, string, error) {
+	t.Helper()
+	t.Chdir(cwd)
+	prev := resolveHome
+	resolveHome = func() (string, error) { return home, nil }
+	t.Cleanup(func() { resolveHome = prev })
+
+	var out, errBuf bytes.Buffer
+	root := NewRootCommand(RootDeps{Out: &out, Err: &errBuf, Version: "test"})
+	root.SetArgs(append([]string{args[0], "--non-interactive"}, args[1:]...))
+	err := root.Execute()
+	return out.String(), errBuf.String(), err
+}
+
 // TestCompose_FoldsUserRulesIntoProject is the U4 happy path: an opted-in
 // cursor project folds the user's rule layer into its own .cursor/rules/, so
 // user rules + project rules coexist under the project ledger.
@@ -484,6 +501,65 @@ func TestCompose_OrphanReclaimOnDropAndOptOut(t *testing.T) {
 	}
 	mustNotExist(t, rulePath(repo, "a")) // opt-out reclaimed the composed file
 	mustExist(t, rulePath(repo, "c"))    // project's own rule survives
+}
+
+// TestCompose_ValidateNoFalseDriftForComposedProject is the regression guard for
+// the P1 review finding: validate uses the single-scope path, so before the fix
+// it built desired output from project rules only and reported the composed
+// .cursor/rules/agent-sync/<id>.mdc as WouldDelete drift — breaking CI/git-hook
+// drift guards for every composed project. After the fix, validate composes too
+// and reports no drift on a cleanly-composed workspace.
+func TestCompose_ValidateNoFalseDriftForComposedProject(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/a.md", "user rule a\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/c.md", "project rule c\n")
+
+	// Compose via a normal sync, then validate: no drift (exit 0).
+	if _, errOut, err := runInTree(t, repo, home, "sync"); err != nil {
+		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "a"))
+	out, errOut, err := runInTree(t, repo, home, "validate")
+	if err != nil {
+		t.Fatalf("validate reported drift on a cleanly-composed project (exit %d): %v\nstdout: %s\nstderr: %s",
+			MapExit(err), err, out, errOut)
+	}
+}
+
+// TestCompose_SingleScopeSyncPreservesComposedRules is the regression guard for
+// the P2 review finding: the single-scope path (sync --workspace; watch shares
+// it via runWatchSync→prepareEngine) synced without composition and its
+// owned-subdir swap deleted previously-composed rules. After the fix it composes
+// too, so composed rules survive.
+func TestCompose_SingleScopeSyncPreservesComposedRules(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/a.md", "user rule a\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/c.md", "project rule c\n")
+
+	// Compose via a normal sync.
+	if _, errOut, err := runInTree(t, repo, home, "sync"); err != nil {
+		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "a"))
+
+	// A single-scope sync (--workspace) must NOT wipe the composed rule.
+	if _, errOut, err := runInTree(t, repo, home, "sync", "--workspace", repo); err != nil {
+		t.Fatalf("sync --workspace: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "a")) // preserved: single-scope path composes now
+	mustExist(t, rulePath(repo, "c"))
 }
 
 // TestCompose_Idempotent: two consecutive composed syncs leave the composed
