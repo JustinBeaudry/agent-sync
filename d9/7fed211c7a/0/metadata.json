@@ -1,0 +1,73 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "d97fed211c7a",
+  "session_id": "b9230637-d4f9-4984-bec8-4b84c193c615",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-02T13:41:18.326055Z",
+  "branch": "chore/gemini-to-antigravity",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5",
+  "turn_id": "a8e7fed06a13",
+  "checkpoint_transcript_start": 295,
+  "transcript_lines_at_start": 295,
+  "token_usage": {
+    "input_tokens": 288,
+    "cache_creation_tokens": 26425,
+    "cache_read_tokens": 2245851,
+    "output_tokens": 6256,
+    "api_call_count": 15
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-compound-engineering:ce-resolve-pr-feedback-2026-07-02T13:35:05.73882Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-resolve-pr-feedback"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "e6f9297f5ccf",
+      "timestamp": "2026-07-02T13:35:05.73882Z",
+      "native": {
+        "command": "/compound-engineering:ce-resolve-pr-feedback"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/compound-engineering:ce-resolve-pr-feedback",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-02T13:41:18.313101Z",
+    "agent_lines": 1,
+    "agent_removed": 1,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1,
+    "total_lines_changed": 2,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
