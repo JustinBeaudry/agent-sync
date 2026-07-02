@@ -21,9 +21,12 @@ type DecodeOptions struct {
 
 // rootAgentsMDOverlay maps root-level overlay filenames to their target
 // adapter scope. AGENTS.md itself is unscoped (empty target slice).
+// GEMINI.md scopes to antigravity, not gemini: Google retired Gemini CLI
+// (2026-06-18) in favor of Antigravity CLI, which still reads GEMINI.md
+// as its tool-specific overlay, and no gemini adapter ever shipped.
 var rootAgentsMDOverlay = map[string]string{
 	"CLAUDE.md": "claude",
-	"GEMINI.md": "gemini",
+	"GEMINI.md": "antigravity",
 }
 
 // Decode walks the canonical-repo tree at commitSHA and returns the IR

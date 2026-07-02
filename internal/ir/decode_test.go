@@ -48,7 +48,9 @@ func TestDecode_AGENTSMD_OverlaysSurfaceAsTargetScopedNodes(t *testing.T) {
 
 	// AGENTS.md is the canonical name. CLAUDE.md / GEMINI.md are tool
 	// overlays per the spec — they share the agents-md kind but their
-	// Targets restrict scope.
+	// Targets restrict scope. GEMINI.md scopes to the antigravity target:
+	// Antigravity CLI (Gemini CLI's successor) reads GEMINI.md as its
+	// tool-specific overlay, and no gemini adapter ever shipped.
 	repo := makeCanonicalRepo(t, []canonicalFile{
 		{Path: "AGENTS.md", Content: "# canonical agents\n"},
 		{Path: "CLAUDE.md", Content: "# claude overlay\n"},
@@ -82,8 +84,8 @@ func TestDecode_AGENTSMD_OverlaysSurfaceAsTargetScopedNodes(t *testing.T) {
 				t.Errorf("CLAUDE.md missing claude target, got %v", n.Targets)
 			}
 		case "GEMINI.md":
-			if !hasTarget(n.Targets, "gemini") {
-				t.Errorf("GEMINI.md missing gemini target, got %v", n.Targets)
+			if !hasTarget(n.Targets, "antigravity") {
+				t.Errorf("GEMINI.md missing antigravity target, got %v", n.Targets)
 			}
 		}
 	}

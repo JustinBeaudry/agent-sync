@@ -25,7 +25,7 @@ v2-grade change that requires a separate spec.
 
 | Kind | What it is | Typical filename |
 |---|---|---|
-| `agents-md` | Repo-root project guidance file. `AGENTS.md` is the canonical name; `CLAUDE.md` / `GEMINI.md` are recognized overlays that produce additional, target-scoped `agents-md` nodes. | `AGENTS.md` |
+| `agents-md` | Repo-root project guidance file. `AGENTS.md` is the canonical name; `CLAUDE.md` / `GEMINI.md` are recognized overlays that produce additional, target-scoped `agents-md` nodes (`GEMINI.md` scopes to the `antigravity` target — Antigravity CLI, Gemini CLI's successor, reads it as its tool-specific overlay). | `AGENTS.md` |
 | `rule` | A short, behavior-shaping guideline. | `rules/<id>.md` |
 | `skill` | A multi-file skill bundle (markdown + optional assets). | `skills/<id>/SKILL.md` |
 | `command` | A user-invokable command definition (slash-commandable). | `commands/<id>.md` |
@@ -53,7 +53,7 @@ case-sensitive even on case-insensitive filesystems.
 canonical-repo/
 ├── AGENTS.md                 # one agents-md node, id "agents", Targets: [] (unscoped)
 ├── CLAUDE.md                 # optional overlay; separate agents-md node, id "claude", Targets: [claude]
-├── GEMINI.md                 # optional overlay; separate agents-md node, id "gemini", Targets: [gemini]
+├── GEMINI.md                 # optional overlay; separate agents-md node, id "gemini", Targets: [antigravity]
 ├── rules/
 │   └── <id>.md               # one rule node per file
 ├── skills/
@@ -79,9 +79,14 @@ from the filename basename, lowercased, with the extension stripped:
 `AGENTS.md` → `agents`, `CLAUDE.md` → `claude`, `GEMINI.md` → `gemini`.
 Each file is a distinct `agents-md` node, so the per-kind uniqueness
 rule is satisfied automatically. The overlay's `Targets` is set from
-the filename (`[claude]` for `CLAUDE.md`, `[gemini]` for `GEMINI.md`),
-unioned with any `targets:` declared in frontmatter; `AGENTS.md` itself
-ships unscoped (`Targets: []`, meaning all adapters).
+the filename (`[claude]` for `CLAUDE.md`, `[antigravity]` for
+`GEMINI.md`), unioned with any `targets:` declared in frontmatter;
+`AGENTS.md` itself ships unscoped (`Targets: []`, meaning all adapters).
+The overlay target need not equal the derived id: `GEMINI.md` keeps id
+`gemini` (filename-derived) but scopes to `antigravity`, because
+Antigravity CLI — Gemini CLI's successor after its 2026-06-18
+retirement — reads `GEMINI.md` as its tool-specific overlay, and no
+`gemini` adapter exists.
 
 ### Recognized files vs. unknown files
 

@@ -9,6 +9,21 @@ While the project is pre-1.0, minor version bumps may include breaking changes;
 the adapter wire protocol follows its own "freeze the frame, grow capabilities"
 compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
+## [Unreleased]
+
+### Changed
+
+- **Gemini CLI → Antigravity CLI.** Google retired Gemini CLI on 2026-06-18
+  in favor of Antigravity CLI (`agy`); only enterprise Gemini Code Assist
+  licenses retain Gemini CLI access. The planned-adapter roadmap entry is now
+  Antigravity CLI, and the `GEMINI.md` root overlay in canonical sources now
+  scopes its `agents-md` node to the `antigravity` target instead of the
+  never-shipped `gemini` one (Antigravity still reads `GEMINI.md` as its
+  tool-specific overlay, so the recognized filename is unchanged; the node id
+  stays `gemini`, filename-derived). No behavior change for existing
+  workspaces — neither target has a bundled adapter yet, so the overlay was
+  and remains inert until the Antigravity adapter lands.
+
 ## [0.4.0] - 2026-07-02
 
 ### Added
