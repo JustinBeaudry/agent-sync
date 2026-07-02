@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "ee21f899aa84",
+  "session_id": "b9230637-d4f9-4984-bec8-4b84c193c615",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-02T13:33:46.410476Z",
+  "branch": "chore/gemini-to-antigravity",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md",
+    "internal/ir/decode_test.go",
+    "internal/ir/decode.go",
+    "docs/spec/ir-v1.md",
+    "CHANGELOG.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5",
+  "turn_id": "87e36faa24bb",
+  "checkpoint_transcript_start": 134,
+  "transcript_lines_at_start": 134,
+  "token_usage": {
+    "input_tokens": 1958,
+    "cache_creation_tokens": 139631,
+    "cache_read_tokens": 2930303,
+    "output_tokens": 17770,
+    "api_call_count": 26
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-02T13:33:46.398015Z",
+    "agent_lines": 36,
+    "agent_removed": 11,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 36,
+    "total_lines_changed": 47,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
