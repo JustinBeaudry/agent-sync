@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "505fa85d3b49",
+  "strategy": "manual-commit",
+  "branch": "feat/skill-descriptions-upstream-update",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "docs/spec/ir-v1.md",
+    "internal/ir/decode.go",
+    "internal/ir/decode_test.go",
+    "internal/ir/kinds.go",
+    "internal/ir/kinds_test.go",
+    "internal/ir/types.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/50/5fa85d3b49/0/metadata.json",
+      "transcript": "/50/5fa85d3b49/0/full.jsonl",
+      "content_hash": "/50/5fa85d3b49/0/content_hash.txt",
+      "prompt": "/50/5fa85d3b49/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 57998,
+    "cache_creation_tokens": 4039722,
+    "cache_read_tokens": 33657659,
+    "output_tokens": 143209,
+    "api_call_count": 171
+  }
+}
