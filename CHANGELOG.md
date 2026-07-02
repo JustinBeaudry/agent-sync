@@ -9,9 +9,24 @@ While the project is pre-1.0, minor version bumps may include breaking changes;
 the adapter wire protocol follows its own "freeze the frame, grow capabilities"
 compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
-## [Unreleased]
+## [0.4.0] - 2026-07-02
 
 ### Added
+
+- **User-scope Cursor rule composition**
+  (`compose.cursor-rules-from-user`, opt-in). A project manifest can fold the
+  user-scope (`~`) manifest's Cursor `rule` nodes into its own sync, so global
+  Cursor rules take effect through the project's `.cursor/rules/` — Cursor has
+  no file-addressable user-global rules home, and those nodes were previously
+  surfaced only as inert-at-user-scope warnings. Composed rules are owned by
+  the project ledger, so dropping the rule (or the opt-in) reclaims them via
+  the normal orphan path. Id collisions resolve project-wins with a per-id
+  shadow warning. Composition is best-effort: a missing or malformed user
+  manifest never fails the project sync, and remote user canonicals are never
+  fetched during composition. `validate`, `watch`, and `sync --workspace` see
+  the same composed desired state, so composed rules are neither reported as
+  drift nor deleted; when composition fires, the now-misleading "rule is inert
+  at user scope" coverage warning is suppressed.
 
 - **Cross-adapter shared-subdir co-ownership ("ADV-1")** + **pi `skill`
   support**. codex and pi both read the shared `.agents/skills/` tree; with
