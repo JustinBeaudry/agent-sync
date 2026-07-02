@@ -1,0 +1,165 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "3a06dfae8a2e",
+  "session_id": "b9230637-d4f9-4984-bec8-4b84c193c615",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-02T14:07:58.793642Z",
+  "branch": "fix/sync-silent-noop-hint",
+  "checkpoints_count": 2,
+  "save_step_count": 1,
+  "files_touched": [
+    "CHANGELOG.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5",
+  "turn_id": "a09b962ef92a",
+  "token_usage": {
+    "input_tokens": 44896,
+    "cache_creation_tokens": 495704,
+    "cache_read_tokens": 17344546,
+    "output_tokens": 66078,
+    "api_call_count": 118
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-compound-engineering:ce-resolve-pr-feedback-2026-07-02T13:35:05.73882Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-resolve-pr-feedback"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "e6f9297f5ccf",
+      "timestamp": "2026-07-02T13:35:05.73882Z",
+      "native": {
+        "command": "/compound-engineering:ce-resolve-pr-feedback"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/compound-engineering:ce-resolve-pr-feedback",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_016teJ9TBgrBGa2oMyK1Q8ej",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-clean-gone-branches"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "a09b962ef92a",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 399,
+        "end": 400,
+        "entry_ids": [
+          "8f6b83b1-338a-49f1-9244-2742c92f59d7"
+        ],
+        "tool_use_id": "toolu_016teJ9TBgrBGa2oMyK1Q8ej"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_016teJ9TBgrBGa2oMyK1Q8ej"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-clean-gone-branches",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01BL7RkdDBs4ACSMpkDSFbFM",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-debug"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "a09b962ef92a",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 425,
+        "end": 426,
+        "entry_ids": [
+          "9d32332b-39d9-4f06-94b3-06269316f257"
+        ],
+        "tool_use_id": "toolu_01BL7RkdDBs4ACSMpkDSFbFM"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01BL7RkdDBs4ACSMpkDSFbFM"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-debug",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_0117vqgTqgrnV2pmqLGGHEQo",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-commit-push-pr"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "a09b962ef92a",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 630,
+        "end": 631,
+        "entry_ids": [
+          "12973a69-3dfc-49b4-ac0c-078a19316f1f"
+        ],
+        "tool_use_id": "toolu_0117vqgTqgrnV2pmqLGGHEQo"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_0117vqgTqgrnV2pmqLGGHEQo"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-commit-push-pr",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-02T14:07:58.775886Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 174,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 174,
+    "total_lines_changed": 193,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
