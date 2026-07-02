@@ -124,6 +124,7 @@ Closing delimiter is the same. The block is parsed with
 | `required` | bool | `false` | Capability matrix MUST mark this node `supported` for every targeted adapter; failure means sync rejects with `required_unmet`. |
 | `targets` | `[]string` | `[]` (means: all adapters) | Restrict which adapters see this node. Values must match a registered adapter name; unknown names are decode errors. |
 | `version` | int | `1` | Author-controlled monotonic counter. Adapters MAY use it for migration (e.g., "this rule moved from path A to B between v1 and v2"). |
+| `description` | string | `""` | Short human-readable summary of the node. Authorable on any markdown kind, but rendered today only for skills (emitted into the target tool's SKILL.md frontmatter for skill discovery). Empty when unauthored. |
 
 Unknown frontmatter fields are decode errors. `x-` prefixed fields are
 reserved for forward-compat experimentation and are tolerated but ignored.
@@ -133,7 +134,9 @@ reserved for forward-compat experimentation and are tolerated but ignored.
 `mcp-server-entry` (JSON) carries metadata in the body of the file via
 reserved top-level keys `__agentsync_required`, `__agentsync_targets`,
 `__agentsync_version` (so the file stays valid JSON). These keys are stripped
-from the body the adapter receives.
+from the body the adapter receives. There is no reserved
+`__agentsync_description` key — `description` is a markdown-frontmatter
+field only (JSON and TOML nodes decode with an empty Description).
 
 `plugin-reference` (TOML) is decoded with default metadata (`required:
 false`, `targets: []`, `version: 1`) in v1. Reserved-key extraction in
@@ -150,13 +153,14 @@ The decoder produces `[]Node` in a deterministic order (sorted by
 
 ```go
 type Node struct {
-    ID         string         // e.g. "no-pr-on-friday"
-    Kind       Kind           // e.g. KindRule
-    Version    int            // from frontmatter, default 1
-    Required   bool           // from frontmatter, default false
-    Targets    []string       // from frontmatter, empty == all
-    Provenance Provenance     // where in the canonical repo this came from
-    Body       []byte         // the post-frontmatter content (or full file for mcp/plugin)
+    ID          string         // e.g. "no-pr-on-friday"
+    Kind        Kind           // e.g. KindRule
+    Version     int            // from frontmatter, default 1
+    Required    bool           // from frontmatter, default false
+    Targets     []string       // from frontmatter, empty == all
+    Description string         // from frontmatter, "" when unauthored
+    Provenance  Provenance     // where in the canonical repo this came from
+    Body        []byte         // the post-frontmatter content (or full file for mcp/plugin)
 }
 
 type Provenance struct {

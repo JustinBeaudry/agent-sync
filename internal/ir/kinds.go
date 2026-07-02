@@ -17,13 +17,22 @@ import (
 // author didn't set.
 //
 // Field defaults match the spec:
-//   - Required: false
-//   - Targets:  empty slice (means "all adapters")
-//   - Version:  1
+//   - Required:    false
+//   - Targets:     empty slice (means "all adapters")
+//   - Version:     1
+//   - Description: "" (unauthored)
 type Frontmatter struct {
 	Required bool     `yaml:"required" json:"__agentsync_required"`
 	Targets  []string `yaml:"targets"  json:"__agentsync_targets"`
 	Version  int      `yaml:"version"  json:"__agentsync_version"`
+
+	// Description is a short human-readable summary of the node,
+	// authorable on any markdown kind but skill-relevant: it is rendered
+	// today only for skills (SKILL.md frontmatter → target-tool skill
+	// listings). Empty when unauthored. Markdown YAML frontmatter only in
+	// v1 — there is no reserved `__agentsync_description` JSON key, hence
+	// the `json:"-"` tag.
+	Description string `yaml:"description" json:"-"`
 }
 
 // defaultFrontmatter returns a fresh Frontmatter with the documented

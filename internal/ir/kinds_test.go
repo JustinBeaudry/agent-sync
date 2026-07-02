@@ -44,6 +44,41 @@ func TestExtractMarkdownFrontmatter_AllFields(t *testing.T) {
 	}
 }
 
+func TestExtractMarkdownFrontmatter_DescriptionField(t *testing.T) {
+	t.Parallel()
+
+	body := []byte("---\ndescription: run the review loop\nrequired: true\n---\nbody\n")
+	fm, rest, err := extractMarkdownFrontmatter(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fm.Description != "run the review loop" {
+		t.Errorf("Description = %q, want %q", fm.Description, "run the review loop")
+	}
+	if !fm.Required {
+		t.Errorf("Required = false, want true (sibling fields must still parse)")
+	}
+	if strings.Contains(string(rest), "description:") {
+		t.Errorf("body still contains frontmatter: %q", rest)
+	}
+}
+
+func TestExtractMarkdownFrontmatter_XDescriptionNotAliased(t *testing.T) {
+	t.Parallel()
+
+	// `x-description:` is a forward-compat escape: it must parse (no
+	// unknown-field error) and be discarded — never aliased onto the
+	// first-class Description field.
+	body := []byte("---\nx-description: nope\n---\nbody\n")
+	fm, _, err := extractMarkdownFrontmatter(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fm.Description != "" {
+		t.Errorf("Description = %q, want empty (x-description must be discarded, not aliased)", fm.Description)
+	}
+}
+
 func TestExtractMarkdownFrontmatter_UnknownField(t *testing.T) {
 	t.Parallel()
 

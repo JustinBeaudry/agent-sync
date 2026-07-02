@@ -384,6 +384,108 @@ func TestDecode_VersionDefaultsToOne(t *testing.T) {
 	}
 }
 
+// TestDecode_SkillDescriptionFrontmatter guards R1 of the skill-descriptions
+// plan (docs/plans/2026-07-02-001): a canonical SKILL.md can author
+// `description:` in its frontmatter and the value lands on Node.Description;
+// existing description-less skills keep decoding exactly as today, and
+// frontmatter strictness around the new field is preserved.
+func TestDecode_SkillDescriptionFrontmatter(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		content  string
+		wantDesc string
+		wantErr  error
+	}{
+		{
+			name:     "authored description lands on the node",
+			content:  "---\ndescription: foo\n---\nSkill body.\n",
+			wantDesc: "foo",
+		},
+		{
+			name:     "no description decodes with empty Description",
+			content:  "Skill body.\n",
+			wantDesc: "",
+		},
+		{
+			name:    "unknown frontmatter key still rejected",
+			content: "---\ndescription: foo\nbogus_field: true\n---\nSkill body.\n",
+			wantErr: ErrUnknownFrontmatterField,
+		},
+		{
+			name:     "x-description parses and is discarded",
+			content:  "---\nx-description: bar\n---\nSkill body.\n",
+			wantDesc: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := makeCanonicalRepo(t, []canonicalFile{
+				{Path: "skills/desc-skill/SKILL.md", Content: tc.content},
+			})
+			nodes, _, err := Decode(repo.Repo, repo.SHA, DecodeOptions{})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Decode: %v", err)
+			}
+			skills := byKind(nodes)[KindSkill]
+			if len(skills) != 1 {
+				t.Fatalf("expected 1 skill node, got %d", len(skills))
+			}
+			if skills[0].Description != tc.wantDesc {
+				t.Errorf("Description = %q, want %q", skills[0].Description, tc.wantDesc)
+			}
+			// Frontmatter must still be stripped from the body (the
+			// contains-check also catches a leaked `x-description:`).
+			if strings.Contains(string(skills[0].Body), "description:") {
+				t.Errorf("body still contains frontmatter: %q", skills[0].Body)
+			}
+			if !strings.Contains(string(skills[0].Body), "Skill body.") {
+				t.Errorf("body lost its content: %q", skills[0].Body)
+			}
+		})
+	}
+}
+
+// TestDecode_DescriptionParsesOnAllFrontmatterKinds pins the U1 posture:
+// `description:` parses wherever markdown frontmatter parses (rules,
+// commands, agents-md), even though only skills render it today.
+func TestDecode_DescriptionParsesOnAllFrontmatterKinds(t *testing.T) {
+	t.Parallel()
+
+	repo := makeCanonicalRepo(t, []canonicalFile{
+		{Path: "AGENTS.md", Content: "---\ndescription: agents overview\n---\n# agents\n"},
+		{Path: "rules/described.md", Content: "---\ndescription: a described rule\n---\nrule body\n"},
+		{Path: "commands/described.md", Content: "---\ndescription: a described command\n---\ncommand body\n"},
+	})
+	nodes, _, err := Decode(repo.Repo, repo.SHA, DecodeOptions{})
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	want := map[Kind]string{
+		KindAgentsMD: "agents overview",
+		KindRule:     "a described rule",
+		KindCommand:  "a described command",
+	}
+	got := byKind(nodes)
+	for kind, wantDesc := range want {
+		if len(got[kind]) != 1 {
+			t.Fatalf("kind %q: got %d nodes, want 1", kind, len(got[kind]))
+		}
+		if got[kind][0].Description != wantDesc {
+			t.Errorf("kind %q: Description = %q, want %q", kind, got[kind][0].Description, wantDesc)
+		}
+	}
+}
+
 // TestDecode_EmptyOverlayIsAcceptedNotErrored guards thread #2: empty
 // CLAUDE.md / GEMINI.md overlays must not produce ErrEmptyAgentsMD.
 // That sentinel is canonical-AGENTS.md-specific.

@@ -74,6 +74,12 @@ type Node struct {
 	// registered adapters".
 	Targets []string
 
+	// Description is a short human-readable summary populated from the
+	// frontmatter `description:` field. Empty when the author didn't set
+	// one. Authorable on any kind that carries frontmatter; rendered
+	// today only for skills.
+	Description string
+
 	// Provenance points back to the canonical-repo file the node came from.
 	Provenance Provenance
 
