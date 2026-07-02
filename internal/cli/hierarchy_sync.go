@@ -54,10 +54,15 @@ type hierarchySyncOptions struct {
 // under the home directory. The orchestration is a CLI-layer loop over the
 // unmodified engine.Sync; each scope runs against its own fsroot root and so
 // writes its own staging and ledger.
-func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string, opts hierarchySyncOptions, now time.Time) ([]scopeOutcome, error) {
+//
+// The returned notice is non-empty only when the run produced zero emit scopes:
+// it explains why nothing was synced (user manifest needs --user, or no manifest
+// exists) so an empty run is never a silent no-op. It is advisory — exit code
+// stays 0.
+func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string, opts hierarchySyncOptions, now time.Time) ([]scopeOutcome, string, error) {
 	scopes, err := hierarchy.Discover(cwd, hierarchy.Options{Home: home, IncludeUser: opts.IncludeUser})
 	if err != nil {
-		return nil, fmt.Errorf("discover hierarchy: %w", err)
+		return nil, "", fmt.Errorf("discover hierarchy: %w", err)
 	}
 
 	// composeActive records whether Cursor-rule composition fired for any
@@ -72,7 +77,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		// must not keep emitting subsequent scopes. engine.Sync also respects ctx,
 		// but this stops the loop before the next scope's prepare/compose work.
 		if err := ctx.Err(); err != nil {
-			return outcomes, err
+			return outcomes, "", err
 		}
 		if !sc.Emit {
 			continue // read-only (user) scope shown elsewhere, not emitted
@@ -128,7 +133,26 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			}
 		}
 	}
-	return outcomes, nil
+	var notice string
+	if len(outcomes) == 0 {
+		notice = emptyRunNotice(scopes, cwd)
+	}
+	return outcomes, notice, nil
+}
+
+// emptyRunNotice explains a hierarchy sync that discovered zero emit scopes.
+// Without it the run prints an empty report and exits 0 — indistinguishable
+// from a successful no-op, which reads as "sync doesn't do anything". Two
+// cases: discovery found a user-home manifest but it is read-only without
+// --user (the plain-sync-never-writes-home invariant), or no manifest exists
+// at all.
+func emptyRunNotice(scopes []hierarchy.Scope, cwd string) string {
+	for _, sc := range scopes {
+		if sc.Level == hierarchy.LevelUser && !sc.Emit {
+			return fmt.Sprintf("manifest at %s is the user scope and a plain sync never writes to the home directory; run 'agent-sync sync --user' to sync it", sc.ManifestPath)
+		}
+	}
+	return fmt.Sprintf("no .agent-sync.yaml found from %s up to the project root; run 'agent-sync init' to create one", cwd)
 }
 
 // dropWarning returns ws without any warning matching (target, kind, level).
@@ -379,7 +403,13 @@ func scopeExitCode(o scopeOutcome) int {
 // level and root, then either the scope's report text (success) or its error
 // line (prepare/sync failure). Mirrors the spacing of renderSummary in
 // cmd_sync.go (report.RenderText already carries the body's formatting).
-func renderHierarchyText(w io.Writer, outcomes []scopeOutcome) error {
+// A non-empty notice (zero-emit run) renders as a single explanatory line.
+func renderHierarchyText(w io.Writer, outcomes []scopeOutcome, notice string) error {
+	if notice != "" {
+		if _, err := fmt.Fprintf(w, "nothing to sync: %s\n", notice); err != nil {
+			return err
+		}
+	}
 	for i, o := range outcomes {
 		if i > 0 {
 			if _, err := fmt.Fprintln(w); err != nil {
@@ -422,7 +452,9 @@ type hierarchyScopeJSON struct {
 // renderHierarchyJSON writes the aggregate machine-readable document: one
 // entry per emit scope plus the run-wide exit code. The embedded summary uses
 // the report.Summary JSON tags (the same shape report.MarshalJSON emits).
-func renderHierarchyJSON(w io.Writer, outcomes []scopeOutcome) error {
+// notice is additive (omitempty) and set only on zero-emit runs, so existing
+// schema_version 1 consumers are unaffected.
+func renderHierarchyJSON(w io.Writer, outcomes []scopeOutcome, notice string) error {
 	scopes := make([]hierarchyScopeJSON, 0, len(outcomes))
 	for _, o := range outcomes {
 		entry := hierarchyScopeJSON{
@@ -449,10 +481,12 @@ func renderHierarchyJSON(w io.Writer, outcomes []scopeOutcome) error {
 	doc := struct {
 		SchemaVersion int                  `json:"schema_version"`
 		Scopes        []hierarchyScopeJSON `json:"scopes"`
+		Notice        string               `json:"notice,omitempty"`
 		ExitCode      int                  `json:"exit_code"`
 	}{
 		SchemaVersion: 1,
 		Scopes:        scopes,
+		Notice:        notice,
 		ExitCode:      hierarchyExitCode(outcomes),
 	}
 	data, err := json.Marshal(doc)

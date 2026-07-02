@@ -90,7 +90,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
 			}
-			outcomes, err := runHierarchySync(cmd.Context(), rc, cwd, home,
+			outcomes, notice, err := runHierarchySync(cmd.Context(), rc, cwd, home,
 				hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts}, now)
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
@@ -106,10 +106,10 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			}
 
 			if rc.Access.Output == OutputJSON {
-				if err := renderHierarchyJSON(cmd.OutOrStdout(), outcomes); err != nil {
+				if err := renderHierarchyJSON(cmd.OutOrStdout(), outcomes, notice); err != nil {
 					return err
 				}
-			} else if err := renderHierarchyText(cmd.OutOrStdout(), outcomes); err != nil {
+			} else if err := renderHierarchyText(cmd.OutOrStdout(), outcomes, notice); err != nil {
 				return err
 			}
 			if code := hierarchyExitCode(outcomes); code != 0 {
