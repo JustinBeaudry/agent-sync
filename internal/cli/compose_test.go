@@ -54,7 +54,7 @@ func TestCompose_SuppressesUserRuleWarningWhenActive(t *testing.T) {
 
 	rc := newTestRuntime()
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
-	outcomes, err := runHierarchySync(context.Background(), rc, repo, home,
+	outcomes, _, err := runHierarchySync(context.Background(), rc, repo, home,
 		hierarchySyncOptions{IncludeUser: true, EngineOpts: composeEngineOpts(rc, now)}, now)
 	if err != nil {
 		t.Fatalf("runHierarchySync: %v", err)
@@ -140,7 +140,7 @@ func TestCompose_CollidingUserRulesDoNotSuppressWarning(t *testing.T) {
 
 	rc := newTestRuntime()
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
-	outcomes, err := runHierarchySync(context.Background(), rc, repo, home,
+	outcomes, _, err := runHierarchySync(context.Background(), rc, repo, home,
 		hierarchySyncOptions{IncludeUser: true, EngineOpts: composeEngineOpts(rc, now)}, now)
 	if err != nil {
 		t.Fatalf("runHierarchySync: %v", err)
@@ -168,7 +168,7 @@ func TestCompose_KeepsUserRuleWarningWhenInactive(t *testing.T) {
 
 	rc := newTestRuntime()
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
-	outcomes, err := runHierarchySync(context.Background(), rc, repo, home,
+	outcomes, _, err := runHierarchySync(context.Background(), rc, repo, home,
 		hierarchySyncOptions{IncludeUser: true, EngineOpts: composeEngineOpts(rc, now)}, now)
 	if err != nil {
 		t.Fatalf("runHierarchySync: %v", err)

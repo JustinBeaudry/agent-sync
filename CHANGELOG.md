@@ -11,6 +11,19 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A zero-emit `sync` now explains itself instead of printing an empty
+  report.** Running plain `sync` where the only discovered manifest is the
+  user-home one (e.g. from `~` itself, or any directory with no project
+  manifest) silently emitted nothing — exit 0, `"scopes":[]`, no hint — because
+  the user scope is read-only without `--user` (the plain-sync-never-writes-home
+  invariant) and non-emit scopes were dropped without a word. The run now
+  carries an advisory notice (additive `notice` field in the JSON document,
+  `nothing to sync: …` line in text mode): it points at `agent-sync sync
+  --user` when a user manifest was found, or at `agent-sync init` when no
+  manifest exists at all. Exit code and write behavior are unchanged.
+
 ### Changed
 
 - **Gemini CLI → Antigravity CLI.** Google retired Gemini CLI on 2026-06-18

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,7 +72,7 @@ func TestRunHierarchySyncEmitsEachScope(t *testing.T) {
 	rc := newTestRuntime()
 	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
 
-	outcomes, err := runHierarchySync(
+	outcomes, _, err := runHierarchySync(
 		context.Background(), rc, nested, home,
 		hierarchySyncOptions{IncludeUser: false, EngineOpts: engine.Options{
 			Mode:   report.ModeAtomic,
@@ -159,7 +160,7 @@ func TestRunHierarchySyncContinuesPastMalformedScope(t *testing.T) {
 	rc := newTestRuntime()
 	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
 
-	outcomes, err := runHierarchySync(
+	outcomes, _, err := runHierarchySync(
 		context.Background(), rc, nested, home,
 		hierarchySyncOptions{IncludeUser: false, EngineOpts: engine.Options{
 			Mode:   report.ModeAtomic,
@@ -228,7 +229,7 @@ func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
 	rc := newTestRuntime()
 	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
 
-	outcomes, err := runHierarchySync(
+	outcomes, _, err := runHierarchySync(
 		context.Background(), rc, nested, home,
 		hierarchySyncOptions{IncludeUser: false, EngineOpts: engine.Options{
 			Mode:   report.ModeAtomic,
@@ -266,7 +267,7 @@ func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
 
 	// The warning surfaces in text output, scoped under the directory header.
 	var buf bytes.Buffer
-	if err := renderHierarchyText(&buf, outcomes); err != nil {
+	if err := renderHierarchyText(&buf, outcomes, ""); err != nil {
 		t.Fatalf("renderHierarchyText: %v", err)
 	}
 	out := buf.String()
@@ -278,7 +279,7 @@ func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
 	// aggregate JSON (e.g. "level":"directory"), not as a raw integer
 	// ("level":2), staying consistent with the CLI's other level fields.
 	var jbuf bytes.Buffer
-	if err := renderHierarchyJSON(&jbuf, outcomes); err != nil {
+	if err := renderHierarchyJSON(&jbuf, outcomes, ""); err != nil {
 		t.Fatalf("renderHierarchyJSON: %v", err)
 	}
 	js := jbuf.String()
@@ -309,6 +310,100 @@ func TestSyncCommandUserFlag(t *testing.T) {
 		t.Fatalf("sync --user failed: %v\nstderr: %s", err, errOut)
 	}
 	mustExist(t, filepath.Join(home, ".claude", "skills", "agent-sync-user-skill", "SKILL.md"))
+}
+
+// TestSyncCommandHomeManifestOnlyHintsUserFlag guards the silent-no-op UX gap:
+// a plain `sync` run from the home directory itself, where the only manifest is
+// ~/.agent-sync.yaml, discovers the user scope read-only (no --user) and emits
+// nothing. The run must stay exit 0 and write nothing under home, but the report
+// must say WHY it did nothing and point at `sync --user` instead of printing an
+// empty document.
+func TestSyncCommandHomeManifestOnlyHintsUserFlag(t *testing.T) {
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errOut, err := runSyncHierarchy(t, home, home)
+	if err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+
+	var doc struct {
+		Notice   string            `json:"notice"`
+		Scopes   []json.RawMessage `json:"scopes"`
+		ExitCode int               `json:"exit_code"`
+	}
+	if uerr := json.Unmarshal([]byte(out), &doc); uerr != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", uerr, out)
+	}
+	if len(doc.Scopes) != 0 {
+		t.Errorf("got %d scopes, want 0 (user scope is read-only without --user)", len(doc.Scopes))
+	}
+	if doc.ExitCode != 0 {
+		t.Errorf("exit_code = %d, want 0", doc.ExitCode)
+	}
+	if !strings.Contains(doc.Notice, "--user") {
+		t.Errorf("notice %q does not point at --user", doc.Notice)
+	}
+	// The hint must not change the safety invariant: nothing written under home.
+	mustNotExist(t, filepath.Join(home, ".claude"))
+}
+
+// TestSyncCommandNoManifestHintsInit: a sync that discovers no manifest at all
+// (no project, no user) must explain itself and point at `agent-sync init`
+// rather than printing an empty document.
+func TestSyncCommandNoManifestHintsInit(t *testing.T) {
+	home := t.TempDir()
+	cwd := filepath.Join(home, "elsewhere")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errOut, err := runSyncHierarchy(t, cwd, home)
+	if err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+
+	var doc struct {
+		Notice   string            `json:"notice"`
+		Scopes   []json.RawMessage `json:"scopes"`
+		ExitCode int               `json:"exit_code"`
+	}
+	if uerr := json.Unmarshal([]byte(out), &doc); uerr != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", uerr, out)
+	}
+	if len(doc.Scopes) != 0 {
+		t.Errorf("got %d scopes, want 0", len(doc.Scopes))
+	}
+	if !strings.Contains(doc.Notice, "agent-sync init") {
+		t.Errorf("notice %q does not point at agent-sync init", doc.Notice)
+	}
+}
+
+// TestSyncCommandNoticeAbsentWhenScopesEmit: the empty-run notice is strictly
+// for zero-emit runs; a normal sync must not carry one.
+func TestSyncCommandNoticeAbsentWhenScopesEmit(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+
+	out, errOut, err := runSyncHierarchy(t, nested, home)
+	if err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+
+	var doc struct {
+		Notice string            `json:"notice"`
+		Scopes []json.RawMessage `json:"scopes"`
+	}
+	if uerr := json.Unmarshal([]byte(out), &doc); uerr != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", uerr, out)
+	}
+	if len(doc.Scopes) == 0 {
+		t.Fatal("expected emit scopes, got none")
+	}
+	if doc.Notice != "" {
+		t.Errorf("notice = %q, want empty on a run with emit scopes", doc.Notice)
+	}
 }
 
 // TestSyncUserScope_ClaudeTargetsRealUserPaths is the U4 end-to-end proof:
@@ -600,7 +695,7 @@ func TestRenderHierarchyText(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	if err := renderHierarchyText(&buf, outcomes); err != nil {
+	if err := renderHierarchyText(&buf, outcomes, ""); err != nil {
 		t.Fatalf("renderHierarchyText: %v", err)
 	}
 	out := buf.String()
@@ -617,6 +712,19 @@ func TestRenderHierarchyText(t *testing.T) {
 	}
 }
 
+// TestRenderHierarchyTextNotice: a zero-emit run's notice renders as a single
+// explanatory line instead of empty output.
+func TestRenderHierarchyTextNotice(t *testing.T) {
+	var buf bytes.Buffer
+	if err := renderHierarchyText(&buf, nil, "manifest at /home/u/.agent-sync.yaml is the user scope and a plain sync never writes to the home directory; run 'agent-sync sync --user' to sync it"); err != nil {
+		t.Fatalf("renderHierarchyText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "nothing to sync:") || !strings.Contains(out, "sync --user") {
+		t.Errorf("text output missing notice line:\n%s", out)
+	}
+}
+
 func TestRenderHierarchyJSON(t *testing.T) {
 	outcomes := []scopeOutcome{
 		{
@@ -629,7 +737,7 @@ func TestRenderHierarchyJSON(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	if err := renderHierarchyJSON(&buf, outcomes); err != nil {
+	if err := renderHierarchyJSON(&buf, outcomes, ""); err != nil {
 		t.Fatalf("renderHierarchyJSON: %v", err)
 	}
 	var doc struct {
