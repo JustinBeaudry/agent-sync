@@ -95,7 +95,7 @@ func TestBundledAdapter_SupportedSubsetEmitsNoWarnings(t *testing.T) {
 		{"id":"lsp","kind":"mcp-server-entry","body":"{\"command\":\"node\"}"},
 		{"id":"team","kind":"agents-md","targets":["cursor"],"body":"## Build"}
 	]}`)
-	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "project")
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "project", "", "")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -241,7 +241,7 @@ func newServerForTest() *adapterkit.Server {
 		}, nil
 	})
 	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
-		return handleEmit(ctx, params, scope)
+		return handleEmit(ctx, params, scope, "", "")
 	})
 	return server
 }

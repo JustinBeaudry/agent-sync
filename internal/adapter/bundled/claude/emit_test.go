@@ -573,7 +573,7 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 	res, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     raw,
-	}, "project")
+	}, "project", "", "")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -606,7 +606,7 @@ func TestEmit_HandleEmit_RejectsMalformedIRJSON(t *testing.T) {
 	_, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{not json}`),
-	}, "project")
+	}, "project", "", "")
 	if err == nil {
 		t.Fatal("malformed IR JSON must be rejected")
 	}
@@ -625,7 +625,7 @@ func TestEmit_HandleEmit_HonorsContextCancellation(t *testing.T) {
 	_, err := handleEmit(ctx, adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{"nodes":[{"id":"x","kind":"rule","body":"x"}]}`),
-	}, "project")
+	}, "project", "", "")
 	if err == nil {
 		t.Fatal("cancelled context must abort emit")
 	}
@@ -677,7 +677,7 @@ func TestHandleEmit_UserScopePaths(t *testing.T) {
 		{"id":"actual-plane","kind":"mcp-server-entry","body":{"command":"uvx","args":["plane"]}}
 	]}`)
 
-	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: raw}, "user")
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: raw}, "user", "", "")
 	if err != nil {
 		t.Fatalf("handleEmit(user): %v", err)
 	}

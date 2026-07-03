@@ -80,7 +80,7 @@ func (e *emittedOps) wireOps() ([]json.RawMessage, error) {
 }
 
 // handleEmit is the OnEmit handler the bundled adapter registers.
-func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string) (adapterkit.EmitResult, error) {
+func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope, sourceURL, sourceCommit string) (adapterkit.EmitResult, error) {
 	doc, err := decodeIRDocument(params.IR)
 	if err != nil {
 		return adapterkit.EmitResult{}, &adapterkit.Error{
@@ -95,6 +95,8 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string)
 
 	emitted := &emittedOps{}
 	state := emitState{
+		sourceURL:       sourceURL,
+		sourceCommit:    sourceCommit,
 		emittedFilePath: map[string]struct{}{},
 		paths:           resolvePathSet(scope),
 	}
@@ -138,6 +140,13 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string)
 // last-write-wins. paths hold the scope-resolved tool-owned destinations (only
 // agents-md is scope-dependent).
 type emitState struct {
+	// sourceURL / sourceCommit are the session-level source identity from
+	// InitializeParams (audit-safe canonical URL or local path + resolved
+	// SHA), used to render the managed header. A node-level override
+	// (composed nodes) wins over these — see prependHeader.
+	sourceURL    string
+	sourceCommit string
+
 	emittedFilePath map[string]struct{}
 	paths           pathSet
 }
