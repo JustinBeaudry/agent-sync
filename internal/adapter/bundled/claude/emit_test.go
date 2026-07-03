@@ -173,7 +173,13 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	}
 
 	skillOp := findWriteFile(t, ops, ".claude/skills/agent-sync-coder/SKILL.md")
-	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by agent-sync") {
+	if !strings.HasPrefix(string(skillOp.Content), "---\nname: agent-sync-coder\n") {
+		t.Errorf("SKILL.md must start with frontmatter at byte 0; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "description: ") {
+		t.Errorf("SKILL.md frontmatter missing description key; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("skill SKILL.md missing managed header; got %q", skillOp.Content)
 	}
 
@@ -787,4 +793,20 @@ func jsonQuote(s string) string {
 		panic(err)
 	}
 	return string(b)
+}
+
+// TestEmitSkill_AuthoredDescription: an authored description lands in the
+// emitted frontmatter verbatim (quoted scalar), replacing the fallback.
+func TestEmitSkill_AuthoredDescription(t *testing.T) {
+	t.Parallel()
+
+	_, ops := emitFixture(t, "skill-described.json")
+	skillOp := findWriteFile(t, ops, ".claude/skills/agent-sync-coder/SKILL.md")
+	content := string(skillOp.Content)
+	if !strings.Contains(content, `description: "Reviews and writes production code: tests first"`) {
+		t.Errorf("authored description missing from frontmatter; got %q", content)
+	}
+	if strings.Contains(content, "no description authored") {
+		t.Errorf("fallback description leaked despite authored value; got %q", content)
+	}
 }
