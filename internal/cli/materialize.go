@@ -26,6 +26,13 @@ type materialized struct {
 	Nodes  []ir.Node
 	Skills map[string]ir.Skill
 	Commit string // the resolved SHA, stamped into the report + staging
+	// SourceURL is the audit-safe identity of the canonical source: the
+	// cache-canonicalized URL for url sources (userinfo, query, and
+	// fragment stripped — never the raw manifest field) or the path
+	// string for local_dir / local_path sources. Threaded into
+	// engine.Request.SourceURL and, for composed nodes, per-node
+	// overrides.
+	SourceURL string
 	// Warnings are non-fatal decode signals (from ir.Decode and
 	// ir.SkillsByID) — e.g. a missing AGENTS.md or an unreadable skill
 	// asset. The caller surfaces them so they are not silently dropped.
@@ -79,7 +86,12 @@ func materializeLocalDir(m *manifest.Manifest, opts materializeOptions) (materia
 	if err != nil {
 		return materialized{}, fmt.Errorf("cli: local_dir source: %w", err)
 	}
-	return decodeAt(reader, "")
+	mat, err := decodeAt(reader, "")
+	if err != nil {
+		return materialized{}, err
+	}
+	mat.SourceURL = m.Canonical.LocalDir
+	return mat, nil
 }
 
 func materializeLocal(m *manifest.Manifest) (materialized, error) {
@@ -91,7 +103,12 @@ func materializeLocal(m *manifest.Manifest) (materialized, error) {
 		return materialized{}, fmt.Errorf("cli: open local canonical %q: %w", m.Canonical.LocalPath, err)
 	}
 	defer func() { _ = repo.Close() }()
-	return decodeAt(repo, m.Canonical.Commit)
+	mat, err := decodeAt(repo, m.Canonical.Commit)
+	if err != nil {
+		return materialized{}, err
+	}
+	mat.SourceURL = m.Canonical.LocalPath
+	return mat, nil
 }
 
 func materializeURL(ctx context.Context, m *manifest.Manifest, opts materializeOptions) (materialized, error) {
@@ -135,7 +152,15 @@ func materializeURL(ctx context.Context, m *manifest.Manifest, opts materializeO
 		return materialized{}, fmt.Errorf("cli: open materialized repo: %w", err)
 	}
 	defer func() { _ = repo.Close() }()
-	return decodeAt(repo, res.ResolvedSHA)
+	mat, err := decodeAt(repo, res.ResolvedSHA)
+	if err != nil {
+		return materialized{}, err
+	}
+	// The canonicalized form only — cache.Canonicalize strips userinfo,
+	// query, and fragment, so a token-bearing manifest URL can never reach
+	// an emitted header (plan U2 security rule).
+	mat.SourceURL = canonical
+	return mat, nil
 }
 
 // decodeAt decodes any SourceTree at ref. ref is a 40-hex commit SHA for

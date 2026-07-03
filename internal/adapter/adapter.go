@@ -25,6 +25,18 @@ type SessionOptions struct {
 	// "project" (the back-compat default).
 	Scope string
 
+	// SourceURL identifies the canonical source of this session's IR,
+	// sent as InitializeParams.source_url. Callers MUST pass the
+	// audit-safe form (cache-canonicalized URL or local source path),
+	// never a raw manifest URL that may embed credentials. Optional and
+	// additive: empty omits the field on the wire.
+	SourceURL string
+
+	// SourceCommit is the resolved canonical commit SHA for this
+	// session's IR, sent as InitializeParams.source_commit. Empty for
+	// working-tree (local_dir) sources and omitted on the wire.
+	SourceCommit string
+
 	// Timeouts overrides DefaultSubprocessTimeouts on a per-session
 	// basis. Zero fields fall back to defaults.
 	Timeouts SubprocessTimeouts

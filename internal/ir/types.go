@@ -80,6 +80,17 @@ type Node struct {
 	// today only for skills.
 	Description string
 
+	// SourceURL and SourceCommit are per-node source overrides, set only
+	// for nodes injected from another scope's canonical source (e.g.
+	// user-scope Cursor rules composed into a project sync). Empty means
+	// "inherit the session-level source". SourceURL always carries the
+	// audit-safe form: the cache-canonicalized URL for git URL sources
+	// (userinfo, query, and fragment stripped) or the path string for
+	// local sources; SourceCommit is the resolved commit SHA, empty for
+	// working-tree (local_dir) sources.
+	SourceURL    string
+	SourceCommit string
+
 	// Provenance points back to the canonical-repo file the node came from.
 	Provenance Provenance
 

@@ -53,6 +53,10 @@ func (s *AdapterSession) Initialize(ctx context.Context) (*contract.InitializeRe
 		ReservedPrefix:   s.adapter.Manifest.ReservedPrefix,
 		IRVersion:        s.options.IRVersion,
 		Scope:            scope,
+		// Additive source metadata (plan U2): both fields are omitempty,
+		// so a session without source identity sends the pre-0.5 shape.
+		SourceURL:    s.options.SourceURL,
+		SourceCommit: s.options.SourceCommit,
 	}
 
 	resp, err := s.requestResponse(rctx, id, contract.MethodInitialize, params, contract.MethodInitialize, timeout)

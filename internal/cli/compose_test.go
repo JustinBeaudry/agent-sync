@@ -11,6 +11,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/report"
 )
 
@@ -560,6 +561,59 @@ func TestCompose_SingleScopeSyncPreservesComposedRules(t *testing.T) {
 	}
 	mustExist(t, rulePath(repo, "a")) // preserved: single-scope path composes now
 	mustExist(t, rulePath(repo, "c"))
+}
+
+// TestCompose_ComposedNodesCarryUserSourceOverride is the U2 per-node
+// provenance guard for the plan's composed-provenance open question: nodes
+// composed from the USER scope's canonical source must carry their own
+// SourceURL/SourceCommit override (here: the user local_dir path and an
+// empty commit — a working-tree source has no pin), while the project's
+// native nodes keep empty overrides and inherit the session-level source.
+func TestCompose_ComposedNodesCarryUserSourceOverride(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/a.md", "user rule a\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := manifest.LoadFile(filepath.Join(repo, ".agent-sync.yaml"), manifest.LoadOptions{NonInteractive: true})
+	if err != nil {
+		t.Fatalf("load project manifest: %v", err)
+	}
+	req := engine.Request{
+		Targets: []string{cursorTarget},
+		Nodes:   []ir.Node{{ID: "c", Kind: ir.KindRule, Version: 1, Body: []byte("project rule c\n")}},
+	}
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+	if !applyCursorComposition(context.Background(), rc, &req, m, "project", home, now) {
+		t.Fatal("composition did not fire")
+	}
+
+	var sawComposed, sawProject bool
+	for _, n := range req.Nodes {
+		switch n.ID {
+		case "a":
+			sawComposed = true
+			if n.SourceURL != ".agents" {
+				t.Errorf("composed node SourceURL = %q, want user source path %q", n.SourceURL, ".agents")
+			}
+			if n.SourceCommit != "" {
+				t.Errorf("composed node SourceCommit = %q, want empty (local_dir user source has no pin)", n.SourceCommit)
+			}
+		case "c":
+			sawProject = true
+			if n.SourceURL != "" || n.SourceCommit != "" {
+				t.Errorf("native project node must keep empty source override, got url=%q commit=%q", n.SourceURL, n.SourceCommit)
+			}
+		}
+	}
+	if !sawComposed || !sawProject {
+		t.Fatalf("expected both composed and project nodes, got %+v", req.Nodes)
+	}
 }
 
 // TestCompose_Idempotent: two consecutive composed syncs leave the composed

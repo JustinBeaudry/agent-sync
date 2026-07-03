@@ -129,6 +129,7 @@ func prepareScope(ctx context.Context, rc *runtimeContext, scopeRoot, manifestPa
 		Nodes:         mat.Nodes,
 		Skills:        mat.Skills,
 		Commit:        mat.Commit,
+		SourceURL:     mat.SourceURL,
 		Options:       engine.Options{Now: func() time.Time { return now }, Logger: rc.Logger},
 	}
 	return prepared{

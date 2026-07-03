@@ -47,6 +47,12 @@ func runAdapter(ctx context.Context, req Request, target string) (emitOutcome, e
 		WorkspaceRoot: req.WorkspacePath,
 		IRVersion:     "v1",
 		Scope:         req.Scope,
+		// Session source metadata (plan U2): Request.SourceURL is the
+		// audit-safe canonical form by contract (see its doc comment);
+		// Commit is the resolved canonical SHA, empty for working-tree
+		// (local_dir) sources.
+		SourceURL:    req.SourceURL,
+		SourceCommit: req.Commit,
 	})
 	if err != nil {
 		return emitOutcome{}, fmt.Errorf("engine: new session %q: %w", target, err)

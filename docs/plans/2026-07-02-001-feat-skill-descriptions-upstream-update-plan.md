@@ -279,6 +279,8 @@ sequenceDiagram
 
 - **Composed Cursor rules carry the wrong source header (per-node vs session provenance).** The KTD's "one canonical source per session" premise is false since PR #35: `applyCursorComposition` (`internal/cli/hierarchy_sync.go`) folds user-manifest rule nodes into the project scope's request, so a session can carry nodes from two canonical sources — and session-level `source_url`/`source_commit` would stamp composed user rules in `.cursor/rules/` with the *project's* provenance line. Options with real tradeoffs: per-node provenance override on composed nodes (accurate, but grows the wire node), or accept session-level as a documented approximation for composed nodes (simple, but the header lies for that subset). Decide before or during U2; U3's header rendering inherits the choice. (feasibility review, P1)
 
+  **Resolved (2026-07-02, U2): per-node override.** `ir.Node` gains optional `SourceURL`/`SourceCommit`; the wire node carries them additive/omitempty; `composeUserRules` stamps composed nodes from the user scope's materialized source (audit-safe canonical form). Header rendering (U3) prefers node-level over session-level.
+
 ---
 
 ## Sources & Research

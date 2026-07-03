@@ -300,6 +300,12 @@ func composeUserRules(ctx context.Context, rc *runtimeContext, user hierarchy.Sc
 		// stays Cursor-only, matching the flag name and docs. n is a range copy;
 		// reassigning its Targets does not mutate the source IR.
 		n.Targets = []string{cursorTarget}
+		// Per-node provenance override (plan U2, resolved Open Question): a
+		// composed node's content comes from the USER scope's source, not the
+		// project's, so its managed header must say so. mat.SourceURL is
+		// already the audit-safe form (canonicalized URL or local path).
+		n.SourceURL = mat.SourceURL
+		n.SourceCommit = mat.Commit
 		out = append(out, n)
 	}
 	// Deterministic injection: sort the composed subset by id and append it after

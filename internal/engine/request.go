@@ -80,6 +80,15 @@ type Request struct {
 	// and the report.
 	Commit string
 
+	// SourceURL identifies the canonical source the IR came from, passed
+	// to each adapter session as InitializeParams.source_url. It MUST be
+	// the audit-safe form: the cache-canonicalized URL for git URL
+	// sources (userinfo, query, and fragment stripped — never the raw
+	// manifest field, which may embed credentials) or the path string
+	// for local_dir / local_path sources. Empty when the caller has no
+	// source identity to offer.
+	SourceURL string
+
 	Options Options
 }
 

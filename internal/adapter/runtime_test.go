@@ -262,6 +262,72 @@ func TestSession_SendsScopeInInitialize(t *testing.T) {
 	}
 }
 
+// TestSession_SendsSourceMetadataInInitialize asserts the runtime forwards
+// SessionOptions.SourceURL / SourceCommit on the initialize handshake, and
+// that empty options yield empty fields (additive back-compat, matching
+// the scope-field precedent: an adapter ignoring the new fields — or a
+// caller that never sets them — behaves exactly as before).
+func TestSession_SendsSourceMetadataInInitialize(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		sourceURL    string
+		sourceCommit string
+	}{
+		{
+			name:         "source url and commit passed through",
+			sourceURL:    "https://github.com/org/agents.git",
+			sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+		},
+		{name: "unset options send empty source metadata", sourceURL: "", sourceCommit: ""},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			type gotSource struct{ url, commit string }
+			got := make(chan gotSource, 1)
+			sa := &scriptedAdapter{
+				name:            "sourcetest",
+				declaredOutputs: []contract.DeclaredOutput{{Path: ".sourcetest/rules", Mode: contract.OutputModeOwnedSubdir}},
+				conceptKinds:    map[string]contract.CapabilityLevel{"rule": contract.CapabilitySupported},
+			}
+			sa.respondToInit = func(received contract.InitializeParams) (json.RawMessage, *contract.Error) {
+				got <- gotSource{url: received.SourceURL, commit: received.SourceCommit}
+				return sa.defaultInitResult(received)
+			}
+
+			b := sa.bundled(t)
+			a := &adapter.Adapter{Manifest: b.Manifest, Source: adapter.SourceBundled, Bundled: b}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			t.Cleanup(cancel)
+			sess, err := a.NewSession(ctx, adapter.SessionOptions{
+				WorkspaceRoot: "/tmp/ws",
+				IRVersion:     "v1",
+				SourceURL:     tc.sourceURL,
+				SourceCommit:  tc.sourceCommit,
+			})
+			if err != nil {
+				t.Fatalf("NewSession: %v", err)
+			}
+			t.Cleanup(func() { _ = sess.Shutdown(context.Background()) })
+
+			if _, err := sess.Initialize(ctx); err != nil {
+				t.Fatalf("Initialize: %v", err)
+			}
+			g := <-got
+			if g.url != tc.sourceURL {
+				t.Errorf("source_url sent = %q, want %q", g.url, tc.sourceURL)
+			}
+			if g.commit != tc.sourceCommit {
+				t.Errorf("source_commit sent = %q, want %q", g.commit, tc.sourceCommit)
+			}
+		})
+	}
+}
+
 func TestSession_RejectsCookieMismatch(t *testing.T) {
 	// Bundled adapters skip cookie validation in this PR (they share
 	// process). To exercise the cookie-mismatch path, we'd need a
