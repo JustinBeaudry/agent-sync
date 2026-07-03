@@ -11,6 +11,35 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Skills now carry real descriptions.** Emitted `SKILL.md` files open with a
+  YAML frontmatter block (`name:` plus `description:`) at byte 0, so Claude
+  Code and other Agent-Skills consumers list the authored description instead
+  of falling back to the managed-header comment. Author `description:` in your
+  canonical `skills/<id>/SKILL.md` frontmatter (a new recognized IR frontmatter
+  field); a skill with no description still emits — with a deterministic
+  placeholder — and raises a degraded warning so the gap is visible. The
+  claude, codex, and pi adapters render the block through one shared helper so
+  co-emitted skills stay byte-identical. **Compatibility:** canonical repos that
+  adopt `description:` require agent-sync ≥ this release — older binaries reject
+  the unknown frontmatter key.
+- **`agent-sync update`** moves the canonical pin forward safely. It fetches the
+  remote, resolves the manifest's `ref` (or the remote default), shows the
+  old→new SHAs plus a commit change-summary, then re-pins `commit` +
+  `trusted_sha` and re-syncs — all under one workspace run lock so a concurrent
+  sync cannot interleave. Fast-forward-only: a rewritten upstream history is
+  refused unless `--accept-rewritten-history=<sha>` is passed; routine moves in
+  non-interactive mode require `--accept-update=<sha>` (else exit 4). If the
+  post-re-pin sync fails, the command exits 6 with a "pin moved, files did not
+  land — re-run `agent-sync sync`" remediation. `--user`, `--workspace`,
+  `--offline`, `local_dir`, and `local_path` are all handled.
+- **Managed-file headers now record provenance.** Every emitted file's
+  "do not edit" header shows `Source: <url>@<short-sha>` (git sources) or the
+  local source path — the `{source-url}@{short-sha}` template placeholder is
+  gone. Composed user-scope Cursor rules carry their own source, not the
+  project's. Source URLs are always the credential-stripped canonical form.
+
 ### Fixed
 
 - **A zero-emit `sync` now explains itself instead of printing an empty
