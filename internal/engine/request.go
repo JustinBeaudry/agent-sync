@@ -46,6 +46,14 @@ type Options struct {
 	// (2m, matching the per-target lock). The post-merge git-hook path sets a
 	// short value so a contended `git pull` yields fast instead of stalling.
 	RunLockTimeout time.Duration
+
+	// RunLockHeld tells Sync the caller already holds the per-workspace run
+	// lock and Sync must NOT acquire it (doing so would deadlock — see the
+	// acquire site in engine.go). Only `agent-sync update` sets this: it holds
+	// the lock across the manifest re-pin and the sync so the two are one
+	// atomic critical section a concurrent sync cannot interleave. The caller
+	// owns release. Default false: Sync acquires and releases the lock itself.
+	RunLockHeld bool
 }
 
 // Request is one sync/validate invocation. The caller is responsible for

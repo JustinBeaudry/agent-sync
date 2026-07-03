@@ -140,6 +140,7 @@ func NewRootCommand(deps RootDeps) *cobra.Command {
 	// Mount subcommands.
 	root.AddCommand(newInitCommand(deps))
 	root.AddCommand(newSyncCommand(deps))
+	root.AddCommand(newUpdateCommand(deps))
 	root.AddCommand(newStatusCommand())
 	root.AddCommand(newValidateCommand(deps))
 	root.AddCommand(newHooksCommand(deps))
