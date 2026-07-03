@@ -431,7 +431,7 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 	res, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     raw,
-	}, "project")
+	}, "project", "", "")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestEmit_HandleEmit_RejectsMalformedIRJSON(t *testing.T) {
 	_, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{not json}`),
-	}, "project")
+	}, "project", "", "")
 	if err == nil {
 		t.Fatal("malformed IR JSON must be rejected")
 	}
@@ -481,7 +481,7 @@ func TestEmit_HandleEmit_HonorsContextCancellation(t *testing.T) {
 	_, err := handleEmit(ctx, adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{"nodes":[{"id":"x","kind":"rule","body":"x"}]}`),
-	}, "project")
+	}, "project", "", "")
 	if err == nil {
 		t.Fatal("cancelled context must abort emit")
 	}
@@ -505,7 +505,7 @@ func TestEmit_HandleEmit_SkipsOffTargetNodes(t *testing.T) {
 		{"id":"mine","kind":"rule","targets":["cursor"],"body":"cursor rule"},
 		{"id":"theirs","kind":"rule","targets":["claude"],"body":"claude rule"}
 	]}`)
-	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "project")
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "project", "", "")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -530,7 +530,7 @@ func TestEmit_HandleEmit_UserScopePaths(t *testing.T) {
 		{"id":"house-style","kind":"rule","body":"Use 2-space indents."},
 		{"id":"team","kind":"agents-md","body":"## Build"}
 	]}`)
-	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "user")
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "user", "", "")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -561,7 +561,7 @@ func TestEmit_HandleEmit_RejectsDuplicateNodes(t *testing.T) {
 		{"id":"x","kind":"rule","body":"first"},
 		{"id":"x","kind":"rule","body":"second"}
 	]}`)
-	_, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "project")
+	_, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: ir}, "project", "", "")
 	if err == nil {
 		t.Fatal("duplicate (kind, id) must be rejected through handleEmit")
 	}

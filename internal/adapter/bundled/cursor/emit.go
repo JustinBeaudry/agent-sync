@@ -25,14 +25,20 @@ import (
 // than drifting apart. These fields are intentional parity, not copy
 // residue.
 type irNode struct {
-	ID         string          `json:"id"`
-	Kind       string          `json:"kind"`
-	Version    int             `json:"version,omitempty"`
-	Required   bool            `json:"required,omitempty"`
-	Targets    []string        `json:"targets,omitempty"`
-	Provenance irProvenance    `json:"provenance,omitempty"`
-	Body       json.RawMessage `json:"body,omitempty"`
-	Assets     []irAsset       `json:"assets,omitempty"`
+	ID       string   `json:"id"`
+	Kind     string   `json:"kind"`
+	Version  int      `json:"version,omitempty"`
+	Required bool     `json:"required,omitempty"`
+	Targets  []string `json:"targets,omitempty"`
+	// Description, SourceURL, SourceCommit are additive wire fields (plan
+	// U2): the authored frontmatter description and the per-node source
+	// override for composed nodes (empty = inherit the session source).
+	Description  string          `json:"description,omitempty"`
+	SourceURL    string          `json:"source_url,omitempty"`
+	SourceCommit string          `json:"source_commit,omitempty"`
+	Provenance   irProvenance    `json:"provenance,omitempty"`
+	Body         json.RawMessage `json:"body,omitempty"`
+	Assets       []irAsset       `json:"assets,omitempty"`
 }
 
 type irProvenance struct {
@@ -99,7 +105,7 @@ func (e *emittedOps) wireOps() ([]json.RawMessage, error) {
 //
 // Context is checked between nodes so a runtime cancel during a
 // large IR is honored without waiting for the full iteration.
-func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string) (adapterkit.EmitResult, error) {
+func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope, sourceURL, sourceCommit string) (adapterkit.EmitResult, error) {
 	doc, err := decodeIRDocument(params.IR)
 	if err != nil {
 		return adapterkit.EmitResult{}, &adapterkit.Error{
@@ -124,6 +130,8 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string)
 	// written next to .cursor/mcp.json; one per emit regardless of how
 	// many mcp-server-entry nodes are present).
 	state := emitState{
+		sourceURL:       sourceURL,
+		sourceCommit:    sourceCommit,
 		readmeEmitted:   map[string]bool{},
 		sidecarEmitted:  false,
 		emittedFilePath: map[string]struct{}{},
@@ -178,6 +186,13 @@ func handleEmit(ctx context.Context, params adapterkit.EmitParams, scope string)
 // the same path the dispatcher fails closed instead of letting the
 // sync engine last-write-wins.
 type emitState struct {
+	// sourceURL / sourceCommit are the session-level source identity from
+	// InitializeParams (audit-safe canonical URL or local path + resolved
+	// SHA), used to render the managed header. A node-level override
+	// (composed nodes) wins over these — see prependHeader.
+	sourceURL    string
+	sourceCommit string
+
 	readmeEmitted   map[string]bool
 	sidecarEmitted  bool
 	emittedFilePath map[string]struct{}

@@ -34,6 +34,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -431,6 +432,57 @@ func IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (boo
 		}
 	}
 	return false, fmt.Errorf("%w: is-ancestor %s..%s: %w: %s", ErrShellFailed, ancestor, descendant, err, strings.TrimSpace(stderr.String()))
+}
+
+// ChangeSummary returns a human-readable summary of the commits between
+// oldSHA (exclusive) and newSHA (inclusive) in the repository at repoPath
+// — the content context `agent-sync update` shows at its confirmation gate
+// so a human is deciding against real changes, not two opaque hashes. The
+// output is `git log --oneline` limited to maxLines commits, with a
+// trailing "… and N more commit(s)" line when the range is longer. Both
+// SHAs must already be present in the local mirror (the caller fetches
+// first). No network access. A repo with an unreachable oldSHA (history
+// rewritten) is a caller concern surfaced earlier by the fast-forward
+// guard; here it simply yields a shell error.
+func ChangeSummary(ctx context.Context, repoPath, oldSHA, newSHA string, maxLines int) (string, error) {
+	if !filepath.IsAbs(repoPath) {
+		return "", fmt.Errorf("git: change-summary: repo path must be absolute, got %q", repoPath)
+	}
+	if maxLines <= 0 {
+		maxLines = 20
+	}
+	rangeSpec := oldSHA + ".." + newSHA
+	cmd, err := gitCmd(ctx, repoPath, "log", "--oneline", "--no-decorate", "--no-color",
+		fmt.Sprintf("-n%d", maxLines), rangeSpec)
+	if err != nil {
+		return "", err
+	}
+	stdout, _, err := runCapture(cmd, "log "+rangeSpec)
+	if err != nil {
+		return "", err
+	}
+	summary := strings.TrimRight(string(stdout), "\n")
+
+	countCmd, err := gitCmd(ctx, repoPath, "rev-list", "--count", rangeSpec)
+	if err != nil {
+		return "", err
+	}
+	countOut, _, err := runCapture(countCmd, "rev-list --count "+rangeSpec)
+	if err != nil {
+		return "", err
+	}
+	total, err := strconv.Atoi(strings.TrimSpace(string(countOut)))
+	if err != nil {
+		// nilerr: intentional. The commit list already succeeded; the total
+		// count is only used to append a "… and N more" line. A malformed
+		// count should degrade to the (complete, correct) commit list rather
+		// than fail the whole update, so we return the summary we have.
+		return summary, nil //nolint:nilerr
+	}
+	if total > maxLines {
+		summary += fmt.Sprintf("\n… and %d more commit(s)", total-maxLines)
+	}
+	return summary, nil
 }
 
 // ResolveLocalRef resolves ref (a branch, tag, "HEAD", or SHA) to its

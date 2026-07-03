@@ -136,8 +136,20 @@ type InitializeParams struct {
 	// or "directory". Additive/optional under "freeze the frame, grow
 	// capabilities"; absent or unknown ⇒ treated as "project". Mirrors
 	// adapterkit.InitializeParams.Scope and the initialize.json schema.
-	Scope string          `json:"scope,omitempty"`
-	Meta  json.RawMessage `json:"_meta,omitempty"`
+	Scope string `json:"scope,omitempty"`
+	// SourceURL identifies the canonical source of this session's IR:
+	// the cache-canonicalized git URL (userinfo, query, and fragment
+	// stripped — the only URL form safe for audit surfaces such as
+	// emitted managed headers) or the path string for local sources.
+	// Additive/optional under "freeze the frame, grow capabilities";
+	// absent ⇒ no source identity available. Mirrors
+	// adapterkit.InitializeParams.SourceURL and the initialize.json schema.
+	SourceURL string `json:"source_url,omitempty"`
+	// SourceCommit is the resolved canonical commit SHA the IR was
+	// decoded at. Additive/optional; absent for working-tree (local_dir)
+	// sources and for callers that predate the field.
+	SourceCommit string          `json:"source_commit,omitempty"`
+	Meta         json.RawMessage `json:"_meta,omitempty"`
 }
 
 // InitializeResult is the result object the adapter returns from

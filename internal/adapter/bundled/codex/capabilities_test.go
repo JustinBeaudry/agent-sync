@@ -218,7 +218,7 @@ func TestRun_InitializeRoundTrip(t *testing.T) {
 		}, nil
 	})
 	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
-		return handleEmit(ctx, params, scope)
+		return handleEmit(ctx, params, scope, "", "")
 	})
 
 	client, cleanup := adapterkit.RunInprocServer(t, server)

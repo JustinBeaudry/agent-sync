@@ -339,11 +339,12 @@ func buildAgentsMD(src SourceTree, ref string, e git.TreeEntry, overlayTarget st
 		targets = uniqAppend(targets, overlayTarget)
 	}
 	return Node{
-		ID:       id,
-		Kind:     KindAgentsMD,
-		Version:  fm.Version,
-		Required: fm.Required,
-		Targets:  targets,
+		ID:          id,
+		Kind:        KindAgentsMD,
+		Version:     fm.Version,
+		Required:    fm.Required,
+		Targets:     targets,
+		Description: fm.Description,
 		Provenance: Provenance{
 			Path:    e.Path,
 			BlobSHA: e.Hash,
@@ -382,11 +383,12 @@ func buildSimpleNode(src SourceTree, ref string, e git.TreeEntry, kind Kind, dir
 		return Node{}, fmt.Errorf("%w (in %q)", err, e.Path)
 	}
 	return Node{
-		ID:       id,
-		Kind:     kind,
-		Version:  fm.Version,
-		Required: fm.Required,
-		Targets:  fm.Targets,
+		ID:          id,
+		Kind:        kind,
+		Version:     fm.Version,
+		Required:    fm.Required,
+		Targets:     fm.Targets,
+		Description: fm.Description,
 		Provenance: Provenance{
 			Path:    e.Path,
 			BlobSHA: e.Hash,
@@ -407,11 +409,12 @@ func buildSkillNode(src SourceTree, ref string, e git.TreeEntry, id string) (Nod
 		return Node{}, fmt.Errorf("%w (in %q)", err, e.Path)
 	}
 	return Node{
-		ID:       id,
-		Kind:     KindSkill,
-		Version:  fm.Version,
-		Required: fm.Required,
-		Targets:  fm.Targets,
+		ID:          id,
+		Kind:        KindSkill,
+		Version:     fm.Version,
+		Required:    fm.Required,
+		Targets:     fm.Targets,
+		Description: fm.Description,
 		Provenance: Provenance{
 			Path:    e.Path,
 			BlobSHA: e.Hash,

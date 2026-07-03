@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/agent-sync/agent-sync/internal/adapter/bundled/skillmeta"
 	"github.com/agent-sync/agent-sync/pkg/adapterkit"
 )
 
@@ -46,7 +47,7 @@ func emitRule(emitted *emittedOps, node irNode, state *emitState) error {
 	if err := state.recordWritePath(rulePath); err != nil {
 		return err
 	}
-	wf, err := adapterkit.NewOpWriteFile(rulePath, 0o644, prependHeader(body))
+	wf, err := adapterkit.NewOpWriteFile(rulePath, 0o644, prependHeader(state, node, body))
 	if err != nil {
 		return wrapOpErr(node, err)
 	}
@@ -78,7 +79,7 @@ func emitCommand(emitted *emittedOps, node irNode, state *emitState) error {
 	if err := state.recordWritePath(cmdPath); err != nil {
 		return err
 	}
-	wf, err := adapterkit.NewOpWriteFile(cmdPath, 0o644, prependHeader(body))
+	wf, err := adapterkit.NewOpWriteFile(cmdPath, 0o644, prependHeader(state, node, body))
 	if err != nil {
 		return wrapOpErr(node, err)
 	}
@@ -119,11 +120,25 @@ func emitSkill(emitted *emittedOps, node irNode, state *emitState) error {
 	if err := state.recordWritePath(skillPath); err != nil {
 		return err
 	}
-	wf, err := adapterkit.NewOpWriteFile(skillPath, 0o644, prependHeader(body))
+	wf, err := adapterkit.NewOpWriteFile(skillPath, 0o644, skillFileContent(state, node, body))
 	if err != nil {
 		return wrapOpErr(node, err)
 	}
 	emitted.add(wf)
+
+	// Warning-plus-emit (plan U5): a description-less canonical skill
+	// still emits (skillFileContent substitutes the deterministic
+	// fallback) — never warning-only, which would trip the runtime's
+	// capability-lie gate — but the gap is surfaced as a degraded
+	// warning so authors know their skill shows placeholder text in
+	// tool UIs. Mirrors the claude adapter's paths: rule warning.
+	if node.Description == "" {
+		emitted.add(adapterkit.OpWarning{
+			ConceptID: node.ID,
+			Status:    adapterkit.WarningStatusDegraded,
+			Note:      "skill has no description: frontmatter — emitted with a placeholder; author one in the canonical SKILL.md",
+		})
+	}
 
 	assets := slices.Clone(node.Assets)
 	slices.SortFunc(assets, func(a, b irAsset) int { return cmp.Compare(a.RelPath, b.RelPath) })
@@ -245,10 +260,41 @@ func ensureSubdir(emitted *emittedOps, subdir string, state *emitState) error {
 	return nil
 }
 
-// prependHeader inserts the managed-file header before the body.
-func prependHeader(body []byte) []byte {
-	header := markdownHeader()
+// prependHeader inserts the managed-file header before the body. The
+// header carries per-node provenance when the node has a source
+// override (composed nodes); otherwise the session-level source.
+func prependHeader(state *emitState, node irNode, body []byte) []byte {
+	header := renderManagedHeader(sourceForNode(state, node))
 	out := make([]byte, 0, len(header)+len(body))
+	out = append(out, header...)
+	out = append(out, body...)
+	return out
+}
+
+// sourceForNode resolves the provenance identity for a node: the
+// per-node override (composed nodes) when present, else the session.
+func sourceForNode(state *emitState, node irNode) (url, commit string) {
+	if node.SourceURL != "" {
+		return node.SourceURL, node.SourceCommit
+	}
+	return state.sourceURL, state.sourceCommit
+}
+
+// skillFileContent renders an emitted SKILL.md: YAML frontmatter at
+// byte 0 (Claude Code and Agent Skills consumers parse it only there),
+// the managed header below it, then the body. Unauthored descriptions
+// get the deterministic skillmeta fallback; the degraded OpWarning (U5)
+// makes the gap visible. Skills are the only header-second kind.
+func skillFileContent(state *emitState, node irNode, body []byte) []byte {
+	url, commit := sourceForNode(state, node)
+	desc := node.Description
+	if desc == "" {
+		desc = skillmeta.FallbackDescription(url)
+	}
+	fm := skillmeta.Frontmatter(skillPrefix+node.ID, desc)
+	header := renderManagedHeader(url, commit)
+	out := make([]byte, 0, len(fm)+len(header)+len(body))
+	out = append(out, fm...)
 	out = append(out, header...)
 	out = append(out, body...)
 	return out

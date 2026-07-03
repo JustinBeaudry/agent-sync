@@ -144,29 +144,38 @@ func Sync(ctx context.Context, req Request) (report.Summary, error) {
 	// atomic across processes, and recovery/swaps never interleave between two
 	// runs. Held for the whole run (recovery + every target), released on
 	// return. Acquired before Recover so recovery is serialized too.
-	runLock, err := locks.NewRunLock(req.Root)
-	if err != nil {
-		return report.Summary{}, err
-	}
-	release, err := runLock.Acquire(ctx, locks.AcquireOpts{Timeout: opts.RunLockTimeout})
-	if err != nil {
-		// Contention (another sync holds the workspace lock) must NOT be a hard
-		// error: mirror the per-target lock's StatusBlocked outcome so a
-		// post-merge hook sync yields cleanly (exit 0) and never breaks
-		// `git pull` (AGENTS invariant #3). A blocked summary carries no error;
-		// callers surface "blocked" (and the post-merge path writes its
-		// hook-skipped marker). Any other Acquire error is a real failure.
-		if errors.Is(err, locks.ErrRunLocked) {
-			blocked := make([]report.TargetReport, 0)
-			for _, t := range resolvedTargets(req.Targets, opts.TargetsFilter) {
-				blocked = append(blocked, report.TargetReport{Target: t, Status: report.StatusBlocked})
-			}
-			log.Warn("another agent-sync sync is running in this workspace; skipping", "err", err)
-			return report.Summarize(req.WorkspacePath, req.Commit, now.UTC().Format(time.RFC3339), opts.mode(), blocked), nil
+	// RunLockHeld lets a caller that already holds the per-workspace run lock
+	// (currently only `agent-sync update`, which acquires it before re-pinning
+	// the manifest so the re-pin and this sync are one atomic critical section)
+	// skip re-acquiring it here. Re-acquiring would deadlock: the two RunLock
+	// instances open separate flock handles on the same file, and flock(2)
+	// serializes across open file descriptions even within one process. The
+	// caller owns acquire + release in that mode.
+	if !opts.RunLockHeld {
+		runLock, err := locks.NewRunLock(req.Root)
+		if err != nil {
+			return report.Summary{}, err
 		}
-		return report.Summary{}, err
+		release, err := runLock.Acquire(ctx, locks.AcquireOpts{Timeout: opts.RunLockTimeout})
+		if err != nil {
+			// Contention (another sync holds the workspace lock) must NOT be a hard
+			// error: mirror the per-target lock's StatusBlocked outcome so a
+			// post-merge hook sync yields cleanly (exit 0) and never breaks
+			// `git pull` (AGENTS invariant #3). A blocked summary carries no error;
+			// callers surface "blocked" (and the post-merge path writes its
+			// hook-skipped marker). Any other Acquire error is a real failure.
+			if errors.Is(err, locks.ErrRunLocked) {
+				blocked := make([]report.TargetReport, 0)
+				for _, t := range resolvedTargets(req.Targets, opts.TargetsFilter) {
+					blocked = append(blocked, report.TargetReport{Target: t, Status: report.StatusBlocked})
+				}
+				log.Warn("another agent-sync sync is running in this workspace; skipping", "err", err)
+				return report.Summarize(req.WorkspacePath, req.Commit, now.UTC().Format(time.RFC3339), opts.mode(), blocked), nil
+			}
+			return report.Summary{}, err
+		}
+		defer func() { _ = release() }()
 	}
-	defer func() { _ = release() }()
 
 	// Recovery is idempotent and global; drive any half-finished swap to a
 	// clean state before touching anything.

@@ -215,7 +215,7 @@ func newServerForTest() *adapterkit.Server {
 		}, nil
 	})
 	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
-		return handleEmit(ctx, params, scope)
+		return handleEmit(ctx, params, scope, "", "")
 	})
 	return server
 }

@@ -40,7 +40,7 @@ func emitRule(emitted *emittedOps, node irNode, state *emitState) error {
 	if err := state.recordWritePath(rulePath); err != nil {
 		return err
 	}
-	wf, err := adapterkit.NewOpWriteFile(rulePath, 0o644, prependHeader(body))
+	wf, err := adapterkit.NewOpWriteFile(rulePath, 0o644, prependHeader(state, node, body))
 	if err != nil {
 		return wrapOpErr(node, err)
 	}
@@ -76,9 +76,15 @@ func ensureSubdir(emitted *emittedOps, subdir string, state *emitState) error {
 	return nil
 }
 
-// prependHeader inserts the managed-file header before the body.
-func prependHeader(body []byte) []byte {
-	header := markdownHeader()
+// prependHeader inserts the managed-file header before the body. The
+// header carries per-node provenance when the node has a source
+// override (composed nodes); otherwise the session-level source.
+func prependHeader(state *emitState, node irNode, body []byte) []byte {
+	url, commit := state.sourceURL, state.sourceCommit
+	if node.SourceURL != "" {
+		url, commit = node.SourceURL, node.SourceCommit
+	}
+	header := renderManagedHeader(url, commit)
 	out := make([]byte, 0, len(header)+len(body))
 	out = append(out, header...)
 	out = append(out, body...)

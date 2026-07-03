@@ -63,12 +63,19 @@ func TestEmitSkill_HappyPath(t *testing.T) {
 	wantRecords := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWarning},
 	}
 	if !reflect.DeepEqual(res.OpsPerformed, wantRecords) {
 		t.Fatalf("OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, wantRecords)
 	}
 	skillOp := findWriteFile(t, ops, ".agents/skills/agent-sync-coder/SKILL.md")
-	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by agent-sync") {
+	if !strings.HasPrefix(string(skillOp.Content), "---\nname: agent-sync-coder\n") {
+		t.Errorf("SKILL.md must start with frontmatter at byte 0; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "description: ") {
+		t.Errorf("SKILL.md frontmatter missing description key; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("SKILL.md missing managed header; got %q", skillOp.Content)
 	}
 	if !strings.Contains(string(skillOp.Content), "Write production code.") {
@@ -84,6 +91,7 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	wantRecords := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWarning},
 		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/examples/usage.md"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/templates/foo.txt"},
 	}
@@ -262,4 +270,25 @@ func findWarning(ops []adapterkit.Op, conceptID string) (adapterkit.OpWarning, b
 		}
 	}
 	return adapterkit.OpWarning{}, false
+}
+
+// TestEmitSkill_AuthoredDescription: an authored description lands in the
+// emitted frontmatter verbatim (quoted scalar), replacing the fallback.
+func TestEmitSkill_AuthoredDescription(t *testing.T) {
+	t.Parallel()
+
+	_, ops := emitFixture(t, "skill-described.json")
+	skillOp := findWriteFile(t, ops, ".agents/skills/agent-sync-coder/SKILL.md")
+	content := string(skillOp.Content)
+	if !strings.Contains(content, `description: "Reviews and writes production code: tests first"`) {
+		t.Errorf("authored description missing from frontmatter; got %q", content)
+	}
+	if strings.Contains(content, "no description authored") {
+		t.Errorf("fallback description leaked despite authored value; got %q", content)
+	}
+	for _, op := range ops {
+		if op.OpKind() == adapterkit.OpKindWarning {
+			t.Errorf("described skill must not emit the missing-description warning; got %+v", op)
+		}
+	}
 }

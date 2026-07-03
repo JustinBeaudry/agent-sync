@@ -124,8 +124,18 @@ type InitializeParams struct {
 	// scope vs ./CLAUDE.md at project scope). Additive and optional under
 	// the "freeze the frame, grow capabilities" policy: an adapter that
 	// ignores it, or an absent value, MUST be treated as "project".
-	Scope string          `json:"scope,omitempty"`
-	Meta  json.RawMessage `json:"_meta,omitempty"`
+	Scope string `json:"scope,omitempty"`
+	// SourceURL identifies the canonical source of this session's IR:
+	// the credential-stripped canonical git URL or the path string for
+	// local sources. Additive and optional under the "freeze the frame,
+	// grow capabilities" policy: an adapter that ignores it, or an
+	// absent value, behaves exactly as before the field existed.
+	SourceURL string `json:"source_url,omitempty"`
+	// SourceCommit is the resolved canonical commit SHA the IR was
+	// decoded at. Additive and optional; absent for working-tree
+	// (local_dir) sources.
+	SourceCommit string          `json:"source_commit,omitempty"`
+	Meta         json.RawMessage `json:"_meta,omitempty"`
 }
 
 type InitializeResult struct {

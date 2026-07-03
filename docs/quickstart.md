@@ -34,10 +34,11 @@ id `foo`; `skills/code-review/SKILL.md` → id `code-review`). Ids must match
 ### Frontmatter — the one thing that trips people up
 
 Markdown-bearing files (`AGENTS.md`, rules, skills, commands) accept an
-**optional** YAML frontmatter block. Only three fields are recognized:
+**optional** YAML frontmatter block. Four fields are recognized:
 
 ```markdown
 ---
+description: Reviews a diff for correctness and style   # skill summary (see below)
 required: true          # fail the sync if a target can't support this node
 targets: [claude, cursor]  # restrict to these adapters (omit = all targets)
 version: 2              # author-controlled counter
@@ -46,10 +47,15 @@ version: 2              # author-controlled counter
 The body goes here.
 ```
 
-> **Gotcha:** Do **not** put native tool frontmatter like `name:` or
-> `description:` in a canonical `SKILL.md`. The decoder rejects unknown
-> frontmatter fields with a hard error. The skill's name comes from its
-> directory; each adapter generates the tool-native frontmatter on emit.
+> **Describe your skills.** Set `description:` in a canonical
+> `skills/<id>/SKILL.md` — it becomes the emitted skill's frontmatter
+> description, which is what Claude Code and other Agent-Skills consumers show
+> in their skill list. A skill with no `description:` still syncs, but it emits
+> a placeholder description and a warning. The skill's `name` still comes from
+> its directory id; the adapter generates it. Requires agent-sync ≥ 0.5.
+>
+> **Gotcha:** other native tool frontmatter (`name:`, `allowed-tools:`, …) is
+> still rejected with a hard error — only the four fields above are recognized.
 > Unknown fields prefixed `x-` are tolerated (and ignored) for forward-compat.
 
 ---
@@ -117,6 +123,33 @@ agent-sync validate --output=json
 Immediately after a clean `sync`, `validate` reports **no drift**. If you (or
 a teammate) hand-edit inside an agent-sync-managed section, `validate` flags it
 so the next `sync` re-rendering it is never a surprise.
+
+---
+
+## 5. Update — pull in upstream changes
+
+When your canonical source has new commits, `update` moves the pin forward for
+you instead of hand-editing `commit:` and `trusted_sha:`:
+
+```bash
+agent-sync update              # nearest workspace
+agent-sync update --user       # the ~ manifest
+```
+
+It fetches the source, shows the old→new SHAs and the commits in between, then
+asks before re-pinning and re-syncing. Non-interactively, name the SHA you're
+accepting:
+
+```bash
+agent-sync update --non-interactive --accept-update=<new-sha>
+```
+
+`update` is **fast-forward-only**: if upstream history was rewritten (the
+current pin is no longer an ancestor of the new commit) it refuses, and moving
+the pin anyway takes the deliberate `--accept-rewritten-history=<new-sha>`.
+Nothing is written until you accept — every refusal leaves the manifest
+byte-identical. A `local_dir` source has nothing to pin, and `--offline`
+declines rather than guessing.
 
 ---
 

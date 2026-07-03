@@ -46,6 +46,14 @@ type Options struct {
 	// (2m, matching the per-target lock). The post-merge git-hook path sets a
 	// short value so a contended `git pull` yields fast instead of stalling.
 	RunLockTimeout time.Duration
+
+	// RunLockHeld tells Sync the caller already holds the per-workspace run
+	// lock and Sync must NOT acquire it (doing so would deadlock — see the
+	// acquire site in engine.go). Only `agent-sync update` sets this: it holds
+	// the lock across the manifest re-pin and the sync so the two are one
+	// atomic critical section a concurrent sync cannot interleave. The caller
+	// owns release. Default false: Sync acquires and releases the lock itself.
+	RunLockHeld bool
 }
 
 // Request is one sync/validate invocation. The caller is responsible for
@@ -79,6 +87,15 @@ type Request struct {
 	// Commit is the resolved canonical SHA, stamped into staging metadata
 	// and the report.
 	Commit string
+
+	// SourceURL identifies the canonical source the IR came from, passed
+	// to each adapter session as InitializeParams.source_url. It MUST be
+	// the audit-safe form: the cache-canonicalized URL for git URL
+	// sources (userinfo, query, and fragment stripped — never the raw
+	// manifest field, which may embed credentials) or the path string
+	// for local_dir / local_path sources. Empty when the caller has no
+	// source identity to offer.
+	SourceURL string
 
 	Options Options
 }

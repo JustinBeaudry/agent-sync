@@ -78,10 +78,12 @@ func run(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	// scope is captured at initialize and read at emit. The adapterkit Server
 	// processes initialize before emit on a single goroutine, so this needs no
 	// synchronization; each run() (one per session) has its own variable.
-	var scope string
+	var scope, sourceURL, sourceCommit string
 
 	server.OnInitialize(func(_ context.Context, params adapterkit.InitializeParams) (adapterkit.InitializeResult, error) {
 		scope = params.Scope
+		sourceURL = params.SourceURL
+		sourceCommit = params.SourceCommit
 		return adapterkit.InitializeResult{
 			Capabilities:    capabilitiesForWire(scope),
 			DeclaredOutputs: declaredOutputs(scope),
@@ -89,7 +91,7 @@ func run(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	})
 
 	server.OnEmit(func(ctx context.Context, params adapterkit.EmitParams) (adapterkit.EmitResult, error) {
-		return handleEmit(ctx, params, scope)
+		return handleEmit(ctx, params, scope, sourceURL, sourceCommit)
 	})
 
 	if err := server.Run(ctx); err != nil {

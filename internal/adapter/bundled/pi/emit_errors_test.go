@@ -18,7 +18,7 @@ func emitDoc(t *testing.T, raw string) (adapterkit.EmitResult, error) {
 // given initialize scope.
 func emitDocScope(t *testing.T, raw, scope string) (adapterkit.EmitResult, error) {
 	t.Helper()
-	return handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: json.RawMessage(raw)}, scope)
+	return handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: json.RawMessage(raw)}, scope, "", "")
 }
 
 func TestHandleEmit_HappyMixed(t *testing.T) {

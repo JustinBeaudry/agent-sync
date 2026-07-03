@@ -58,10 +58,20 @@ with a copyable example under [`examples/canonical/`](examples/canonical/).
    compiles it via per-tool adapters, stages the output, and atomically
    swaps it into each tool's reserved subdirectory (e.g.
    `.claude/rules/agent-sync/`, `.cursor/rules/agent-sync/`, `.codex/skills/agent-sync-<id>/`).
-3. **Safe by default.** Pinning, offline-strict, TOFU on `(URL, SHA)`
+   Emitted skills carry a real `name` / `description` frontmatter block so
+   they show up correctly in each tool's skill list, and every managed file
+   records its source (`<url>@<short-sha>`) in its header.
+3. **Moving the pin: `update`.** `agent-sync update` fetches the canonical
+   remote, shows what changed since the current pin, and — on confirmation
+   (or `--accept-update=<sha>` when non-interactive) — re-pins
+   `commit` + `trusted_sha` and re-syncs in one locked step. It is
+   fast-forward-only: a rewritten upstream history is refused unless you
+   pass `--accept-rewritten-history=<sha>`. Use `--user` to update the
+   `~` manifest.
+4. **Safe by default.** Pinning, offline-strict, TOFU on `(URL, SHA)`
    pairs, reserved-prefix ownership with a ledger, and atomic swap with
    rollback — designed to fail closed.
-4. **Capability-honest translation.** A tool-agnostic IR (`agents-md`,
+5. **Capability-honest translation.** A tool-agnostic IR (`agents-md`,
    `rule`, `skill`, `command`, `plugin-reference`, `mcp-server-entry`) is
    translated by each adapter; per-target capability reports make
    lossy translations visible.

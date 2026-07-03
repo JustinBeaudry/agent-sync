@@ -165,6 +165,7 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	wantRecords := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/agent-sync-coder"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWarning},
 		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/examples/usage.md"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/templates/foo.txt"},
 	}
@@ -173,7 +174,13 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	}
 
 	skillOp := findWriteFile(t, ops, ".claude/skills/agent-sync-coder/SKILL.md")
-	if !strings.HasPrefix(string(skillOp.Content), "<!-- Managed by agent-sync") {
+	if !strings.HasPrefix(string(skillOp.Content), "---\nname: agent-sync-coder\n") {
+		t.Errorf("SKILL.md must start with frontmatter at byte 0; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "description: ") {
+		t.Errorf("SKILL.md frontmatter missing description key; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "<!-- Managed by agent-sync") {
 		t.Errorf("skill SKILL.md missing managed header; got %q", skillOp.Content)
 	}
 
@@ -209,6 +216,7 @@ func TestEmitSkill_ZeroAssetsEmitsOnlySKILLMd(t *testing.T) {
 	want := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/agent-sync-empty"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-empty/SKILL.md"},
+		{Op: adapterkit.OpKindWarning},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("zero-asset skill ops mismatch:\n got: %+v\nwant: %+v", got, want)
@@ -573,7 +581,7 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 	res, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     raw,
-	}, "project")
+	}, "project", "", "")
 	if err != nil {
 		t.Fatalf("handleEmit: %v", err)
 	}
@@ -606,7 +614,7 @@ func TestEmit_HandleEmit_RejectsMalformedIRJSON(t *testing.T) {
 	_, err := handleEmit(context.Background(), adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{not json}`),
-	}, "project")
+	}, "project", "", "")
 	if err == nil {
 		t.Fatal("malformed IR JSON must be rejected")
 	}
@@ -625,7 +633,7 @@ func TestEmit_HandleEmit_HonorsContextCancellation(t *testing.T) {
 	_, err := handleEmit(ctx, adapterkit.EmitParams{
 		Target: adapterName,
 		IR:     json.RawMessage(`{"nodes":[{"id":"x","kind":"rule","body":"x"}]}`),
-	}, "project")
+	}, "project", "", "")
 	if err == nil {
 		t.Fatal("cancelled context must abort emit")
 	}
@@ -677,7 +685,7 @@ func TestHandleEmit_UserScopePaths(t *testing.T) {
 		{"id":"actual-plane","kind":"mcp-server-entry","body":{"command":"uvx","args":["plane"]}}
 	]}`)
 
-	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: raw}, "user")
+	res, err := handleEmit(context.Background(), adapterkit.EmitParams{Target: adapterName, IR: raw}, "user", "", "")
 	if err != nil {
 		t.Fatalf("handleEmit(user): %v", err)
 	}
@@ -787,4 +795,25 @@ func jsonQuote(s string) string {
 		panic(err)
 	}
 	return string(b)
+}
+
+// TestEmitSkill_AuthoredDescription: an authored description lands in the
+// emitted frontmatter verbatim (quoted scalar), replacing the fallback.
+func TestEmitSkill_AuthoredDescription(t *testing.T) {
+	t.Parallel()
+
+	_, ops := emitFixture(t, "skill-described.json")
+	skillOp := findWriteFile(t, ops, ".claude/skills/agent-sync-coder/SKILL.md")
+	content := string(skillOp.Content)
+	if !strings.Contains(content, `description: "Reviews and writes production code: tests first"`) {
+		t.Errorf("authored description missing from frontmatter; got %q", content)
+	}
+	if strings.Contains(content, "no description authored") {
+		t.Errorf("fallback description leaked despite authored value; got %q", content)
+	}
+	for _, op := range ops {
+		if op.OpKind() == adapterkit.OpKindWarning {
+			t.Errorf("described skill must not emit the missing-description warning; got %+v", op)
+		}
+	}
 }

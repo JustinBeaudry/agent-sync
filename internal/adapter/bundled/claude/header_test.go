@@ -5,59 +5,56 @@ import (
 	"testing"
 )
 
-func TestMarkdownHeader_ContainsManagedBanner(t *testing.T) {
+// TestRenderManagedHeader pins the three provenance forms of the managed
+// banner. codex and pi carry an IDENTICAL copy of this table — the shared
+// .agents/skills tree requires byte-identical co-emission (ADV-1), so a
+// divergence in either package's renderer fails that package's own test.
+func TestRenderManagedHeader(t *testing.T) {
 	t.Parallel()
 
-	got := string(markdownHeader())
-	if !strings.Contains(got, "Managed by agent-sync") {
-		t.Errorf("markdownHeader missing canonical banner phrase; got %q", got)
+	cases := []struct {
+		name        string
+		url, commit string
+		want        string
+	}{
+		{
+			name:   "git-backed source renders url@short-sha",
+			url:    "https://github.com/acme/agent-config",
+			commit: "9cee577c8e96a8c859d37def58ab41584755c6da",
+			want:   "<!-- Managed by agent-sync — do not edit. Source: https://github.com/acme/agent-config@9cee577c8e96. Regenerate: agent-sync sync -->\n\n",
+		},
+		{
+			name: "local source (no commit) renders path only",
+			url:  ".agents",
+			want: "<!-- Managed by agent-sync — do not edit. Source: .agents. Regenerate: agent-sync sync -->\n\n",
+		},
+		{
+			name: "no source identity omits the Source segment",
+			want: "<!-- Managed by agent-sync — do not edit. Regenerate: agent-sync sync -->\n\n",
+		},
 	}
-	if !strings.HasSuffix(got, "\n\n") {
-		t.Errorf("markdownHeader must end with a blank line; got tail %q", got[len(got)-4:])
-	}
-	// Source URL + short SHA are placeholders in v1; the placeholder
-	// shape itself is part of the contract until Unit 13 plumbs real
-	// values.
-	if !strings.Contains(got, "{source-url}@{short-sha}") {
-		t.Errorf("markdownHeader must keep the {source-url}@{short-sha} placeholder until Unit 13; got %q", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(renderManagedHeader(tc.url, tc.commit))
+			if got != tc.want {
+				t.Errorf("renderManagedHeader(%q, %q) = %q, want %q", tc.url, tc.commit, got, tc.want)
+			}
+			if strings.Contains(got, "{source-url}") || strings.Contains(got, "{short-sha}") {
+				t.Errorf("rendered header contains template placeholders: %q", got)
+			}
+			if !strings.HasSuffix(got, "\n\n") {
+				t.Errorf("header must end with a blank line; got tail %q", got)
+			}
+		})
 	}
 }
 
-func TestJSONSidecarMarker_NamesUnmanageCommand(t *testing.T) {
+func TestShortSHA(t *testing.T) {
 	t.Parallel()
-
-	body := string(jsonSidecarMarker())
-	if !strings.Contains(body, "Managed by agent-sync") {
-		t.Errorf("jsonSidecarMarker missing managed banner; got %q", body)
+	if got := shortSHA("9cee577c8e96a8c859d37def58ab41584755c6da"); got != "9cee577c8e96" {
+		t.Errorf("shortSHA(full) = %q, want 12-char prefix", got)
 	}
-	if !strings.Contains(body, "agent-sync unmanage claude") {
-		t.Errorf("jsonSidecarMarker should name the unmanage exit path; got %q", body)
-	}
-	if !strings.Contains(body, ".mcp.json") {
-		t.Errorf("jsonSidecarMarker should reference its sibling .mcp.json file; got %q", body)
-	}
-}
-
-func TestReadmeForSubdir_NamesPathAndExit(t *testing.T) {
-	t.Parallel()
-
-	body := string(readmeForSubdir(".claude/rules/agent-sync"))
-	if !strings.Contains(body, ".claude/rules/agent-sync") {
-		t.Errorf("README must reference the subdir label; got %q", body)
-	}
-	if !strings.Contains(body, "agent-sync unmanage claude") {
-		t.Errorf("README must name the unmanage exit path; got %q", body)
-	}
-	if !strings.HasPrefix(body, "# ") {
-		t.Errorf("README must start with a markdown heading; got %q", body[:min(40, len(body))])
-	}
-}
-
-func TestReadmeForSubdir_DefaultsOnEmptyLabel(t *testing.T) {
-	t.Parallel()
-
-	body := string(readmeForSubdir(""))
-	if !strings.Contains(body, "(unknown subdirectory)") {
-		t.Errorf("empty subdir label should fall back to placeholder; got %q", body)
+	if got := shortSHA("abc"); got != "abc" {
+		t.Errorf("shortSHA(short input) = %q, want unchanged", got)
 	}
 }

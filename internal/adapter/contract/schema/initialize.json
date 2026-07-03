@@ -14,6 +14,8 @@
         "reserved_prefix": {"type": "string"},
         "ir_version": {"type": "string"},
         "scope": {"enum": ["user", "project", "directory"], "description": "Hierarchy level this emit targets; absent ⇒ project"},
+        "source_url": {"type": "string", "description": "Canonical source of this session's IR: credential-stripped canonical git URL or local source path; absent ⇒ no source identity"},
+        "source_commit": {"type": "string", "description": "Resolved canonical commit SHA the IR was decoded at; absent for working-tree sources"},
         "_meta": {}
       },
       "required": ["client", "protocol_versions", "cookie", "workspace_root", "reserved_prefix", "ir_version"]

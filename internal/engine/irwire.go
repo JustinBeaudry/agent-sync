@@ -22,14 +22,24 @@ import (
 // emit handlers (mirrors the bundled adapters' irNode). Kept local so
 // the engine owns the IR→wire contract in one place.
 type wireNode struct {
-	ID         string          `json:"id"`
-	Kind       string          `json:"kind"`
-	Version    int             `json:"version,omitempty"`
-	Required   bool            `json:"required,omitempty"`
-	Targets    []string        `json:"targets,omitempty"`
-	Provenance wireProvenance  `json:"provenance,omitempty"`
-	Body       json.RawMessage `json:"body,omitempty"`
-	Assets     []wireAsset     `json:"assets,omitempty"`
+	ID       string   `json:"id"`
+	Kind     string   `json:"kind"`
+	Version  int      `json:"version,omitempty"`
+	Required bool     `json:"required,omitempty"`
+	Targets  []string `json:"targets,omitempty"`
+	// Description is the authored frontmatter description (plan U2).
+	// Additive under "freeze the frame, grow capabilities": empty is
+	// omitted, so pre-U2 adapters see byte-compatible input.
+	Description string `json:"description,omitempty"`
+	// SourceURL / SourceCommit are the per-node source override for
+	// nodes injected from another scope's canonical source (e.g. Cursor
+	// composition). Additive/omitempty; absent means "inherit the
+	// session-level source_url / source_commit".
+	SourceURL    string          `json:"source_url,omitempty"`
+	SourceCommit string          `json:"source_commit,omitempty"`
+	Provenance   wireProvenance  `json:"provenance,omitempty"`
+	Body         json.RawMessage `json:"body,omitempty"`
+	Assets       []wireAsset     `json:"assets,omitempty"`
 }
 
 type wireProvenance struct {
@@ -61,11 +71,14 @@ func MarshalIR(nodes []ir.Node, skills map[string]ir.Skill) (json.RawMessage, er
 	doc := wireDocument{Nodes: make([]wireNode, 0, len(nodes))}
 	for _, n := range nodes {
 		wn := wireNode{
-			ID:       n.ID,
-			Kind:     string(n.Kind),
-			Version:  n.Version,
-			Required: n.Required,
-			Targets:  n.Targets,
+			ID:           n.ID,
+			Kind:         string(n.Kind),
+			Version:      n.Version,
+			Required:     n.Required,
+			Targets:      n.Targets,
+			Description:  n.Description,
+			SourceURL:    n.SourceURL,
+			SourceCommit: n.SourceCommit,
 			Provenance: wireProvenance{
 				Path:    n.Provenance.Path,
 				BlobSHA: n.Provenance.BlobSHA,
