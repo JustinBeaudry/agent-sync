@@ -1,0 +1,135 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "22f6187a8a8e",
+  "session_id": "5700be34-677e-4092-b711-1bd9eeaf4381",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-03T23:52:06.96533Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "README.md"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "4cc63c8128a1",
+  "checkpoint_transcript_start": 626,
+  "transcript_lines_at_start": 626,
+  "token_usage": {
+    "input_tokens": 282,
+    "cache_creation_tokens": 11328,
+    "cache_read_tokens": 4327667,
+    "output_tokens": 7829,
+    "api_call_count": 12
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-compound-engineering:ce-resolve-pr-feedback-2026-07-03T20:35:11.114497Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-resolve-pr-feedback"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "7c1b97847a48",
+      "timestamp": "2026-07-03T20:35:11.114497Z",
+      "native": {
+        "command": "/compound-engineering:ce-resolve-pr-feedback"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/compound-engineering:ce-resolve-pr-feedback",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_013bdYeaS9eJ9uQVtYw7R84u",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-plan"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4cc63c8128a1",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 76,
+        "end": 77,
+        "entry_ids": [
+          "904e6580-0a90-468f-8e9c-7a0fb608febb"
+        ],
+        "tool_use_id": "toolu_013bdYeaS9eJ9uQVtYw7R84u"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_013bdYeaS9eJ9uQVtYw7R84u"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-plan",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_015kAux9tDixKLByXN9tejfW",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-work"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4cc63c8128a1",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 132,
+        "end": 133,
+        "entry_ids": [
+          "ba5230b3-2328-406a-9dd0-12ca17df4dbc"
+        ],
+        "tool_use_id": "toolu_015kAux9tDixKLByXN9tejfW"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_015kAux9tDixKLByXN9tejfW"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-work",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-03T23:52:06.939656Z",
+    "agent_lines": 11,
+    "agent_removed": 10,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 11,
+    "total_lines_changed": 21,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
