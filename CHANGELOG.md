@@ -9,7 +9,7 @@ While the project is pre-1.0, minor version bumps may include breaking changes;
 the adapter wire protocol follows its own "freeze the frame, grow capabilities"
 compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
-## [Unreleased]
+## [0.5.0] - 2026-07-03
 
 ### Added
 
@@ -22,8 +22,8 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
   placeholder — and raises a degraded warning so the gap is visible. The
   claude, codex, and pi adapters render the block through one shared helper so
   co-emitted skills stay byte-identical. **Compatibility:** canonical repos that
-  adopt `description:` require agent-sync ≥ this release — older binaries reject
-  the unknown frontmatter key.
+  adopt `description:` require agent-sync ≥ 0.5.0 — older binaries reject the
+  unknown frontmatter key.
 - **`agent-sync update`** moves the canonical pin forward safely. It fetches the
   remote, resolves the manifest's `ref` (or the remote default), shows the
   old→new SHAs plus a commit change-summary, then re-pins `commit` +
