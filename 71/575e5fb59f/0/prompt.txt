@@ -1,0 +1,11 @@
+/compound-engineering:ce-resolve-pr-feedback 39
+
+---
+
+<task-notification>
+<task-id>bkk6f19w5</task-id>
+<tool-use-id>toolu_01Ekvzrxnd8ujgaEAdUwdxBK</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/50424f8e-94af-46f3-8bdf-dae509804849/tasks/bkk6f19w5.output</output-file>
+<status>completed</status>
+<summary>Background command "Poll until CodeRabbit review completes" completed (exit code 0)</summary>
+</task-notification>

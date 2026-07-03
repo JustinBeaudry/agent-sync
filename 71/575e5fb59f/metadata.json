@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "71575e5fb59f",
+  "strategy": "manual-commit",
+  "branch": "feat/antigravity-adapter",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/adapters/antigravity.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/71/575e5fb59f/0/metadata.json",
+      "transcript": "/71/575e5fb59f/0/full.jsonl",
+      "content_hash": "/71/575e5fb59f/0/content_hash.txt",
+      "prompt": "/71/575e5fb59f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 282,
+    "cache_creation_tokens": 26717,
+    "cache_read_tokens": 3972071,
+    "output_tokens": 11187,
+    "api_call_count": 12
+  }
+}
