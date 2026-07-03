@@ -165,6 +165,7 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	wantRecords := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/agent-sync-coder"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWarning},
 		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/examples/usage.md"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-coder/templates/foo.txt"},
 	}
@@ -215,6 +216,7 @@ func TestEmitSkill_ZeroAssetsEmitsOnlySKILLMd(t *testing.T) {
 	want := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindMkdir, Path: ".claude/skills/agent-sync-empty"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".claude/skills/agent-sync-empty/SKILL.md"},
+		{Op: adapterkit.OpKindWarning},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("zero-asset skill ops mismatch:\n got: %+v\nwant: %+v", got, want)
@@ -808,5 +810,10 @@ func TestEmitSkill_AuthoredDescription(t *testing.T) {
 	}
 	if strings.Contains(content, "no description authored") {
 		t.Errorf("fallback description leaked despite authored value; got %q", content)
+	}
+	for _, op := range ops {
+		if op.OpKind() == adapterkit.OpKindWarning {
+			t.Errorf("described skill must not emit the missing-description warning; got %+v", op)
+		}
 	}
 }

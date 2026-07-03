@@ -126,6 +126,20 @@ func emitSkill(emitted *emittedOps, node irNode, state *emitState) error {
 	}
 	emitted.add(wf)
 
+	// Warning-plus-emit (plan U5): a description-less canonical skill
+	// still emits (skillFileContent substitutes the deterministic
+	// fallback) — never warning-only, which would trip the runtime's
+	// capability-lie gate — but the gap is surfaced as a degraded
+	// warning so authors know their skill shows placeholder text in
+	// tool UIs. Mirrors the claude adapter's paths: rule warning.
+	if node.Description == "" {
+		emitted.add(adapterkit.OpWarning{
+			ConceptID: node.ID,
+			Status:    adapterkit.WarningStatusDegraded,
+			Note:      "skill has no description: frontmatter — emitted with a placeholder; author one in the canonical SKILL.md",
+		})
+	}
+
 	assets := slices.Clone(node.Assets)
 	slices.SortFunc(assets, func(a, b irAsset) int { return cmp.Compare(a.RelPath, b.RelPath) })
 
