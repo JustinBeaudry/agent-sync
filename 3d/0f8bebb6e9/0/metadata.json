@@ -283,6 +283,68 @@
         "label": "Skill: compound-engineering:ce-work",
         "default_collapsed": true
       }
+    },
+    {
+      "id": "claude-skill-toolu_01FUFu8x37pKCHW736qeLue9",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-code-review"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "216692bac1cb",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1773,
+        "end": 1774,
+        "entry_ids": [
+          "f673d451-a2a3-4384-b3e3-a691088b9b48"
+        ],
+        "tool_use_id": "toolu_01FUFu8x37pKCHW736qeLue9"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01FUFu8x37pKCHW736qeLue9"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-code-review",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_012SRuRuHhckEaGCF9mutEHr",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "review"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "216692bac1cb",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1785,
+        "end": 1786,
+        "entry_ids": [
+          "c36cb6d4-6f74-4c7d-a564-415784214b5e"
+        ],
+        "tool_use_id": "toolu_012SRuRuHhckEaGCF9mutEHr"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_012SRuRuHhckEaGCF9mutEHr"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: review",
+        "default_collapsed": true
+      }
     }
   ],
   "session_metrics": {
