@@ -1,0 +1,9 @@
+{
+  "nodes": [
+    {
+      "id": "team",
+      "kind": "agents-md",
+      "body": "## Team standards\n\nUse conventional commits."
+    }
+  ]
+}

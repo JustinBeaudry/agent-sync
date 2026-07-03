@@ -78,7 +78,7 @@ with a copyable example under [`examples/canonical/`](examples/canonical/).
 
 ## Supported tools
 
-Adapters translate the tool-agnostic IR into each tool's native files. Four
+Adapters translate the tool-agnostic IR into each tool's native files. Five
 adapters ship bundled today; the rest are planned, and the `Planned (tier)`
 label records the support tier each will land at.
 
@@ -88,7 +88,7 @@ label records the support tier each will land at.
 | Cursor | ✅ Bundled |
 | Codex CLI | ✅ Bundled |
 | Pi (`@mariozechner/pi-coding-agent`) | ✅ Bundled (agents-md; skill & command planned) |
-| Antigravity CLI (replaces Gemini CLI, retired 2026-06-18) | Planned (supported) |
+| Antigravity (2.0 IDE + CLI; replaces Gemini CLI, retired 2026-06-18) | ✅ Bundled (full parity) |
 | Windsurf | Planned (experimental) |
 | LM Studio | Planned (experimental) |
 

@@ -42,10 +42,14 @@ type Warning struct {
 //     commands, skills, or mcp entries from nested .claude/ directories.
 //   - codex walks nested AGENTS.md (agents-md); nothing else nested.
 //   - cursor reads nested .cursor/rules (rule); nothing else nested.
+//   - antigravity walks nested GEMINI.md/AGENTS.md (agents-md); it does NOT read
+//     rules, workflows/commands, skills, or mcp entries from nested .agent/ or
+//     .agents/ directories.
 var nativeAtDirectory = map[string]map[ir.Kind]bool{
-	"claude": {ir.KindAgentsMD: true},
-	"codex":  {ir.KindAgentsMD: true},
-	"cursor": {ir.KindRule: true},
+	"claude":      {ir.KindAgentsMD: true},
+	"codex":       {ir.KindAgentsMD: true},
+	"cursor":      {ir.KindRule: true},
+	"antigravity": {ir.KindAgentsMD: true},
 }
 
 // nonNativeAtUser[target] is the set of kinds the target does NOT read from any
@@ -64,8 +68,14 @@ var nativeAtDirectory = map[string]map[ir.Kind]bool{
 //   - claude (scope-aware paths target ~/.claude/...) and codex (agents-md
 //     remaps to ~/.codex/AGENTS.md; mcp + skills already resolve under $HOME)
 //     read every supported kind from a user-global location → no entry.
+//   - antigravity (agents-md → ~/.gemini/GEMINI.md; mcp → ~/.gemini/config/…;
+//     skills → ~/.gemini/skills) reads those three from a user-global location,
+//     but has NO user-global home for rules (.agent/rules folds into
+//     ~/.gemini/GEMINI.md) or workflows/commands (global workflows live at a
+//     different, untargeted path), so rule and command are inert at user scope.
 var nonNativeAtUser = map[string]map[ir.Kind]bool{
-	"cursor": {ir.KindRule: true, ir.KindAgentsMD: true},
+	"cursor":      {ir.KindRule: true, ir.KindAgentsMD: true},
+	"antigravity": {ir.KindRule: true, ir.KindCommand: true},
 }
 
 // known reports whether we have a native-support table for target. Unknown

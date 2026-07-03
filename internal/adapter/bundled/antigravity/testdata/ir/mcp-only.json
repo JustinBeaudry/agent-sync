@@ -1,0 +1,9 @@
+{
+  "nodes": [
+    {
+      "id": "lsp",
+      "kind": "mcp-server-entry",
+      "body": "{\"command\":\"node\",\"args\":[\"server.js\"]}"
+    }
+  ]
+}

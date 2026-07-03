@@ -25,6 +25,36 @@ func TestAnalyzeUserLevelClaudeCodexNative(t *testing.T) {
 	}
 }
 
+func TestAnalyzeUserLevelAntigravityRuleAndCommandWarn(t *testing.T) {
+	// antigravity reads agents-md, skill, and mcp from ~/.gemini/ at user scope,
+	// but has no user-global home for rule (.agent/rules) or command
+	// (.agent/workflows) — those warn.
+	got := Analyze(hierarchy.LevelUser, []ir.Kind{ir.KindRule, ir.KindCommand, ir.KindSkill, ir.KindAgentsMD, ir.KindMCPServerEntry}, []string{"antigravity"})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 user-scope warnings (rule, command), got %d: %+v", len(got), got)
+	}
+	for _, w := range got {
+		if w.Target != "antigravity" || w.Level != hierarchy.LevelUser {
+			t.Errorf("unexpected warning: %+v", w)
+		}
+		if w.Kind != ir.KindRule && w.Kind != ir.KindCommand {
+			t.Errorf("only rule and command should warn at user scope; got %q", w.Kind)
+		}
+	}
+}
+
+func TestAnalyzeDirectoryLevelAntigravityAgentsMDNative(t *testing.T) {
+	// antigravity walks nested GEMINI.md/AGENTS.md (agents-md native), but not
+	// nested rules/workflows/skills/mcp.
+	if got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindAgentsMD}, []string{"antigravity"}); len(got) != 0 {
+		t.Fatalf("antigravity agents-md is native at directory level, got: %+v", got)
+	}
+	got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindRule, ir.KindSkill}, []string{"antigravity"})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 directory-scope warnings (rule, skill), got %d: %+v", len(got), got)
+	}
+}
+
 func TestAnalyzeUserLevelCursorRuleAndAgentsMDWarn(t *testing.T) {
 	// Cursor has no file-addressable user-global home for rules (User Rules are
 	// app-settings/cloud only) or AGENTS.md; only ~/.cursor/mcp.json is

@@ -1,0 +1,9 @@
+{
+  "nodes": [
+    {
+      "id": "some-plugin",
+      "kind": "plugin-reference",
+      "body": "example/plugin@1.0.0"
+    }
+  ]
+}
