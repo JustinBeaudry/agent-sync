@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/agent-sync/agent-sync/internal/adapter"
+	antigravityadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/antigravity"
 	claudeadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/claude"
 	codexadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/codex"
 	cursoradapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/cursor"
@@ -25,6 +26,7 @@ func bundledAdapters() []*adapter.BundledAdapter {
 		cursoradapter.Bundled(),
 		codexadapter.Bundled(),
 		piadapter.Bundled(),
+		antigravityadapter.Bundled(),
 	}
 }
 

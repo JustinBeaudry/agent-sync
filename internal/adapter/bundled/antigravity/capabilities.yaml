@@ -1,0 +1,64 @@
+name: antigravity
+version: "0.1"
+contract_version: agent-sync/v1
+reserved_prefix: .agent
+
+# concept_kinds is the authoritative per-IR-kind support declaration for the
+# antigravity adapter. The in-code map in capabilities.go must match this file
+# kind-for-kind; capabilities_test.go enforces the parity.
+#
+# Antigravity is internally inconsistent about its config directory name, and the
+# adapter reproduces this faithfully: rules and workflows use .agent/ (singular,
+# Windsurf lineage); skills and mcp use .agents/ (plural, cross-tool AGENTS.md
+# convention). See docs/adapters/antigravity.md.
+concept_kinds:
+  agents-md:
+    status: supported
+    note: |
+      Section-merged into the workspace-root GEMINI.md as a managed section
+      between agent-sync:begin / agent-sync:end markers. GEMINI.md is
+      Antigravity's highest-precedence, tool-specific instruction file. The
+      adapter targets GEMINI.md ONLY (not AGENTS.md — that file is owned by the
+      codex/pi adapters; a second writer at the same scope would collide). At
+      user scope the adapter targets .gemini/GEMINI.md (→ ~/.gemini/GEMINI.md).
+  rule:
+    status: supported
+    note: |
+      Emitted at .agent/rules/agent-sync/<id>.md (SINGULAR .agent — Antigravity's
+      Windsurf-lineage rules directory). agent-sync owns the whole agent-sync
+      subdir (owned-subdir, swapped wholesale). Antigravity documents no
+      user-global rules directory (global rules fold into ~/.gemini/GEMINI.md), so
+      rule is inert at user scope (coverage warns; sync it at project scope).
+  skill:
+    status: supported
+    note: |
+      Emitted at .agents/skills/agent-sync-<id>/SKILL.md (plus assets) — PLURAL
+      .agents, the cross-tool skills convention shared with codex/pi, so one
+      emitted skill tree serves all three tools (co-ownership made safe by ADV-1
+      union-aware drift/orphan checks). At user scope the adapter targets
+      .gemini/skills/ (Antigravity's user-global skills directory). SKILL.md
+      requires name + description frontmatter.
+  command:
+    status: supported
+    note: |
+      Emitted at .agent/workflows/agent-sync/<id>.md (SINGULAR .agent).
+      Antigravity "workflows" are slash-triggered saved prompts — the closest
+      native shape to an agent-sync command. agent-sync owns the agent-sync
+      subdir (owned-subdir). Antigravity's user-global workflows live at a
+      different, untargeted path, so command is inert at user scope (coverage
+      warns; sync it at project scope).
+  mcp-server-entry:
+    status: supported
+    note: |
+      Merged into .agents/mcp_config.json (PLURAL .agents) at
+      /mcpServers/agentsync_<id> via a JSON-pointer write_tool_owned op; other
+      entries are preserved. Antigravity 2.0 (IDE + CLI) reads this file. At user
+      scope the adapter targets .gemini/config/mcp_config.json
+      (→ ~/.gemini/config/mcp_config.json), Antigravity's central MCP config.
+  plugin-reference:
+    status: unsupported
+    note: |
+      Antigravity does not load a project-level plugin-reference registry file;
+      IDE plugins install through Antigravity's own mechanisms. Targeting
+      plugin-reference at antigravity surfaces a degradation warning and emits no
+      files.

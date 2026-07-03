@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    { "id": "team", "kind": "agents-md", "body": "## Team\n\nUse conventional commits." },
+    { "id": "no-fri", "kind": "rule", "body": "No deploys on Fridays." },
+    { "id": "fmt", "kind": "command", "body": "# /fmt\n\nFormat the codebase." },
+    { "id": "coder", "kind": "skill", "description": "Writes production code", "body": "# Coder\n\nWrite production code." },
+    { "id": "lsp", "kind": "mcp-server-entry", "body": "{\"command\":\"node\",\"args\":[\"server.js\"]}" },
+    { "id": "some-plugin", "kind": "plugin-reference", "body": "example/plugin@1.0.0" }
+  ]
+}

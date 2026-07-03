@@ -9,6 +9,24 @@ While the project is pre-1.0, minor version bumps may include breaking changes;
 the adapter wire protocol follows its own "freeze the frame, grow capabilities"
 compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
+## [Unreleased]
+
+### Added
+
+- **Antigravity adapter (bundled, full parity).** agent-sync now syncs to
+  [Google Antigravity](https://antigravity.google) 2.0 (IDE + CLI), which
+  replaced the retired Gemini CLI and reads the same `GEMINI.md` overlay. The
+  adapter supports every IR kind except `plugin-reference`: `agents-md` →
+  `GEMINI.md` managed section (not `AGENTS.md`, to avoid colliding with the
+  codex/pi adapters), `rule` → `.agent/rules/agent-sync/`, `command` →
+  `.agent/workflows/agent-sync/`, `skill` → the shared `.agents/skills/` tree,
+  and `mcp-server-entry` → `.agents/mcp_config.json`. It faithfully reproduces
+  Antigravity's own `.agent` (rules/workflows) vs `.agents` (skills/mcp)
+  directory split. `agents-md`, `skill`, and `mcp-server-entry` are scope-aware
+  (`sync --user` targets `~/.gemini/`); `rule` and `command` have no Antigravity
+  user-global home and are reported as inert at user scope. See
+  [`docs/adapters/antigravity.md`](docs/adapters/antigravity.md).
+
 ## [0.5.0] - 2026-07-03
 
 ### Added
