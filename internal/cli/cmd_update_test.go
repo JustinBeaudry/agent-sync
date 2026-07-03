@@ -210,7 +210,7 @@ func TestUpdate_ConcurrentLockRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = root.Close() }()
+	t.Cleanup(func() { _ = root.Close() })
 	rl, err := locks.NewRunLock(root)
 	if err != nil {
 		t.Fatal(err)
@@ -219,7 +219,7 @@ func TestUpdate_ConcurrentLockRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = release() }()
+	t.Cleanup(func() { _ = release() })
 
 	_, _, uerr := runUpdateCmd(t, ws, "", "--non-interactive", "--accept-update=any")
 	if uerr == nil {

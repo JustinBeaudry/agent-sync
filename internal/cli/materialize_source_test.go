@@ -21,7 +21,7 @@ func TestMaterialize_LocalDir_SourceURLIsPathWithEmptyCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open root: %v", err)
 	}
-	defer func() { _ = root.Close() }()
+	t.Cleanup(func() { _ = root.Close() })
 
 	mat, err := materialize(context.Background(), localDirManifest(t), materializeOptions{
 		Offline: true,
