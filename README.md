@@ -3,10 +3,10 @@
 [![Release](https://img.shields.io/github/v/release/JustinBeaudry/agent-sync?label=release)](https://github.com/JustinBeaudry/agent-sync/releases/latest)
 
 `agent-sync` is a Go CLI that keeps AI-agent configuration for multiple tools
-(Claude Code, Cursor, Codex CLI — and more to come) in sync from a single
-Git-backed manifest. Think of it as `dotfiles` for agents: one canonical
-source of skills, rules, commands, and MCP servers; native files rendered
-into each tool's own conventions.
+(Claude Code, Cursor, Codex CLI, Pi, Antigravity — with more planned) in sync
+from a single Git-backed manifest. Think of it as `dotfiles` for agents: one
+canonical source of skills, rules, commands, and MCP servers; native files
+rendered into each tool's own conventions.
 
 > **Status:** pre-alpha. v1 is in active development. Architecture and
 > rationale live in the [requirements](docs/brainstorms/2026-04-21-aienvs-agent-workspace-requirements.md)
@@ -57,7 +57,8 @@ with a copyable example under [`examples/canonical/`](examples/canonical/).
 2. **Explicit `sync`.** `agent-sync sync` materializes the pinned content,
    compiles it via per-tool adapters, stages the output, and atomically
    swaps it into each tool's reserved subdirectory (e.g.
-   `.claude/rules/agent-sync/`, `.cursor/rules/agent-sync/`, `.codex/skills/agent-sync-<id>/`).
+   `.claude/rules/agent-sync/`, `.cursor/rules/agent-sync/`, `.codex/skills/agent-sync-<id>/`,
+   `.agent/rules/agent-sync/` for Antigravity).
    Emitted skills carry a real `name` / `description` frontmatter block so
    they show up correctly in each tool's skill list, and every managed file
    records its source (`<url>@<short-sha>`) in its header.
@@ -84,11 +85,11 @@ label records the support tier each will land at.
 
 | Tool | Status |
 |------|--------|
-| Claude Code | ✅ Bundled |
-| Cursor | ✅ Bundled |
-| Codex CLI | ✅ Bundled |
-| Pi (`@mariozechner/pi-coding-agent`) | ✅ Bundled (agents-md; skill & command planned) |
-| Antigravity (2.0 IDE + CLI; replaces Gemini CLI, retired 2026-06-18) | ✅ Bundled (full parity) |
+| [Claude Code](docs/adapters/claude.md) | ✅ Bundled |
+| [Cursor](docs/adapters/cursor.md) | ✅ Bundled |
+| [Codex CLI](docs/adapters/codex.md) | ✅ Bundled |
+| [Pi](docs/adapters/pi.md) (`@mariozechner/pi-coding-agent`) | ✅ Bundled (agents-md; skill & command planned) |
+| [Antigravity](docs/adapters/antigravity.md) (2.0 IDE + CLI; replaces Gemini CLI, retired 2026-06-18) | ✅ Bundled (full parity) |
 | Windsurf | Planned (experimental) |
 | LM Studio | Planned (experimental) |
 
