@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "379fecdfdc06",
+  "strategy": "manual-commit",
+  "branch": "feat/skill-descriptions-upstream-update",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/37/9fecdfdc06/0/metadata.json",
+      "transcript": "/37/9fecdfdc06/0/full.jsonl",
+      "content_hash": "/37/9fecdfdc06/0/content_hash.txt",
+      "prompt": "/37/9fecdfdc06/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 60856,
+    "cache_creation_tokens": 4592797,
+    "cache_read_tokens": 71739488,
+    "output_tokens": 190655,
+    "api_call_count": 245
+  }
+}
