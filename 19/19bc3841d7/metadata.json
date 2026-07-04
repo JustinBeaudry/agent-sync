@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "1919bc3841d7",
+  "strategy": "manual-commit",
+  "branch": "feat/file-leaf-output-mode",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-07-04-001-feat-file-leaf-output-mode-plan.md",
+    "internal/adapter/bundled/pi/emit.go",
+    "internal/adapter/runtime.go",
+    "internal/engine/file_leaf_test.go",
+    "internal/engine/target.go",
+    "internal/engine/target_helpers_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/19/19bc3841d7/0/metadata.json",
+      "transcript": "/19/19bc3841d7/0/full.jsonl",
+      "content_hash": "/19/19bc3841d7/0/content_hash.txt",
+      "prompt": "/19/19bc3841d7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 74245,
+    "cache_creation_tokens": 2506486,
+    "cache_read_tokens": 158035504,
+    "output_tokens": 320544,
+    "api_call_count": 335
+  }
+}
