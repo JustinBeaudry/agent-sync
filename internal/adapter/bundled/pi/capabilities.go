@@ -40,7 +40,7 @@ type conceptKindDeclaration struct {
 var conceptKinds = map[ir.Kind]capmatrix.CapabilityStatus{
 	ir.KindAgentsMD:        capmatrix.Supported,
 	ir.KindSkill:           capmatrix.Supported,
-	ir.KindCommand:         capmatrix.Unsupported,
+	ir.KindCommand:         capmatrix.Supported,
 	ir.KindMCPServerEntry:  capmatrix.Unsupported,
 	ir.KindRule:            capmatrix.Unsupported,
 	ir.KindPluginReference: capmatrix.Unsupported,
@@ -88,6 +88,11 @@ func declaredOutputs(scope string) []adapterkit.DeclaredOutput {
 		// skills and sibling-adapter skills survive a sync (ADV-1 co-ownership).
 		{Path: skillsParent, Mode: adapterkit.OutputModeSharedSubdir},
 		{Path: paths.agentsMD, Mode: adapterkit.OutputModeToolOwnedEntry, SectionID: &agentsMDSection},
+		// .pi/prompts is a flat shared dir Pi reads prompt-template slash commands
+		// from. file-leaf → agent-sync owns only the individual <id>.md files it
+		// emits, never the dir or foreign prompt files. Scope-invariant relative
+		// path (resolves to ~/.pi/prompts at user scope).
+		{Path: promptsParent, Mode: adapterkit.OutputModeFileLeaf},
 	}
 }
 

@@ -28,10 +28,11 @@ const genTimestampFormat = "20060102T150405Z"
 // paths: the decoded ops plus the declared owned-subdir prefixes and any
 // warning notes.
 type emitOutcome struct {
-	ops            []contract.Op
-	ownedPrefixes  []string // OutputModeOwnedSubdir declared output paths
-	sharedPrefixes []string // OutputModeSharedSubdir declared output paths
-	warnings       []string
+	ops             []contract.Op
+	ownedPrefixes   []string // OutputModeOwnedSubdir declared output paths
+	sharedPrefixes  []string // OutputModeSharedSubdir declared output paths
+	fileLeafParents []string // OutputModeFileLeaf declared output paths (shared parent dirs)
+	warnings        []string
 }
 
 // runAdapter drives one adapter's full session lifecycle and returns the
@@ -96,8 +97,9 @@ func runAdapter(ctx context.Context, req Request, target string) (emitOutcome, e
 	}
 
 	out := emitOutcome{
-		ownedPrefixes:  ownedSubdirs(initResult.DeclaredOutputs),
-		sharedPrefixes: sharedSubdirs(initResult.DeclaredOutputs),
+		ownedPrefixes:   ownedSubdirs(initResult.DeclaredOutputs),
+		sharedPrefixes:  sharedSubdirs(initResult.DeclaredOutputs),
+		fileLeafParents: fileLeafParents(initResult.DeclaredOutputs),
 	}
 	for i, raw := range emitResult.Ops {
 		op, derr := contract.DecodeOp(raw)
@@ -159,6 +161,42 @@ func sharedSubdirs(outputs []contract.DeclaredOutput) []string {
 	return shared
 }
 
+// fileLeafParents returns the declared-output paths whose mode is file-leaf.
+// These are flat directories agent-sync shares with the user; the engine owns
+// only the individual direct-child files it emits, never the parent dir (see
+// fileLeafUnder + effectiveOwnedPrefixes). Sorted longest-first so the most
+// specific parent wins when paths nest.
+func fileLeafParents(outputs []contract.DeclaredOutput) []string {
+	var parents []string
+	for _, o := range outputs {
+		if o.Mode == contract.OutputModeFileLeaf {
+			parents = append(parents, o.Path)
+		}
+	}
+	sort.Slice(parents, func(i, j int) bool { return len(parents[i]) > len(parents[j]) })
+	return parents
+}
+
+// fileLeafUnder returns p when p is a DIRECT-CHILD FILE of one of the file-leaf
+// parent dirs (i.e. "<parent>/<name>" with no further "/"), or "" otherwise.
+// Nested paths ("<parent>/sub/x.md") and the parent dir itself return "" — a
+// file-leaf output owns direct children only. The returned unit is the file
+// path itself (not a directory), so it flows through the atomic single-file
+// write path and per-file drift/orphan, and the shared parent is never walked.
+func fileLeafUnder(parents []string, p string) string {
+	for _, parent := range parents {
+		if !strings.HasPrefix(p, parent+"/") {
+			continue
+		}
+		rest := strings.TrimPrefix(p, parent+"/")
+		if rest == "" || strings.Contains(rest, "/") {
+			return "" // the parent dir itself, or a nested (non-direct-child) path
+		}
+		return p
+	}
+	return ""
+}
+
 // leafUnder returns the agent-sync-managed leaf directory of p within one of
 // the shared prefixes — i.e. "<shared>/<firstSegment>" — or "" when p is not
 // under any shared prefix. The leaf (not the shared parent) is the swap unit
@@ -190,7 +228,7 @@ func leafUnder(shared []string, p string) string {
 // is deliberately absent, so it is never swapped wholesale and foreign sibling
 // leaves (never emitted, never in the ledger) are invisible to the engine.
 // Sorted longest-first so the most specific prefix wins when paths nest.
-func effectiveOwnedPrefixes(owned, shared []string, ops []contract.Op, ledgerEntries []ledger.Entry) []string {
+func effectiveOwnedPrefixes(owned, shared, fileLeaf []string, ops []contract.Op, ledgerEntries []ledger.Entry) []string {
 	effective := append([]string(nil), owned...)
 	if len(shared) > 0 {
 		leaves := map[string]struct{}{}
@@ -207,6 +245,28 @@ func effectiveOwnedPrefixes(owned, shared []string, ops []contract.Op, ledgerEnt
 		}
 		for leaf := range leaves {
 			effective = append(effective, leaf)
+		}
+	}
+	// file-leaf: the effective unit is the individual direct-child FILE (from this
+	// run's ops + the prior ledger), never the shared parent dir. A file added
+	// here is its own prefix, so ownerOf(effective, file) == file and the op
+	// classification routes it to the atomic single-file write; the parent dir is
+	// never swapped or drift-walked, so foreign sibling files stay invisible.
+	if len(fileLeaf) > 0 {
+		files := map[string]struct{}{}
+		add := func(p string) {
+			if f := fileLeafUnder(fileLeaf, p); f != "" {
+				files[f] = struct{}{}
+			}
+		}
+		for _, op := range ops {
+			add(op.OpPath())
+		}
+		for _, e := range ledgerEntries {
+			add(e.Path)
+		}
+		for f := range files {
+			effective = append(effective, f)
 		}
 	}
 	sort.Slice(effective, func(i, j int) bool { return len(effective[i]) > len(effective[j]) })
@@ -240,7 +300,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	// leaf dirs (from this run's ops + the prior ledger). The shared parent is
 	// never in this set, so it is never drift-scanned, swapped, or orphaned —
 	// foreign sibling content under a shared tree is invisible to the engine.
-	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.ops, oldLedger.Entries)
+	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.fileLeafParents, out.ops, oldLedger.Entries)
 
 	// Cross-adapter co-ownership (ADV-1): a shared-subdir leaf (e.g.
 	// .agents/skills/agent-sync-<id>) may be legitimately owned by a sibling

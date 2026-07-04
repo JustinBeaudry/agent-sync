@@ -63,6 +63,12 @@ func TestSchemaParity_SamplesValidateAgainstContractSchemas(t *testing.T) {
 			value:      DeclaredOutput{Path: ".agents/skills", Mode: OutputModeSharedSubdir},
 		},
 		{
+			name:       "DeclaredOutput (file-leaf)",
+			schemaName: "initialize",
+			schemaPath: []string{"$defs", "declared_output"},
+			value:      DeclaredOutput{Path: ".cursor/commands", Mode: OutputModeFileLeaf},
+		},
+		{
 			name:       "EmitParams",
 			schemaName: "emit",
 			schemaPath: []string{"$defs", "params"},

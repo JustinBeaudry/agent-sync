@@ -42,14 +42,15 @@ concept_kinds:
       engine's union-aware drift/orphan checks (ADV-1). SKILL.md requires name +
       description frontmatter.
   command:
-    status: unsupported
+    status: supported
     note: |
-      Cursor commands live in a flat .cursor/commands/ directory (project) and
-      ~/.cursor/commands/ (user), co-resident with user-authored command files.
-      Owning individual files there requires file-leaf engine support (planned);
-      subdirectory namespacing works in the Cursor IDE but not the CLI, so it is
-      not a portable option. Until file-leaf lands, targeting command at cursor
-      surfaces a degradation warning and emits no files.
+      Emitted at .cursor/commands/<id>.md (project) and ~/.cursor/commands/<id>.md
+      (user) via the engine's file-leaf OutputMode: a flat directory Cursor reads,
+      co-resident with the user's own command files. agent-sync owns only the
+      individual <id>.md files it emits — never the directory, never foreign files
+      (a pre-existing unmanaged file at the same path fails closed, adoptable via
+      --adopt-prefix). Emitted flat (no subdir) because Cursor's CLI does not read
+      command subdirectories.
   plugin-reference:
     status: unsupported
     note: |

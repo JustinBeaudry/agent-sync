@@ -17,9 +17,19 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
   emitting to the shared `.agents/skills/agent-sync-<id>/` tree that Cursor reads
   (project and `~/.agents/skills/` at user scope) — the same tree codex, pi, and
   antigravity co-own, so a skill authored once serves every tool with
-  byte-identical `SKILL.md`. Cursor `command` remains unsupported pending the
-  `file-leaf` engine mode (Cursor's flat `.cursor/commands/` dir needs per-file
-  ownership). See [`docs/adapters/cursor.md`](docs/adapters/cursor.md).
+  byte-identical `SKILL.md`. See [`docs/adapters/cursor.md`](docs/adapters/cursor.md).
+- **`file-leaf` OutputMode + Cursor & Pi commands.** A new engine ownership mode
+  lets an adapter own individual files inside a flat directory it shares with the
+  user (never the directory, never foreign files; per-file atomic write, drift,
+  and orphan reclaim). A pre-existing unmanaged file at an exact target path fails
+  closed rather than being clobbered (adoptable via `--adopt-prefix`). Built on
+  it: **Cursor `command`** → `.cursor/commands/<id>.md` (project) /
+  `~/.cursor/commands/<id>.md` (user), and **Pi `command`** → `.pi/prompts/<id>.md`
+  — both flip from unsupported to supported. Cursor now has effective full parity
+  (agents-md, rule, skill, command, mcp). See
+  [`docs/adapters/cursor.md`](docs/adapters/cursor.md),
+  [`docs/adapters/pi.md`](docs/adapters/pi.md), and the `file-leaf` row in
+  [`docs/spec/adapter-protocol-v1.md`](docs/spec/adapter-protocol-v1.md).
 
 ## [0.6.0] - 2026-07-03
 

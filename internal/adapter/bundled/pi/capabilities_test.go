@@ -99,13 +99,13 @@ func TestCapabilitiesYAML_MatchesCodeMap(t *testing.T) {
 func TestConceptKinds_SupportSets(t *testing.T) {
 	t.Parallel()
 
-	supported := []ir.Kind{ir.KindAgentsMD, ir.KindSkill}
+	supported := []ir.Kind{ir.KindAgentsMD, ir.KindSkill, ir.KindCommand}
 	for _, kind := range supported {
 		if got := conceptKinds[kind]; got != capmatrix.Supported {
 			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Supported)
 		}
 	}
-	unsupported := []ir.Kind{ir.KindMCPServerEntry, ir.KindRule, ir.KindCommand, ir.KindPluginReference}
+	unsupported := []ir.Kind{ir.KindMCPServerEntry, ir.KindRule, ir.KindPluginReference}
 	for _, kind := range unsupported {
 		if got := conceptKinds[kind]; got != capmatrix.Unsupported {
 			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Unsupported)
@@ -120,6 +120,7 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 	want := map[string]adapterkit.OutputMode{
 		".agents/skills": adapterkit.OutputModeSharedSubdir,
 		"AGENTS.md":      adapterkit.OutputModeToolOwnedEntry,
+		".pi/prompts":    adapterkit.OutputModeFileLeaf,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)
@@ -158,6 +159,7 @@ func TestDeclaredOutputs_UserScope_AgentsMDRemapped(t *testing.T) {
 	want := map[string]adapterkit.OutputMode{
 		".agents/skills":      adapterkit.OutputModeSharedSubdir,
 		".pi/agent/AGENTS.md": adapterkit.OutputModeToolOwnedEntry,
+		".pi/prompts":         adapterkit.OutputModeFileLeaf,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("user-scope declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)

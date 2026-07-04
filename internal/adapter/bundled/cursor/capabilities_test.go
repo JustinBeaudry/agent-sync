@@ -106,21 +106,17 @@ func TestCapabilitiesYAML_MatchesCodeMap(t *testing.T) {
 	}
 }
 
-// TestConceptKinds_UnsupportedSet pins the cursor-specific capability
-// downgrades: command and plugin-reference are unsupported. skill is supported
-// via the shared .agents/skills tree. This is the load-bearing difference from
-// the claude adapter and the honest-mapping decision documented in
+// TestConceptKinds_UnsupportedSet pins the cursor-specific capability set: only
+// plugin-reference is unsupported. skill is supported via the shared
+// .agents/skills tree; command via the file-leaf .cursor/commands tree. See
 // docs/adapters/cursor.md.
 func TestConceptKinds_UnsupportedSet(t *testing.T) {
 	t.Parallel()
 
-	unsupported := []ir.Kind{ir.KindCommand, ir.KindPluginReference}
-	for _, kind := range unsupported {
-		if got := conceptKinds[kind]; got != capmatrix.Unsupported {
-			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Unsupported)
-		}
+	if got := conceptKinds[ir.KindPluginReference]; got != capmatrix.Unsupported {
+		t.Errorf("kind %q status=%q want %q", ir.KindPluginReference, got, capmatrix.Unsupported)
 	}
-	supported := []ir.Kind{ir.KindAgentsMD, ir.KindRule, ir.KindMCPServerEntry, ir.KindSkill}
+	supported := []ir.Kind{ir.KindAgentsMD, ir.KindRule, ir.KindMCPServerEntry, ir.KindSkill, ir.KindCommand}
 	for _, kind := range supported {
 		if got := conceptKinds[kind]; got != capmatrix.Supported {
 			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Supported)
@@ -138,6 +134,7 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 		"AGENTS.md":                   adapterkit.OutputModeToolOwnedEntry,
 		".cursor/.agent-sync-managed": adapterkit.OutputModeOwnedSubdir,
 		".agents/skills":              adapterkit.OutputModeSharedSubdir,
+		".cursor/commands":            adapterkit.OutputModeFileLeaf,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)
@@ -221,6 +218,7 @@ func TestDeclaredOutputs_UserScope(t *testing.T) {
 	want := map[string]adapterkit.OutputMode{
 		".cursor/mcp.json": adapterkit.OutputModeToolOwnedEntry,
 		".agents/skills":   adapterkit.OutputModeSharedSubdir,
+		".cursor/commands": adapterkit.OutputModeFileLeaf,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("user-scope declaredOutputs = %d, want %d: %+v", len(got), len(want), got)

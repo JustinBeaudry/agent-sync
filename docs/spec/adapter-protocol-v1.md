@@ -300,8 +300,10 @@ Ownership modes:
 
 | Value | Meaning | v1 status |
 |---|---|---|
-| `owned-subdir` | adapter owns the whole subtree rooted at `path` | active |
-| `tool-owned-entry` | adapter owns a structured entry inside a tool-owned file | reserved |
+| `owned-subdir` | adapter owns the whole subtree rooted at `path` (swapped wholesale) | active |
+| `shared-subdir` | `path` is a directory shared with the user and other tools; the adapter owns only the `agent-sync-<id>` leaf **directories** within it, never the parent (per-leaf swap; foreign siblings untouched) | active |
+| `file-leaf` | `path` is a flat directory shared with the user; the adapter owns only the individual direct-child **files** it emits, never the directory or any subtree. Per-file atomic write, per-file drift/orphan; the parent is never walked. A pre-existing unmanaged file at an exact target path fails closed (adoptable) rather than being clobbered. | active |
+| `tool-owned-entry` | adapter owns a structured entry inside a tool-owned file | active |
 
 Safety rules:
 

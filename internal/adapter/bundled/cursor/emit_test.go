@@ -290,7 +290,6 @@ func TestEmitUnsupported_WarnsAndSkips(t *testing.T) {
 		conceptID string
 		noteWord  string
 	}{
-		{"command-unsupported.json", "deploy", "command"},
 		{"plugin-reference-unsupported.json", "linter", "plugin"},
 	}
 	for _, tc := range cases {
@@ -363,6 +362,28 @@ func TestEmitSkill_NoDescriptionWarns(t *testing.T) {
 		t.Error("description-less skill must emit a degraded warning")
 	}
 	findWriteFile(t, emitted.ops, ".agents/skills/agent-sync-coder/SKILL.md") // still emits (warning-plus-emit)
+}
+
+// TestEmitCommand_FileLeaf pins cursor command emission as a flat file-leaf
+// write to .cursor/commands/<id>.md — a single write_file, no mkdir, no README,
+// with the managed header prepended.
+func TestEmitCommand_FileLeaf(t *testing.T) {
+	t.Parallel()
+
+	res, ops := emitFixture(t, "command-only.json")
+	want := []adapterkit.OpRecord{
+		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/commands/deploy.md"},
+	}
+	if !reflect.DeepEqual(res.OpsPerformed, want) {
+		t.Fatalf("command OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, want)
+	}
+	cmdOp := findWriteFile(t, ops, ".cursor/commands/deploy.md")
+	if !strings.Contains(string(cmdOp.Content), "<!-- Managed by agent-sync") {
+		t.Errorf("command file missing managed header; got %q", cmdOp.Content)
+	}
+	if !strings.Contains(string(cmdOp.Content), "Run the deploy script") {
+		t.Errorf("command file missing body; got %q", cmdOp.Content)
+	}
 }
 
 func TestEmit_TargetsFilterSkipsOtherAdapters(t *testing.T) {

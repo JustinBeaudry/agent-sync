@@ -35,16 +35,16 @@ type conceptKindDeclaration struct {
 // test asserts the two are kept in sync; if you add a kind here,
 // add it there (and vice versa).
 //
-// Cursor declares two kinds unsupported: command (no project-level command
-// concept — pending file-leaf support) and plugin-reference (no project plugin
-// registry). skill is supported via the shared .agents/skills tree. See
-// capabilities.yaml notes and docs/adapters/cursor.md for the rationale.
+// Cursor declares one kind unsupported: plugin-reference (no project plugin
+// registry). skill is supported via the shared .agents/skills tree; command via
+// the file-leaf .cursor/commands tree. See capabilities.yaml notes and
+// docs/adapters/cursor.md for the rationale.
 var conceptKinds = map[ir.Kind]capmatrix.CapabilityStatus{
 	ir.KindAgentsMD:        capmatrix.Supported,
 	ir.KindRule:            capmatrix.Supported,
 	ir.KindMCPServerEntry:  capmatrix.Supported,
 	ir.KindSkill:           capmatrix.Supported,
-	ir.KindCommand:         capmatrix.Unsupported,
+	ir.KindCommand:         capmatrix.Supported,
 	ir.KindPluginReference: capmatrix.Unsupported,
 }
 
@@ -107,6 +107,11 @@ func declaredOutputs(scope string) []adapterkit.DeclaredOutput {
 		// the relative path resolves to ~/.agents/skills at user scope, which
 		// Cursor also reads.
 		{Path: skillsParent, Mode: adapterkit.OutputModeSharedSubdir},
+		// .cursor/commands is a flat shared dir Cursor reads at the project root
+		// and (as ~/.cursor/commands) at user scope. file-leaf → agent-sync owns
+		// only the individual <id>.md files it emits, never the dir or foreign
+		// files. Declared at both scopes (scope-invariant relative path).
+		{Path: commandsParent, Mode: adapterkit.OutputModeFileLeaf},
 	}
 	if scope == scopeUser {
 		return outputs

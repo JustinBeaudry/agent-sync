@@ -49,6 +49,18 @@ const (
 	// leaf), never the shared parent — so foreign sibling entries are never
 	// touched. Contrast owned-subdir, where the adapter owns the entire subtree.
 	OutputModeSharedSubdir OutputMode = "shared-subdir"
+	// OutputModeFileLeaf is a flat directory the adapter shares with the user
+	// (e.g. .cursor/commands, .pi/prompts), where the adapter owns only the
+	// individual direct-child files it emits — not the directory, and not any
+	// subtree. The declared Path is the shared parent dir; ownership is per-file,
+	// derived from emitted op paths and the ledger. Unlike shared-subdir (whose
+	// unit is an agent-sync-<id> leaf DIRECTORY), the file-leaf unit is a single
+	// FILE: it is written via the atomic single-file path (no directory swap),
+	// drift is checked per-file (the shared parent is never walked), and orphan
+	// reclaim deletes only the specific files. Foreign sibling files are never
+	// touched; a pre-existing unmanaged file at an exact target path fails closed
+	// (adoptable) rather than being clobbered.
+	OutputModeFileLeaf OutputMode = "file-leaf"
 )
 
 type ToolOwnedKind string

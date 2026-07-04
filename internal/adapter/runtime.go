@@ -546,6 +546,18 @@ func (s *AdapterSession) pathInDeclaredOutputs(opPath string) bool {
 		if declClean == "." {
 			return true
 		}
+		// file-leaf declares a shared PARENT dir but owns only direct-child
+		// files. Enforce that here: the op path must be "<parent>/<name>" with no
+		// further segment, and never the parent dir itself. A nested path under a
+		// file-leaf parent is rejected outright (it would imply directory
+		// ownership the mode does not grant).
+		if decl.Mode == contract.OutputModeFileLeaf {
+			if strings.HasPrefix(clean, declClean+"/") {
+				rest := clean[len(declClean)+1:]
+				return rest != "" && !strings.Contains(rest, "/")
+			}
+			continue
+		}
 		if clean == declClean || strings.HasPrefix(clean, declClean+"/") {
 			return true
 		}

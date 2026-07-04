@@ -17,7 +17,6 @@ import (
 var unsupportedNotes = map[ir.Kind]string{
 	ir.KindMCPServerEntry:  "Pi does not load MCP servers by design — see https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/. The MCP entry was not installed. To expose this capability to Pi, build or install a Pi extension that wraps it.",
 	ir.KindRule:            "Pi has no per-tool rule concept distinct from AGENTS.md; the rule was not installed. Consolidate rule content into an agents-md node or a skill.",
-	ir.KindCommand:         "The agent-sync pi adapter does not emit prompt-template commands yet (planned); the command was not installed. Pi itself supports prompt templates at .pi/prompts/.",
 	ir.KindPluginReference: "Pi packages install via `pi install` (npm/git), not a project-level plugin-reference registry; the reference was not installed.",
 }
 

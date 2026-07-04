@@ -7,12 +7,6 @@
       "body": "No PRs on Friday."
     },
     {
-      "id": "draftpr",
-      "kind": "command",
-      "version": 1,
-      "body": "Draft a PR."
-    },
-    {
       "id": "lsp",
       "kind": "mcp-server-entry",
       "version": 1,

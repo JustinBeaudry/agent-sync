@@ -50,7 +50,7 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 	led := func(p string) ledger.Entry { return ledger.Entry{Path: p} }
 
 	t.Run("owned passes through; no shared leaves without shared prefixes", func(t *testing.T) {
-		got := effectiveOwnedPrefixes([]string{".claude/rules/agent-sync"}, nil,
+		got := effectiveOwnedPrefixes([]string{".claude/rules/agent-sync"}, nil, nil,
 			[]contract.Op{op(".claude/rules/agent-sync/x.md")}, nil)
 		if !reflect.DeepEqual(got, []string{".claude/rules/agent-sync"}) {
 			t.Fatalf("got %v", got)
@@ -58,7 +58,7 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 	})
 
 	t.Run("shared leaf derived from this run's ops", func(t *testing.T) {
-		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"},
+		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"}, nil,
 			[]contract.Op{op(".agents/skills/agent-sync-x/SKILL.md")}, nil)
 		if !reflect.DeepEqual(got, []string{".agents/skills/agent-sync-x"}) {
 			t.Fatalf("got %v", got)
@@ -66,7 +66,7 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 	})
 
 	t.Run("shared leaf derived from prior ledger (orphan path)", func(t *testing.T) {
-		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"},
+		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"}, nil,
 			nil, []ledger.Entry{led(".agents/skills/agent-sync-old/SKILL.md")})
 		if !reflect.DeepEqual(got, []string{".agents/skills/agent-sync-old"}) {
 			t.Fatalf("got %v", got)
@@ -74,7 +74,7 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 	})
 
 	t.Run("empty ops and ledger under shared prefix yields only owned", func(t *testing.T) {
-		got := effectiveOwnedPrefixes([]string{".claude/rules/agent-sync"}, []string{".agents/skills"}, nil, nil)
+		got := effectiveOwnedPrefixes([]string{".claude/rules/agent-sync"}, []string{".agents/skills"}, nil, nil, nil)
 		if !reflect.DeepEqual(got, []string{".claude/rules/agent-sync"}) {
 			t.Fatalf("got %v", got)
 		}
@@ -85,7 +85,7 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 		// The foreign path is in neither this run's ops nor... wait, it IS in
 		// the ledger here only to prove union behavior: a real foreign leaf is
 		// never in the ledger. We model the union: both leaves appear.
-		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"},
+		got := effectiveOwnedPrefixes(nil, []string{".agents/skills"}, nil,
 			[]contract.Op{op(".agents/skills/agent-sync-x/SKILL.md")},
 			[]ledger.Entry{led(".agents/skills/agent-sync-y/SKILL.md")})
 		sort.Strings(got)
@@ -94,4 +94,50 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 			t.Fatalf("got %v want %v", got, want)
 		}
 	})
+
+	t.Run("file-leaf: direct-child file enters the set as itself; parent never does", func(t *testing.T) {
+		got := effectiveOwnedPrefixes(nil, nil, []string{".cursor/commands"},
+			[]contract.Op{op(".cursor/commands/deploy.md")}, nil)
+		if !reflect.DeepEqual(got, []string{".cursor/commands/deploy.md"}) {
+			t.Fatalf("got %v want [.cursor/commands/deploy.md] (the file, not the parent)", got)
+		}
+	})
+
+	t.Run("file-leaf: orphan file derived from prior ledger", func(t *testing.T) {
+		got := effectiveOwnedPrefixes(nil, nil, []string{".pi/prompts"},
+			nil, []ledger.Entry{led(".pi/prompts/old.md")})
+		if !reflect.DeepEqual(got, []string{".pi/prompts/old.md"}) {
+			t.Fatalf("got %v", got)
+		}
+	})
+
+	t.Run("file-leaf: nested path and parent dir are not owned", func(t *testing.T) {
+		// A nested path under a file-leaf parent is not a direct-child file, so it
+		// never enters the effective set (the runtime path-safety gate also rejects
+		// it). The parent dir itself is likewise never added.
+		got := effectiveOwnedPrefixes(nil, nil, []string{".cursor/commands"},
+			[]contract.Op{op(".cursor/commands/sub/nested.md")}, nil)
+		if len(got) != 0 {
+			t.Fatalf("nested path must not enter effective set; got %v", got)
+		}
+	})
+}
+
+func TestFileLeafUnder(t *testing.T) {
+	parents := []string{".cursor/commands", ".pi/prompts"}
+	cases := []struct {
+		p, want string
+	}{
+		{".cursor/commands/deploy.md", ".cursor/commands/deploy.md"}, // direct child → owned
+		{".pi/prompts/review.md", ".pi/prompts/review.md"},           // direct child → owned
+		{".cursor/commands/sub/x.md", ""},                            // nested → not owned
+		{".cursor/commands", ""},                                     // the parent dir itself → not owned
+		{".cursor/commandsx/y.md", ""},                               // prefix-adjacent, not under parent
+		{"other/deploy.md", ""},                                      // unrelated
+	}
+	for _, c := range cases {
+		if got := fileLeafUnder(parents, c.p); got != c.want {
+			t.Errorf("fileLeafUnder(%q) = %q, want %q", c.p, got, c.want)
+		}
+	}
 }

@@ -41,13 +41,18 @@ const (
 // tool-owned file (an MCP server entry, an AGENTS.md section, etc.);
 // shared-subdir means the adapter shares the directory with the user and
 // other tools (e.g. .agents/skills) and the engine manages only the
-// agent-sync-owned leaf entries within it, never the shared parent.
+// agent-sync-owned leaf entries within it, never the shared parent;
+// file-leaf means the adapter shares a flat directory with the user (e.g.
+// .cursor/commands, .pi/prompts) and owns only the individual direct-child
+// files it emits — the per-file analog of shared-subdir (swap/drift/orphan
+// unit is a single file, never the parent dir).
 type OutputMode string
 
 const (
 	OutputModeOwnedSubdir    OutputMode = "owned-subdir"
 	OutputModeToolOwnedEntry OutputMode = "tool-owned-entry"
 	OutputModeSharedSubdir   OutputMode = "shared-subdir"
+	OutputModeFileLeaf       OutputMode = "file-leaf"
 )
 
 // ToolOwnedKind names the structural locator scheme for write_tool_owned

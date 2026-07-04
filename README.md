@@ -86,9 +86,9 @@ label records the support tier each will land at.
 | Tool | Status |
 |------|--------|
 | [Claude Code](docs/adapters/claude.md) | ✅ Bundled |
-| [Cursor](docs/adapters/cursor.md) | ✅ Bundled (agents-md, rule, skill, mcp; command pending `file-leaf`) |
+| [Cursor](docs/adapters/cursor.md) | ✅ Bundled (agents-md, rule, skill, command, mcp) |
 | [Codex CLI](docs/adapters/codex.md) | ✅ Bundled |
-| [Pi](docs/adapters/pi.md) (`@mariozechner/pi-coding-agent`) | ✅ Bundled (agents-md; skill & command planned) |
+| [Pi](docs/adapters/pi.md) (`@mariozechner/pi-coding-agent`) | ✅ Bundled (agents-md, skill, command) |
 | [Antigravity](docs/adapters/antigravity.md) (2.0 IDE + CLI; replaces Gemini CLI, retired 2026-06-18) | ✅ Bundled (full parity) |
 | Windsurf | Planned (experimental) |
 | LM Studio | Planned (experimental) |
