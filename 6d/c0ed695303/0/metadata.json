@@ -156,6 +156,37 @@
         "label": "Skill: compound-engineering:ce-plan",
         "default_collapsed": true
       }
+    },
+    {
+      "id": "claude-skill-toolu_013K6WkEHfy7JxcmeXn2mBAJ",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-code-review"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "20dd71a2fc16",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1650,
+        "end": 1651,
+        "entry_ids": [
+          "593cbf81-f9d2-4635-88a8-7edb1a6a9b47"
+        ],
+        "tool_use_id": "toolu_013K6WkEHfy7JxcmeXn2mBAJ"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_013K6WkEHfy7JxcmeXn2mBAJ"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-code-review",
+        "default_collapsed": true
+      }
     }
   ],
   "session_metrics": {
