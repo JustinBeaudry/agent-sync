@@ -185,6 +185,15 @@ func fileLeafParents(outputs []contract.DeclaredOutput) []string {
 // write path and per-file drift/orphan, and the shared parent is never walked.
 func fileLeafUnder(parents []string, p string) string {
 	for _, parent := range parents {
+		// A file-leaf parent of "." (own top-level files) needs special handling:
+		// a cleaned path never starts with "./", so the generic prefix check below
+		// would never match. Its direct children are top-level files (no "/").
+		if parent == "." {
+			if p != "" && p != "." && p != ".." && !strings.Contains(p, "/") {
+				return p
+			}
+			continue
+		}
 		if !strings.HasPrefix(p, parent+"/") {
 			continue
 		}

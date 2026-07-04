@@ -153,4 +153,19 @@ func TestFileLeafUnder(t *testing.T) {
 			t.Errorf("fileLeafUnder(%q) = %q, want %q", c.p, got, c.want)
 		}
 	}
+
+	// A file-leaf parent of "." owns top-level files (no "/"); nested paths and
+	// dot segments are not direct children.
+	rootParents := []string{"."}
+	rootCases := []struct{ p, want string }{
+		{"deploy.md", "deploy.md"}, // top-level file → owned
+		{"sub/x.md", ""},           // nested → not owned
+		{".", ""},                  // the root itself → not owned
+		{"..", ""},                 // escape → not owned
+	}
+	for _, c := range rootCases {
+		if got := fileLeafUnder(rootParents, c.p); got != c.want {
+			t.Errorf("fileLeafUnder([.], %q) = %q, want %q", c.p, got, c.want)
+		}
+	}
 }

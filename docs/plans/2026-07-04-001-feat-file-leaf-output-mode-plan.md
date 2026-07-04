@@ -66,8 +66,14 @@ same gap that deferred Pi `command` (see `docs/adapters/pi.md`).
   temp→fsync→rename primitive; no directory swap, no new sentinel machinery).
 - **R3** — **Foreign files in the shared parent are never touched, never walked,
   never counted as drift or orphans.** This is the load-bearing safety property.
-- **R4** — Drift detection is **per-file** (compare on-disk hash to the ledger
-  entry); the engine must not directory-walk the shared parent.
+- **R4** — Drift detection is **per-file**; the engine must not directory-walk
+  the shared parent. Two distinct checks, consistent with every existing mode:
+  (a) `validate`/plan reports a hand-edited managed file as **OutOfBand** by
+  comparing the on-disk hash to the ledger entry; (b) the sync-time fail-closed
+  **gate** is per-file *unmanaged* detection (R10) — a path with no ledger entry.
+  A still-managed file that was hand-edited is overwritten on sync (as
+  owned-subdir/shared-subdir do); refusing to overwrite hand-edits in a
+  user-shared dir is the cross-mode **content-aware** improvement deferred below.
 - **R5** — Orphan reclaim is **per-file** via ledger diff (a previously-emitted
   file-leaf path no longer desired is deleted; foreign files are invisible).
 - **R6** — Both OutputMode type systems stay in lockstep (adapterkit SDK +
