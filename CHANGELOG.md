@@ -9,6 +9,18 @@ While the project is pre-1.0, minor version bumps may include breaking changes;
 the adapter wire protocol follows its own "freeze the frame, grow capabilities"
 compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
+## [Unreleased]
+
+### Added
+
+- **Cursor skills.** The Cursor adapter now supports the `skill` IR kind,
+  emitting to the shared `.agents/skills/agent-sync-<id>/` tree that Cursor reads
+  (project and `~/.agents/skills/` at user scope) — the same tree codex, pi, and
+  antigravity co-own, so a skill authored once serves every tool with
+  byte-identical `SKILL.md`. Cursor `command` remains unsupported pending the
+  `file-leaf` engine mode (Cursor's flat `.cursor/commands/` dir needs per-file
+  ownership). See [`docs/adapters/cursor.md`](docs/adapters/cursor.md).
+
 ## [0.6.0] - 2026-07-03
 
 ### Added

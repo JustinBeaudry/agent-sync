@@ -58,7 +58,8 @@ func TestBundledAdapter_FullLifecycle(t *testing.T) {
 
 	// Assert the full op sequence end-to-end. handleEmit sorts nodes
 	// by kind then id (agents-md < mcp-server-entry < rule < skill),
-	// so the emitted order is deterministic.
+	// so the emitted order is deterministic. The coder skill has an
+	// authored description, so it emits no missing-description warning.
 	want := []adapterkit.OpRecord{
 		{Op: adapterkit.OpKindWriteToolOwned, Path: "AGENTS.md"},
 		{Op: adapterkit.OpKindWriteToolOwned, Path: ".cursor/mcp.json"},
@@ -66,7 +67,8 @@ func TestBundledAdapter_FullLifecycle(t *testing.T) {
 		{Op: adapterkit.OpKindMkdir, Path: ".cursor/rules/agent-sync"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/README.md"},
 		{Op: adapterkit.OpKindWriteFile, Path: ".cursor/rules/agent-sync/house-style.mdc"},
-		{Op: adapterkit.OpKindWarning, Path: ""},
+		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
 	}
 	if !reflect.DeepEqual(emit.OpsPerformed, want) {
 		t.Fatalf("mixed-everything OpsPerformed mismatch:\n got: %+v\nwant: %+v", emit.OpsPerformed, want)
@@ -270,9 +272,9 @@ func pathInDeclaredOutputs(opPath string, decls []adapterkit.DeclaredOutput) boo
 		if opPath == d.Path {
 			return true
 		}
-		// Owned-subdir mode treats Path as a parent; tool-owned-entry
-		// mode treats Path as exact-match only.
-		if d.Mode == adapterkit.OutputModeOwnedSubdir {
+		// Owned-subdir and shared-subdir modes treat Path as a parent;
+		// tool-owned-entry mode treats Path as exact-match only.
+		if d.Mode == adapterkit.OutputModeOwnedSubdir || d.Mode == adapterkit.OutputModeSharedSubdir {
 			if hasPathPrefix(opPath, d.Path) {
 				return true
 			}

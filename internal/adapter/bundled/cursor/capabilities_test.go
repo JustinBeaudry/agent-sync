@@ -107,19 +107,20 @@ func TestCapabilitiesYAML_MatchesCodeMap(t *testing.T) {
 }
 
 // TestConceptKinds_UnsupportedSet pins the cursor-specific capability
-// downgrades: skill, command, and plugin-reference are unsupported.
-// This is the load-bearing difference from the claude adapter and the
-// honest-mapping decision documented in docs/adapters/cursor.md.
+// downgrades: command and plugin-reference are unsupported. skill is supported
+// via the shared .agents/skills tree. This is the load-bearing difference from
+// the claude adapter and the honest-mapping decision documented in
+// docs/adapters/cursor.md.
 func TestConceptKinds_UnsupportedSet(t *testing.T) {
 	t.Parallel()
 
-	unsupported := []ir.Kind{ir.KindSkill, ir.KindCommand, ir.KindPluginReference}
+	unsupported := []ir.Kind{ir.KindCommand, ir.KindPluginReference}
 	for _, kind := range unsupported {
 		if got := conceptKinds[kind]; got != capmatrix.Unsupported {
 			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Unsupported)
 		}
 	}
-	supported := []ir.Kind{ir.KindAgentsMD, ir.KindRule, ir.KindMCPServerEntry}
+	supported := []ir.Kind{ir.KindAgentsMD, ir.KindRule, ir.KindMCPServerEntry, ir.KindSkill}
 	for _, kind := range supported {
 		if got := conceptKinds[kind]; got != capmatrix.Supported {
 			t.Errorf("kind %q status=%q want %q", kind, got, capmatrix.Supported)
@@ -136,6 +137,7 @@ func TestDeclaredOutputs_Shape(t *testing.T) {
 		".cursor/mcp.json":            adapterkit.OutputModeToolOwnedEntry,
 		"AGENTS.md":                   adapterkit.OutputModeToolOwnedEntry,
 		".cursor/.agent-sync-managed": adapterkit.OutputModeOwnedSubdir,
+		".agents/skills":              adapterkit.OutputModeSharedSubdir,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("declaredOutputs len=%d want %d (%+v)", len(got), len(want), got)
@@ -207,24 +209,40 @@ func TestCapabilitiesForWire_UserScopeDemotesRuleAndAgentsMD(t *testing.T) {
 	}
 }
 
-// TestDeclaredOutputs_UserScope_MCPOnly pins the user-scope declared-outputs
-// shape: only .cursor/mcp.json (the one file-addressable user-global Cursor
-// config). The sidecar, rules dir, and AGENTS.md are dropped because they have
-// no user-global home — keeping declared outputs in lockstep with what
-// emit.go actually emits at user scope.
-func TestDeclaredOutputs_UserScope_MCPOnly(t *testing.T) {
+// TestDeclaredOutputs_UserScope pins the user-scope declared-outputs shape:
+// .cursor/mcp.json (the one file-addressable user-global Cursor config) plus the
+// shared .agents/skills tree (Cursor reads ~/.agents/skills). The sidecar, rules
+// dir, and AGENTS.md are dropped because they have no user-global home — keeping
+// declared outputs in lockstep with what emit.go actually emits at user scope.
+func TestDeclaredOutputs_UserScope(t *testing.T) {
 	t.Parallel()
 
 	got := declaredOutputs("user")
-	if len(got) != 1 {
-		t.Fatalf("user-scope declaredOutputs must be MCP-only, got %d: %+v", len(got), got)
+	want := map[string]adapterkit.OutputMode{
+		".cursor/mcp.json": adapterkit.OutputModeToolOwnedEntry,
+		".agents/skills":   adapterkit.OutputModeSharedSubdir,
 	}
-	d := got[0]
-	if d.Path != ".cursor/mcp.json" || d.Mode != adapterkit.OutputModeToolOwnedEntry {
-		t.Errorf("user-scope declared output = %+v, want .cursor/mcp.json tool-owned-entry", d)
+	if len(got) != len(want) {
+		t.Fatalf("user-scope declaredOutputs = %d, want %d: %+v", len(got), len(want), got)
 	}
-	if d.JSONPointer == nil || *d.JSONPointer != "/mcpServers" {
-		t.Errorf("user-scope mcp declared output missing /mcpServers pointer: %+v", d)
+	for _, d := range got {
+		mode, ok := want[d.Path]
+		if !ok {
+			t.Errorf("unexpected user-scope declared output: %q (%v)", d.Path, d.Mode)
+			continue
+		}
+		if d.Mode != mode {
+			t.Errorf("user-scope declared output %q mode=%v want %v", d.Path, d.Mode, mode)
+		}
+		if d.Path == ".cursor/mcp.json" && (d.JSONPointer == nil || *d.JSONPointer != "/mcpServers") {
+			t.Errorf("user-scope mcp declared output missing /mcpServers pointer: %+v", d)
+		}
+	}
+	// rule/agents-md/sidecar have no user-global home; assert they're absent.
+	for _, d := range got {
+		if d.Path == ".cursor/rules/agent-sync" || d.Path == "AGENTS.md" || d.Path == ".cursor/.agent-sync-managed" {
+			t.Errorf("user-scope must not declare project-only path %q", d.Path)
+		}
 	}
 }
 

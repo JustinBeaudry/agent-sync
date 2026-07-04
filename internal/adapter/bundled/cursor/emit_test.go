@@ -290,7 +290,6 @@ func TestEmitUnsupported_WarnsAndSkips(t *testing.T) {
 		conceptID string
 		noteWord  string
 	}{
-		{"skill-unsupported.json", "coder", "skill"},
 		{"command-unsupported.json", "deploy", "command"},
 		{"plugin-reference-unsupported.json", "linter", "plugin"},
 	}
@@ -321,6 +320,49 @@ func TestEmitUnsupported_WarnsAndSkips(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEmitSkill_SharedTree pins cursor skill emission into the shared
+// .agents/skills/ tree: mkdir + SKILL.md (frontmatter at byte 0) + assets
+// (sorted by rel_path), with SKILL.md bytes matching the shared-tree convention.
+func TestEmitSkill_SharedTree(t *testing.T) {
+	t.Parallel()
+
+	res, ops := emitFixture(t, "skill-with-assets.json")
+	want := []adapterkit.OpRecord{
+		{Op: adapterkit.OpKindMkdir, Path: ".agents/skills/agent-sync-coder"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/SKILL.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/examples/usage.md"},
+		{Op: adapterkit.OpKindWriteFile, Path: ".agents/skills/agent-sync-coder/templates/foo.txt"},
+	}
+	if !reflect.DeepEqual(res.OpsPerformed, want) {
+		t.Fatalf("skill OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, want)
+	}
+	skillOp := findWriteFile(t, ops, ".agents/skills/agent-sync-coder/SKILL.md")
+	if !strings.HasPrefix(string(skillOp.Content), "---\nname: agent-sync-coder\n") {
+		t.Errorf("SKILL.md must start with frontmatter at byte 0; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "description: ") {
+		t.Errorf("SKILL.md frontmatter missing description; got %q", skillOp.Content)
+	}
+	if !strings.Contains(string(skillOp.Content), "<!-- Managed by agent-sync") {
+		t.Errorf("SKILL.md missing managed header; got %q", skillOp.Content)
+	}
+}
+
+// TestEmitSkill_NoDescriptionWarns: a description-less skill still emits (with a
+// placeholder) plus a degraded warning — never warning-only (capability-lie gate).
+func TestEmitSkill_NoDescriptionWarns(t *testing.T) {
+	t.Parallel()
+
+	emitted, err := captureOps(json.RawMessage(`{"nodes":[{"id":"coder","kind":"skill","body":"# c"}]}`))
+	if err != nil {
+		t.Fatalf("captureOps: %v", err)
+	}
+	if _, ok := findWarning(emitted.ops, "coder"); !ok {
+		t.Error("description-less skill must emit a degraded warning")
+	}
+	findWriteFile(t, emitted.ops, ".agents/skills/agent-sync-coder/SKILL.md") // still emits (warning-plus-emit)
 }
 
 func TestEmit_TargetsFilterSkipsOtherAdapters(t *testing.T) {
@@ -444,15 +486,17 @@ func TestEmit_HandleEmitFullRoundTrip(t *testing.T) {
 		".cursor/mcp.json",
 		".cursor/.agent-sync-managed",
 		"AGENTS.md",
+		// skill now emits into the shared .agents/skills tree instead of warning.
+		".agents/skills/agent-sync-coder/SKILL.md",
 	}
 	for _, want := range expectPaths {
 		if !containsPath(res.OpsPerformed, want) {
 			t.Errorf("expected op for path %q; got %+v", want, res.OpsPerformed)
 		}
 	}
-	// Skill must surface as a warning, not a write.
-	if !containsKind(res.OpsPerformed, adapterkit.OpKindWarning) {
-		t.Errorf("mixed-everything must include warning op for skill; got %+v", res.OpsPerformed)
+	// The coder skill has an authored description, so no degradation warning.
+	if containsKind(res.OpsPerformed, adapterkit.OpKindWarning) {
+		t.Errorf("mixed-everything (described skill) must not warn; got %+v", res.OpsPerformed)
 	}
 }
 

@@ -32,18 +32,24 @@ concept_kinds:
       marker is written next to the strict-JSON file because JSON has
       no comment syntax.
   skill:
-    status: unsupported
+    status: supported
     note: |
-      Cursor has no folder-per-skill / SKILL.md convention; skills are
-      a Claude Code concept. Targeting skill at cursor surfaces a
-      degradation warning and emits no files. If a future Cursor
-      release adds a skills directory, flip to supported.
+      Emitted at .agents/skills/agent-sync-<id>/SKILL.md (plus assets). Cursor
+      scans the shared .agents/skills/ tree (and ~/.agents/skills/ at user scope)
+      — a cross-tool convention shared with codex/pi/antigravity, so one emitted
+      skill tree serves every tool. SKILL.md content is byte-identical across
+      those adapters; cross-adapter co-ownership of a leaf is made safe by the
+      engine's union-aware drift/orphan checks (ADV-1). SKILL.md requires name +
+      description frontmatter.
   command:
     status: unsupported
     note: |
-      Cursor has no project-level custom slash-command concept
-      analogous to Claude Code's .claude/commands/. Targeting command
-      at cursor surfaces a degradation warning and emits no files.
+      Cursor commands live in a flat .cursor/commands/ directory (project) and
+      ~/.cursor/commands/ (user), co-resident with user-authored command files.
+      Owning individual files there requires file-leaf engine support (planned);
+      subdirectory namespacing works in the Cursor IDE but not the CLI, so it is
+      not a portable option. Until file-leaf lands, targeting command at cursor
+      surfaces a degradation warning and emits no files.
   plugin-reference:
     status: unsupported
     note: |

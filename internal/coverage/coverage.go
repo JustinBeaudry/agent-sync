@@ -41,14 +41,15 @@ type Warning struct {
 //   - claude reads nested CLAUDE.md (agents-md); it does NOT read rules,
 //     commands, skills, or mcp entries from nested .claude/ directories.
 //   - codex walks nested AGENTS.md (agents-md); nothing else nested.
-//   - cursor reads nested .cursor/rules (rule); nothing else nested.
+//   - cursor reads nested .cursor/rules (rule) and nested .agents/skills (skill,
+//     "anywhere inside your repository"); nothing else nested.
 //   - antigravity walks nested GEMINI.md/AGENTS.md (agents-md); it does NOT read
 //     rules, workflows/commands, skills, or mcp entries from nested .agent/ or
 //     .agents/ directories.
 var nativeAtDirectory = map[string]map[ir.Kind]bool{
 	"claude":      {ir.KindAgentsMD: true},
 	"codex":       {ir.KindAgentsMD: true},
-	"cursor":      {ir.KindRule: true},
+	"cursor":      {ir.KindRule: true, ir.KindSkill: true},
 	"antigravity": {ir.KindAgentsMD: true},
 }
 

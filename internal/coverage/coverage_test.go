@@ -105,9 +105,13 @@ func TestAnalyzeDirectoryLevelCursorRuleNative(t *testing.T) {
 	if got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindRule}, []string{"cursor"}); len(got) != 0 {
 		t.Fatalf("cursor nested rule should be native, got: %+v", got)
 	}
-	// But cursor does not read nested skills natively.
-	if got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindSkill}, []string{"cursor"}); len(got) != 1 {
-		t.Fatalf("cursor nested skill should warn, got: %+v", got)
+	// Cursor reads nested .agents/skills, so skill at directory level is native too.
+	if got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindSkill}, []string{"cursor"}); len(got) != 0 {
+		t.Fatalf("cursor nested skill should be native, got: %+v", got)
+	}
+	// But cursor does not read nested commands or mcp entries natively.
+	if got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindCommand}, []string{"cursor"}); len(got) != 1 {
+		t.Fatalf("cursor nested command should warn, got: %+v", got)
 	}
 }
 

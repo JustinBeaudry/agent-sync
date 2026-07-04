@@ -1,0 +1,15 @@
+{
+  "nodes": [
+    {
+      "id": "coder",
+      "kind": "skill",
+      "version": 1,
+      "description": "Reviews and writes production code",
+      "body": "# Coder skill\n\nWrite production code.",
+      "assets": [
+        { "rel_path": "templates/foo.txt", "content": "template body" },
+        { "rel_path": "examples/usage.md", "content": "usage example" }
+      ]
+    }
+  ]
+}
