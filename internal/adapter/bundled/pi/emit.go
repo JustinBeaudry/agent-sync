@@ -143,7 +143,7 @@ type emitState struct {
 	// sourceURL / sourceCommit are the session-level source identity from
 	// InitializeParams (audit-safe canonical URL or local path + resolved
 	// SHA), used to render the managed header. A node-level override
-	// (composed nodes) wins over these — see prependHeader.
+	// (composed nodes) wins over these — see sourceForNode.
 	sourceURL    string
 	sourceCommit string
 

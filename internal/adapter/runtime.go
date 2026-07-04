@@ -552,9 +552,16 @@ func (s *AdapterSession) pathInDeclaredOutputs(opPath string) bool {
 		// file-leaf parent is rejected outright (it would imply directory
 		// ownership the mode does not grant).
 		if decl.Mode == contract.OutputModeFileLeaf {
+			// Accept only a direct-child file of the file-leaf parent. A nested
+			// path or the parent dir itself is not accepted by THIS declaration,
+			// but must not short-circuit the loop: a later declared output (e.g. a
+			// nested owned-subdir) may legitimately cover it. Fall through to the
+			// next decl; the loop's final `return false` rejects if none match.
 			if strings.HasPrefix(clean, declClean+"/") {
 				rest := clean[len(declClean)+1:]
-				return rest != "" && !strings.Contains(rest, "/")
+				if rest != "" && !strings.Contains(rest, "/") {
+					return true
+				}
 			}
 			continue
 		}

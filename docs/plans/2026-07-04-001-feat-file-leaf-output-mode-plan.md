@@ -451,9 +451,24 @@ Pi command; docs; Codex note-sharpening (docs only).
 
 ### Deferred to Follow-Up Work
 
+- **Content-aware orphan deletion (from code review, P0-flagged).** Orphan reclaim
+  is content-blind across *all* modes: a previously-emitted file that is dropped
+  from the emit set is deleted without checking whether its on-disk bytes still
+  match the ledger. For file-leaf this is sharper — agent-sync files sit
+  un-namespaced in a dir the user is invited to edit, so a user who hand-edits an
+  agent-sync-owned command (despite the "do not edit" header) and then removes its
+  source node loses their edits silently. Fixing it (hash-check before orphan
+  delete) is a cross-mode engine change touching owned-subdir/shared-subdir too;
+  deliberately out of scope here to avoid widening this PR's blast radius into the
+  shared orphan path. Track as its own change.
 - **ADV-1 co-ownership for file-leaf.** Not needed now (`.pi/prompts/` vs
   `.cursor/commands/` are distinct dirs). If two adapters ever share one flat
   command dir, add the sibling-leaf release-filter path (mirror shared-subdir).
+- **Declared-output overlap validation (from code review).** The engine trusts
+  declared outputs; nothing rejects an adapter that declares contradictory
+  overlapping modes (e.g. an owned-subdir enclosing a file-leaf parent). No
+  bundled adapter does this, but an initialize-time validation rejecting
+  prefix-overlapping declarations with different modes would be defense-in-depth.
 - **Cursor command subdirectory namespacing.** IDE-only; skipped in favor of the
   flat file-leaf approach that works in IDE + CLI.
 

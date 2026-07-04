@@ -121,6 +121,17 @@ func TestEffectiveOwnedPrefixes(t *testing.T) {
 			t.Fatalf("nested path must not enter effective set; got %v", got)
 		}
 	})
+
+	t.Run("file-leaf: mkdir op under a file-leaf parent does not enter the set", func(t *testing.T) {
+		// file-leaf owns files, not directories. A stray mkdir under a file-leaf
+		// parent must not create an effective prefix (which would be mis-handled as
+		// a directory in the swap loop). Only write_file establishes a unit.
+		got := effectiveOwnedPrefixes(nil, nil, []string{".cursor/commands"},
+			[]contract.Op{contract.OpMkdir{Path: ".cursor/commands/foo"}}, nil)
+		if len(got) != 0 {
+			t.Fatalf("mkdir under a file-leaf parent must not enter effective set; got %v", got)
+		}
+	})
 }
 
 func TestFileLeafUnder(t *testing.T) {
@@ -132,6 +143,8 @@ func TestFileLeafUnder(t *testing.T) {
 		{".pi/prompts/review.md", ".pi/prompts/review.md"},           // direct child → owned
 		{".cursor/commands/sub/x.md", ""},                            // nested → not owned
 		{".cursor/commands", ""},                                     // the parent dir itself → not owned
+		{".cursor/commands/..", ""},                                  // parent-escape segment → not owned
+		{".cursor/commands/.", ""},                                   // dot segment → not owned
 		{".cursor/commandsx/y.md", ""},                               // prefix-adjacent, not under parent
 		{"other/deploy.md", ""},                                      // unrelated
 	}

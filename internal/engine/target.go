@@ -189,8 +189,13 @@ func fileLeafUnder(parents []string, p string) string {
 			continue
 		}
 		rest := strings.TrimPrefix(p, parent+"/")
-		if rest == "" || strings.Contains(rest, "/") {
-			return "" // the parent dir itself, or a nested (non-direct-child) path
+		// Reject the parent dir itself, nested paths, and "."/".." segments —
+		// the same guard leafUnder applies. Defense-in-depth: op paths are already
+		// path.Clean'd by the runtime gate, but prior-ledger paths are fed here
+		// unfiltered, so a corrupt/tampered ledger entry like "<parent>/.." must
+		// not resolve to a deletable unit that reaches root.Remove.
+		if rest == "" || rest == "." || rest == ".." || strings.Contains(rest, "/") {
+			return ""
 		}
 		return p
 	}
@@ -222,12 +227,14 @@ func leafUnder(shared []string, p string) string {
 }
 
 // effectiveOwnedPrefixes is the set of prefixes the engine treats as owned for
-// stage+swap, drift, and orphan purposes: every owned-subdir prefix, plus — for
-// each shared-subdir — only the agent-sync-managed leaf directories within it,
-// derived from this run's emitted ops and the prior ledger. The shared parent
-// is deliberately absent, so it is never swapped wholesale and foreign sibling
-// leaves (never emitted, never in the ledger) are invisible to the engine.
-// Sorted longest-first so the most specific prefix wins when paths nest.
+// stage+swap, drift, and orphan purposes: every owned-subdir prefix; plus — for
+// each shared-subdir — only the agent-sync-managed leaf directories within it;
+// plus — for each file-leaf parent — only the individual direct-child files
+// within it. Both the shared-subdir and file-leaf contributions are derived from
+// this run's emitted ops and the prior ledger, and the shared/file-leaf parent
+// dir is deliberately absent, so it is never swapped wholesale and foreign
+// sibling entries (never emitted, never in the ledger) are invisible to the
+// engine. Sorted longest-first so the most specific prefix wins when paths nest.
 func effectiveOwnedPrefixes(owned, shared, fileLeaf []string, ops []contract.Op, ledgerEntries []ledger.Entry) []string {
 	effective := append([]string(nil), owned...)
 	if len(shared) > 0 {
@@ -260,6 +267,14 @@ func effectiveOwnedPrefixes(owned, shared, fileLeaf []string, ops []contract.Op,
 			}
 		}
 		for _, op := range ops {
+			// file-leaf owns FILES, not directories. Only write_file ops
+			// establish a file-leaf unit; a mkdir under a file-leaf parent is not
+			// a valid file-leaf op (a well-behaved adapter never emits one) and
+			// must not enter the effective set, or it would be mis-handled as a
+			// directory in the stage+swap loop instead of the single-file path.
+			if _, ok := op.(contract.OpWriteFile); !ok {
+				continue
+			}
 			add(op.OpPath())
 		}
 		for _, e := range ledgerEntries {

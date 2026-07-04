@@ -45,6 +45,10 @@ func deployCmd() []ir.Node {
 	return []ir.Node{{ID: "deploy", Kind: ir.KindCommand, Version: 1, Body: []byte("Run deploy.")}}
 }
 
+func cmdNode(id, body string) ir.Node {
+	return ir.Node{ID: id, Kind: ir.KindCommand, Version: 1, Body: []byte(body)}
+}
+
 // TestSync_FileLeaf_PreservesForeignCommand is the file-leaf data-loss guard:
 // .cursor/commands is a flat shared dir, so a sync that adds — then removes — an
 // agent-sync command must never touch a foreign command file living alongside it.
@@ -135,6 +139,112 @@ func TestSync_FileLeaf_ExactTargetCollisionFailsClosed(t *testing.T) {
 	}
 	if !strings.Contains(string(adopted), "Run deploy.") || !strings.Contains(string(adopted), "Managed by agent-sync") {
 		t.Fatalf("after adopt, file must hold agent-sync-emitted content; got %q", adopted)
+	}
+}
+
+// TestSync_FileLeaf_AdoptThenPlainResyncIsClean verifies adoption actually
+// transfers ownership: after a --adopt-prefix sync takes over a colliding file,
+// a subsequent PLAIN sync (no adopt flag) neither fails closed nor reports drift.
+func TestSync_FileLeaf_AdoptThenPlainResyncIsClean(t *testing.T) {
+	ws := t.TempDir()
+	collide := filepath.Join(ws, ".cursor", "commands", "deploy.md")
+	if err := os.MkdirAll(filepath.Dir(collide), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(collide, []byte("# user's own\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Adopt sync takes ownership.
+	req1, done1 := cursorFileLeafReq(t, ws, deployCmd(), ".cursor/commands/deploy.md")
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("adopt sync: %v", err)
+	}
+	done1()
+
+	// Plain re-sync: must succeed (not fail closed) and report no drift.
+	req2, done2 := cursorFileLeafReq(t, ws, deployCmd())
+	summary, err := Sync(context.Background(), req2)
+	done2()
+	if err != nil || summary.Outcome.ExitCode != 0 {
+		t.Fatalf("plain re-sync after adopt must succeed; err=%v exit=%+v", err, summary.Outcome)
+	}
+	req3, done3 := cursorFileLeafReq(t, ws, deployCmd())
+	res, err := Plan(context.Background(), req3)
+	done3()
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if res.DriftDetected {
+		t.Fatalf("adopted file must be clean on re-plan; got %+v", res.Targets)
+	}
+}
+
+// TestSync_FileLeaf_PartialOrphan verifies per-file orphan accounting: syncing
+// {a,b} then {a} orphan-deletes only b, retains a, and never touches a foreign
+// sibling — the multi-file case single-command tests can't exercise.
+func TestSync_FileLeaf_PartialOrphan(t *testing.T) {
+	ws := t.TempDir()
+	foreign := filepath.Join(ws, ".cursor", "commands", "mine.md")
+	if err := os.MkdirAll(filepath.Dir(foreign), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(foreign, []byte("keep me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	req1, done1 := cursorFileLeafReq(t, ws, []ir.Node{cmdNode("deploy", "d"), cmdNode("review", "r")})
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("sync 1: %v", err)
+	}
+	done1()
+	deploy := filepath.Join(ws, ".cursor", "commands", "deploy.md")
+	review := filepath.Join(ws, ".cursor", "commands", "review.md")
+	for _, p := range []string{deploy, review} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("expected %s: %v", p, err)
+		}
+	}
+
+	// Re-sync with only deploy: review is orphaned, deploy kept, foreign untouched.
+	req2, done2 := cursorFileLeafReq(t, ws, []ir.Node{cmdNode("deploy", "d")})
+	if _, err := Sync(context.Background(), req2); err != nil {
+		t.Fatalf("sync 2: %v", err)
+	}
+	done2()
+	if _, err := os.Stat(review); !os.IsNotExist(err) {
+		t.Fatalf("review.md should be orphan-removed; stat err = %v", err)
+	}
+	if _, err := os.Stat(deploy); err != nil {
+		t.Fatalf("deploy.md must be retained: %v", err)
+	}
+	assertFileBytes(t, foreign, "keep me\n", "after partial orphan")
+}
+
+// TestSync_FileLeaf_ParentDirNotEmptied pins that removing the sole (agent-sync)
+// command leaves the shared parent dir in place — the mode never rmdir's the
+// user's shared directory.
+func TestSync_FileLeaf_ParentDirNotEmptied(t *testing.T) {
+	ws := t.TempDir()
+	req1, done1 := cursorFileLeafReq(t, ws, deployCmd())
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("sync 1: %v", err)
+	}
+	done1()
+
+	req2, done2 := cursorFileLeafReq(t, ws, nil)
+	if _, err := Sync(context.Background(), req2); err != nil {
+		t.Fatalf("sync 2: %v", err)
+	}
+	done2()
+
+	deploy := filepath.Join(ws, ".cursor", "commands", "deploy.md")
+	if _, err := os.Stat(deploy); !os.IsNotExist(err) {
+		t.Fatalf("command file should be removed; stat err = %v", err)
+	}
+	// The shared parent dir must still exist (agent-sync owns files, not the dir).
+	if fi, err := os.Stat(filepath.Join(ws, ".cursor", "commands")); err != nil || !fi.IsDir() {
+		t.Fatalf(".cursor/commands parent must survive; err=%v", err)
 	}
 }
 
