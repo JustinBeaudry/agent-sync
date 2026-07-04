@@ -9,7 +9,7 @@ While the project is pre-1.0, minor version bumps may include breaking changes;
 the adapter wire protocol follows its own "freeze the frame, grow capabilities"
 compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
-## [Unreleased]
+## [0.7.0] - 2026-07-04
 
 ### Added
 
