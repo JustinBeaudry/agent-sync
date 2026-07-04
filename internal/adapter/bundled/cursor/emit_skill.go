@@ -87,7 +87,7 @@ func emitSkill(emitted *emittedOps, node irNode, state *emitState) error {
 		if err := state.recordWritePath(assetPath); err != nil {
 			return &adapterkit.Error{
 				Code:    adapterkit.CodeInvalidParams,
-				Message: fmt.Sprintf("cursor: skill %q asset %q collides with another emitted path", node.ID, a.RelPath),
+				Message: fmt.Sprintf("cursor: skill %q asset %q collides with another emitted path: %s", node.ID, a.RelPath, err.Error()),
 			}
 		}
 		assetBody, err := decodeBodyOrPassthrough(a.Content)

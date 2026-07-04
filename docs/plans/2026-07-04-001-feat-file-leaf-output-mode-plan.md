@@ -79,6 +79,15 @@ same gap that deferred Pi `command` (see `docs/adapters/pi.md`).
 - **R9** — Passes `go vet ./... && go test -race ./... && golangci-lint run`,
   plus a real `agent-sync sync` e2e proving foreign-file survival alongside
   agent-sync-owned command/skill files.
+- **R10 — Exact-target collision policy.** A pre-existing file at the **exact**
+  file-leaf target path (`.cursor/commands/deploy.md`) that is **not**
+  agent-sync-owned (absent from this target's ledger) must **not** be silently
+  overwritten on first sync. The engine fails closed (preserve-by-default) with a
+  clear error, adoptable via the existing adopt escape (`--adopt-prefix` or its
+  file-leaf equivalent) — consistent with how owned-subdir/shared-subdir treat
+  pre-existing unmanaged content at a managed path. This is distinct from R3
+  (foreign *siblings* with different names, which are invisible): R10 governs a
+  name *collision* at the owned path itself.
 
 ---
 
@@ -195,7 +204,7 @@ same four files.
 routing them through the existing atomic single-file write, with per-file drift
 and orphan handling and no parent-directory walk.
 
-**Requirements:** R1, R2, R3, R4, R5, KTD1–KTD3, KTD5
+**Requirements:** R1, R2, R3, R4, R5, R10, KTD1–KTD3, KTD5
 **Dependencies:** U1
 **Files:** `internal/engine/target.go`, `internal/engine/plan.go`,
 `internal/adapter/runtime.go`, possibly `internal/sync/drift.go`
@@ -220,6 +229,15 @@ and orphan handling and no parent-directory walk.
 - **Orphan:** already correct via `ownerOf(effective, e.Path)` + `newEntries`
   diff → `DeleteOrphans` removes the single file. Confirm the `--expect-deletions`
   count includes file-leaf orphans.
+- **Exact-target collision (R10):** before writing a file-leaf file, if the exact
+  target path exists on disk but is **absent from the old ledger** (an unmanaged,
+  user-authored file at the owned path — not merely a foreign sibling), fail
+  closed rather than `StagedWrite`-clobber it. Route through the same adopt escape
+  the owned/shared drift gate uses (`--adopt-prefix` or a file-leaf equivalent):
+  no adopt → error naming the path; adopt → take ownership and overwrite, adding
+  it to the ledger. This is the per-file analog of the `ScanDrift` "unmanaged file
+  under a managed prefix" gate — verify how the existing single-file sidecar and
+  the owned-subdir adopt path handle a pre-existing unmanaged file and mirror it.
 - **Path-safety (`pathInDeclaredOutputs`):** add a mode-aware branch rejecting a
   file-leaf op path that is not a direct-child file of its declared parent.
 **Execution note:** Test-first. Write failing engine tests (U3) for foreign-file
@@ -245,7 +263,7 @@ engine/sync test regresses.
 **Goal:** Prove the safety properties of file-leaf against the same adversarial
 cases shared-subdir is tested for — at file granularity.
 
-**Requirements:** R3, R4, R5
+**Requirements:** R3, R4, R5, R10
 **Dependencies:** U2 (co-developed; tests written first per U2 execution note)
 **Files:** `internal/engine/file_leaf_test.go` (new),
 `internal/engine/target_helpers_test.go`, `internal/sync/*_test.go` as needed
@@ -261,6 +279,11 @@ foreign-skill setup), `internal/sync/drift_test.go`, `orphans_test.go`.
   sync that drops `deploy.md` (orphan-deleted) — `mine.md` untouched throughout.
 - **Foreign file is NOT drift:** `validate` after a clean sync reports no drift
   despite `mine.md` sitting in the shared parent.
+- **Exact-target collision fails closed (R10):** user hand-authors
+  `.cursor/commands/deploy.md` *before* agent-sync owns it; a sync emitting a
+  `deploy` command **refuses** (clear error, file byte-unchanged) rather than
+  clobbering it; with the adopt escape the sync takes ownership and the file
+  enters the ledger. Distinct from the foreign-sibling case (different name).
 - **Owned file out-of-band edit IS drift:** hand-edit `deploy.md`; `validate`
   flags it `OutOfBand`; the foreign `mine.md` never flagged.
 - **Orphan reclaim per-file:** remove the command node; only `deploy.md` deleted;
