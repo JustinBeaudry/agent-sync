@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": "draftpr",
+      "kind": "command",
+      "version": 1,
+      "body": "Draft a PR from the current branch."
+    }
+  ]
+}

@@ -26,13 +26,14 @@ concept_kinds:
       description frontmatter; Pi permits the skill name to differ from the
       folder name.
   command:
-    status: unsupported
+    status: supported
     note: |
-      Pi supports prompt-template slash commands at .pi/prompts/<name>.md, but
-      the agent-sync pi adapter does not emit them yet (planned). Pi's prompt
-      directory is flat and shared with user prompts, so owning individual
-      command files needs file-leaf swap support in the engine — tracked as a
-      follow-up. Targeting command at pi surfaces a degradation warning today.
+      Emitted at .pi/prompts/<id>.md via the engine's file-leaf OutputMode — Pi's
+      flat prompt-template directory, invoked as /<id>, co-resident with the
+      user's own prompt files. agent-sync owns only the individual <id>.md files
+      it emits — never the directory, never foreign files (a pre-existing
+      unmanaged file at the same path fails closed, adoptable via --adopt-prefix).
+      The relative path resolves to ~/.pi/prompts at user scope.
   mcp-server-entry:
     status: unsupported
     note: |

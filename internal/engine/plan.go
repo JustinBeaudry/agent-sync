@@ -42,7 +42,7 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 	// leaf dirs of shared-subdirs (never the shared parent) so deletion
 	// accounting covers removed agent-sync leaves without flagging foreign
 	// sibling content under a shared tree.
-	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.ops, old.Entries)
+	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.fileLeafParents, out.ops, old.Entries)
 
 	// Cross-adapter co-ownership (ADV-1): mirror applyTarget so validate's
 	// WouldDelete matches what sync actually does. A shared-subdir leaf path a

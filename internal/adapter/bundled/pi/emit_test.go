@@ -98,6 +98,27 @@ func TestEmitSkill_WithAssets(t *testing.T) {
 	}
 }
 
+// TestEmitCommand_FileLeaf pins pi command emission as a flat file-leaf write to
+// .pi/prompts/<id>.md — a single write_file, no mkdir, with the managed header.
+func TestEmitCommand_FileLeaf(t *testing.T) {
+	t.Parallel()
+
+	res, ops := emitFixture(t, "command-only.json")
+	want := []adapterkit.OpRecord{
+		{Op: adapterkit.OpKindWriteFile, Path: ".pi/prompts/draftpr.md"},
+	}
+	if !reflect.DeepEqual(res.OpsPerformed, want) {
+		t.Fatalf("command OpsPerformed mismatch:\n got: %+v\nwant: %+v", res.OpsPerformed, want)
+	}
+	cmdOp := findWriteFile(t, ops, ".pi/prompts/draftpr.md")
+	if !strings.Contains(string(cmdOp.Content), "<!-- Managed by agent-sync") {
+		t.Errorf("command file missing managed header; got %q", cmdOp.Content)
+	}
+	if !strings.Contains(string(cmdOp.Content), "Draft a PR") {
+		t.Errorf("command file missing body; got %q", cmdOp.Content)
+	}
+}
+
 func TestEmitAgentsMD_HappyPath(t *testing.T) {
 	t.Parallel()
 
@@ -160,7 +181,7 @@ func TestEmitUnsupported_WarnsNoFiles(t *testing.T) {
 			t.Errorf("unsupported kinds must emit only warnings; got op %q path %q", r.Op, r.Path)
 		}
 	}
-	for _, conceptID := range []string{"no-fri", "draftpr", "lsp", "some-plugin"} {
+	for _, conceptID := range []string{"no-fri", "lsp", "some-plugin"} {
 		w, ok := findWarning(ops, conceptID)
 		if !ok {
 			t.Errorf("expected degradation warning for %q", conceptID)

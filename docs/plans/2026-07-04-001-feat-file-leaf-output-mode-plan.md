@@ -66,8 +66,14 @@ same gap that deferred Pi `command` (see `docs/adapters/pi.md`).
   temp→fsync→rename primitive; no directory swap, no new sentinel machinery).
 - **R3** — **Foreign files in the shared parent are never touched, never walked,
   never counted as drift or orphans.** This is the load-bearing safety property.
-- **R4** — Drift detection is **per-file** (compare on-disk hash to the ledger
-  entry); the engine must not directory-walk the shared parent.
+- **R4** — Drift detection is **per-file**; the engine must not directory-walk
+  the shared parent. Two distinct checks, consistent with every existing mode:
+  (a) `validate`/plan reports a hand-edited managed file as **OutOfBand** by
+  comparing the on-disk hash to the ledger entry; (b) the sync-time fail-closed
+  **gate** is per-file *unmanaged* detection (R10) — a path with no ledger entry.
+  A still-managed file that was hand-edited is overwritten on sync (as
+  owned-subdir/shared-subdir do); refusing to overwrite hand-edits in a
+  user-shared dir is the cross-mode **content-aware** improvement deferred below.
 - **R5** — Orphan reclaim is **per-file** via ledger diff (a previously-emitted
   file-leaf path no longer desired is deleted; foreign files are invisible).
 - **R6** — Both OutputMode type systems stay in lockstep (adapterkit SDK +
@@ -451,9 +457,24 @@ Pi command; docs; Codex note-sharpening (docs only).
 
 ### Deferred to Follow-Up Work
 
+- **Content-aware orphan deletion (from code review, P0-flagged).** Orphan reclaim
+  is content-blind across *all* modes: a previously-emitted file that is dropped
+  from the emit set is deleted without checking whether its on-disk bytes still
+  match the ledger. For file-leaf this is sharper — agent-sync files sit
+  un-namespaced in a dir the user is invited to edit, so a user who hand-edits an
+  agent-sync-owned command (despite the "do not edit" header) and then removes its
+  source node loses their edits silently. Fixing it (hash-check before orphan
+  delete) is a cross-mode engine change touching owned-subdir/shared-subdir too;
+  deliberately out of scope here to avoid widening this PR's blast radius into the
+  shared orphan path. Track as its own change.
 - **ADV-1 co-ownership for file-leaf.** Not needed now (`.pi/prompts/` vs
   `.cursor/commands/` are distinct dirs). If two adapters ever share one flat
   command dir, add the sibling-leaf release-filter path (mirror shared-subdir).
+- **Declared-output overlap validation (from code review).** The engine trusts
+  declared outputs; nothing rejects an adapter that declares contradictory
+  overlapping modes (e.g. an owned-subdir enclosing a file-leaf parent). No
+  bundled adapter does this, but an initialize-time validation rejecting
+  prefix-overlapping declarations with different modes would be defense-in-depth.
 - **Cursor command subdirectory namespacing.** IDE-only; skipped in favor of the
   flat file-leaf approach that works in IDE + CLI.
 

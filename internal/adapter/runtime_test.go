@@ -394,6 +394,96 @@ func TestSession_RejectsUndeclaredOutputs(t *testing.T) {
 	}
 }
 
+// TestSession_FileLeafGate pins the path-safety gate for file-leaf declared
+// outputs: a direct-child file is accepted, but the parent dir itself and any
+// nested path are rejected. This is the enforcement point that stops a
+// misbehaving adapter from claiming directory ownership via a file-leaf decl;
+// the engine integration tests can't reach it because the real adapters only
+// ever emit direct-child files.
+func TestSession_FileLeafGate(t *testing.T) {
+	t.Parallel()
+
+	newAdapter := func(opPath string) *scriptedAdapter {
+		return &scriptedAdapter{
+			name:            "fleaf",
+			declaredOutputs: []contract.DeclaredOutput{{Path: ".cursor/commands", Mode: contract.OutputModeFileLeaf}},
+			conceptKinds:    map[string]contract.CapabilityLevel{},
+			emitOps:         []contract.OpRecord{{Op: contract.OpKindWriteFile, Path: opPath}},
+		}
+	}
+
+	t.Run("direct-child file accepted", func(t *testing.T) {
+		t.Parallel()
+		sess, ctx, _ := runScriptedSession(t, newAdapter(".cursor/commands/deploy.md"))
+		if _, err := sess.Initialize(ctx); err != nil {
+			t.Fatalf("Initialize: %v", err)
+		}
+		if err := sess.Initialized(ctx); err != nil {
+			t.Fatalf("Initialized: %v", err)
+		}
+		if _, err := sess.Emit(ctx, "fleaf", json.RawMessage(`{"nodes":[]}`)); err != nil {
+			t.Fatalf("direct-child file must pass the gate; got %v", err)
+		}
+	})
+
+	// A file-leaf parent of "." (workspace root) must still enforce the
+	// direct-child rule — it must NOT inherit the "." accept-everything early
+	// return, which would let nested paths bypass the gate.
+	t.Run("root file-leaf parent still enforces direct-child", func(t *testing.T) {
+		t.Parallel()
+		rootAdapter := func(opPath string) *scriptedAdapter {
+			return &scriptedAdapter{
+				name:            "rootfleaf",
+				declaredOutputs: []contract.DeclaredOutput{{Path: ".", Mode: contract.OutputModeFileLeaf}},
+				conceptKinds:    map[string]contract.CapabilityLevel{},
+				emitOps:         []contract.OpRecord{{Op: contract.OpKindWriteFile, Path: opPath}},
+			}
+		}
+		// Top-level file accepted.
+		sess, ctx, _ := runScriptedSession(t, rootAdapter("deploy.md"))
+		if _, err := sess.Initialize(ctx); err != nil {
+			t.Fatalf("Initialize: %v", err)
+		}
+		if err := sess.Initialized(ctx); err != nil {
+			t.Fatalf("Initialized: %v", err)
+		}
+		if _, err := sess.Emit(ctx, "rootfleaf", json.RawMessage(`{"nodes":[]}`)); err != nil {
+			t.Fatalf("top-level file under root file-leaf must pass; got %v", err)
+		}
+		// Nested path rejected (the security bypass this guards against).
+		sess2, ctx2, _ := runScriptedSession(t, rootAdapter("sub/dir/file.md"))
+		if _, err := sess2.Initialize(ctx2); err != nil {
+			t.Fatalf("Initialize: %v", err)
+		}
+		if err := sess2.Initialized(ctx2); err != nil {
+			t.Fatalf("Initialized: %v", err)
+		}
+		if _, err := sess2.Emit(ctx2, "rootfleaf", json.RawMessage(`{"nodes":[]}`)); !errors.Is(err, adapter.ErrAdapterUndeclaredOutput) {
+			t.Fatalf("nested path under root file-leaf must be rejected; got %v", err)
+		}
+	})
+
+	for _, bad := range []struct{ name, path string }{
+		{"parent dir itself", ".cursor/commands"},
+		{"nested path", ".cursor/commands/sub/x.md"},
+	} {
+		t.Run(bad.name+" rejected", func(t *testing.T) {
+			t.Parallel()
+			sess, ctx, _ := runScriptedSession(t, newAdapter(bad.path))
+			if _, err := sess.Initialize(ctx); err != nil {
+				t.Fatalf("Initialize: %v", err)
+			}
+			if err := sess.Initialized(ctx); err != nil {
+				t.Fatalf("Initialized: %v", err)
+			}
+			_, err := sess.Emit(ctx, "fleaf", json.RawMessage(`{"nodes":[]}`))
+			if !errors.Is(err, adapter.ErrAdapterUndeclaredOutput) {
+				t.Fatalf("file-leaf %s (%q) must be rejected; got %v", bad.name, bad.path, err)
+			}
+		})
+	}
+}
+
 func TestSession_OpWarningExemptFromGate(t *testing.T) {
 	// AC-002: warnings carry path="" intentionally. The gate must not
 	// flag them as undeclared outputs.

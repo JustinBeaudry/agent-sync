@@ -26,10 +26,11 @@ The adapter owns:
 
 The adapter does **not** own:
 
-- `command` or `plugin-reference` — Cursor reads neither at the project
-  level in a way agent-sync can own today, so they are declared
-  `unsupported` (see "Unsupported kinds" below). (`skill` is supported via
-  the shared `.agents/skills/` tree — see the table.)
+- `plugin-reference` — Cursor has no project-level plugin manifest
+  agent-sync can populate, so it is declared `unsupported` (see
+  "Unsupported kinds" below). (`skill` is supported via the shared
+  `.agents/skills/` tree; `command` via the file-leaf `.cursor/commands/`
+  tree — see the table.)
 - The legacy `.cursorrules` file — it is never written, migrated, or
   mutated (see "Legacy `.cursorrules`" below).
 - The whole of `AGENTS.md` — the adapter writes exactly one
@@ -47,7 +48,7 @@ The adapter does **not** own:
 | `rule` | supported | `.cursor/rules/agent-sync/<id>.mdc` | n/a | Managed-file header prepended. v1 emits frontmatter-less `.mdc` (the IR strips frontmatter at decode); the rule behaves as a manual / agent-requested rule until IR frontmatter exposure lands. No `paths:` ward — that is a Claude Code bug with no Cursor equivalent. |
 | `mcp-server-entry` | supported | `.cursor/mcp.json` | json-pointer `/mcpServers/agentsync_<id>` | A sidecar `.cursor/.agent-sync-managed` file is written alongside `.cursor/mcp.json` because JSON has no comment syntax. |
 | `skill` | supported | `.agents/skills/agent-sync-<id>/SKILL.md` (+assets) | n/a | Shared cross-tool tree (co-owned with codex/pi/antigravity; ADV-1-safe, byte-identical `SKILL.md`). Cursor reads `.agents/skills/` and `~/.agents/skills/`. Scope-invariant: the relative path resolves under `$HOME` at user scope. |
-| `command` | unsupported | n/a | n/a | Cursor commands live in a **flat** `.cursor/commands/` dir (project) / `~/.cursor/commands/` (user), co-resident with user files. Owning individual files there needs `file-leaf` engine support (planned); subdirectory namespacing works in the Cursor IDE but not the CLI. Until then, targeting `command` surfaces a degradation warning and emits no files. |
+| `command` | supported | `.cursor/commands/<id>.md` (project) / `~/.cursor/commands/<id>.md` (user) | n/a | Emitted via the engine's `file-leaf` mode: a **flat** dir shared with the user's own command files. agent-sync owns only the individual `<id>.md` files it emits — never the dir or foreign files (a pre-existing unmanaged file at the same path fails closed, adoptable via `--adopt-prefix`). Emitted flat (no subdir): the Cursor CLI does not read command subdirectories. |
 | `plugin-reference` | unsupported | n/a | n/a | Cursor does not load project-level plugin registries. Targeting `plugin-reference` at `cursor` surfaces a degradation warning and emits no files. |
 
 ## Path-verification notes
@@ -76,19 +77,13 @@ the adapter declares these kinds `unsupported` and surfaces a
 degradation `warning` op so the sync report names the gap honestly. No
 files are written for these kinds.
 
-- **`command`** — Cursor commands live in a **flat** `.cursor/commands/`
-  directory (project) and `~/.cursor/commands/` (user), co-resident with
-  the user's own command files. Owning individual files in a shared flat
-  dir requires the engine's `file-leaf` OutputMode (planned — see the
-  file-leaf plan). Subdirectory namespacing (`.cursor/commands/agent-sync/`)
-  is read by the Cursor IDE but **not** the Cursor CLI, so it is not a
-  portable option. `command` flips to `supported` once `file-leaf` lands.
 - **`plugin-reference`** — Cursor has no project-level plugin manifest
   that agent-sync can populate.
 
-> **`skill` is now supported** (was unsupported in earlier releases):
-> Cursor reads the shared `.agents/skills/` tree, so the adapter co-owns
-> it with codex/pi/antigravity. See the concept table above.
+> **`skill` and `command` are now supported** (both were unsupported in
+> earlier releases): `skill` via the shared `.agents/skills/` tree (co-owned
+> with codex/pi/antigravity); `command` via the engine's `file-leaf` mode
+> into the flat `.cursor/commands/` dir. See the concept table above.
 
 ## Legacy `.cursorrules`
 
@@ -122,6 +117,7 @@ project config:
 |---|---|
 | `mcp-server-entry` | Emitted to `~/.cursor/mcp.json` — Cursor's user-global MCP config, the same `{"mcpServers": {...}}` shape as the project file. The strict-JSON sidecar (`.agent-sync-managed`) is **suppressed**: `~/.cursor/mcp.json` is Cursor's own shared file, not an agent-sync-owned one. |
 | `skill` | Emitted to `.agents/skills/agent-sync-<id>/` (→ `~/.agents/skills/…`), which Cursor reads at user scope. Scope-invariant — no remap needed. |
+| `command` | Emitted to `.cursor/commands/<id>.md` (→ `~/.cursor/commands/<id>.md`), Cursor's user-global command dir. Scope-invariant file-leaf — no remap needed. |
 | `rule` | **Skipped.** Cursor has no file-addressable user-global rules location — "User Rules" live in Cursor's settings/cloud (Customize → Rules), not a writable file. |
 | `agents-md` | **Skipped.** Cursor reads `AGENTS.md` at the project root and in subdirectories only; there is no user-global `~/AGENTS.md` or `~/.cursor/AGENTS.md`. |
 

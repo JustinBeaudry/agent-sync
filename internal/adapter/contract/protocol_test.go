@@ -144,6 +144,8 @@ func TestOutputModes_StableValues(t *testing.T) {
 	}{
 		{OutputModeOwnedSubdir, "owned-subdir"},
 		{OutputModeToolOwnedEntry, "tool-owned-entry"},
+		{OutputModeSharedSubdir, "shared-subdir"},
+		{OutputModeFileLeaf, "file-leaf"},
 	}
 	for _, c := range cases {
 		if string(c.got) != c.want {

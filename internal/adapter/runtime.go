@@ -539,10 +539,33 @@ func (s *AdapterSession) pathInDeclaredOutputs(opPath string) bool {
 		if path.IsAbs(declClean) {
 			continue
 		}
-		// path.Clean turns "" or "./" into ".". A declared output of "."
-		// is the workspace root: every workspace-relative path is contained
-		// within it. Without this case the prefix check below would fail
-		// for any normalized path that doesn't literally start with "./".
+		// file-leaf declares a shared PARENT dir but owns only direct-child
+		// files. Enforce that here: the op path must be a direct child of the
+		// parent with no further segment, and never the parent dir itself. A
+		// nested path is not accepted by THIS declaration, but must not
+		// short-circuit the loop: a later declared output (e.g. a nested
+		// owned-subdir) may legitimately cover it. Fall through to the next decl;
+		// the loop's final `return false` rejects if none match.
+		//
+		// The file-leaf branch is checked BEFORE the "." workspace-root early
+		// return below: a file-leaf parent of "." (own top-level files) must still
+		// enforce the direct-child rule, not inherit "." 's accept-everything.
+		if decl.Mode == contract.OutputModeFileLeaf {
+			var rest string
+			if declClean == "." {
+				rest = clean // direct children of the repo root are top-level files
+			} else if strings.HasPrefix(clean, declClean+"/") {
+				rest = clean[len(declClean)+1:]
+			}
+			if rest != "" && !strings.Contains(rest, "/") {
+				return true
+			}
+			continue
+		}
+		// path.Clean turns "" or "./" into ".". A non-file-leaf declared output of
+		// "." is the workspace root: every workspace-relative path is contained
+		// within it. Without this case the prefix check below would fail for any
+		// normalized path that doesn't literally start with "./".
 		if declClean == "." {
 			return true
 		}

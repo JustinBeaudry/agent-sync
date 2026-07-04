@@ -143,7 +143,7 @@ type emitState struct {
 	// sourceURL / sourceCommit are the session-level source identity from
 	// InitializeParams (audit-safe canonical URL or local path + resolved
 	// SHA), used to render the managed header. A node-level override
-	// (composed nodes) wins over these — see prependHeader.
+	// (composed nodes) wins over these — see sourceForNode.
 	sourceURL    string
 	sourceCommit string
 
@@ -165,11 +165,11 @@ func (s *emitState) recordWritePath(path string) error {
 
 // dispatchNode routes one IR node to its kind-specific emitter.
 //
-// Supported kinds (agents-md, skill) produce ops; unsupported kinds
-// (mcp-server-entry, rule, command, plugin-reference) produce a degradation
-// warning and emit no files. The capability matrix in capabilities.go is the
-// authoritative source for which kinds are supported; this switch must stay in
-// agreement with it. (command is planned — see capabilities.yaml.)
+// Supported kinds (agents-md, skill, command) produce ops; unsupported kinds
+// (mcp-server-entry, rule, plugin-reference) produce a degradation warning and
+// emit no files. The capability matrix in capabilities.go is the authoritative
+// source for which kinds are supported; this switch must stay in agreement with
+// it.
 func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 	if !ir.IsValidID(node.ID) {
 		return &adapterkit.Error{
@@ -182,7 +182,9 @@ func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 		return emitAgentsMD(emitted, node, state)
 	case ir.KindSkill:
 		return emitSkill(emitted, node, state)
-	case ir.KindMCPServerEntry, ir.KindRule, ir.KindCommand, ir.KindPluginReference:
+	case ir.KindCommand:
+		return emitCommand(emitted, node, state)
+	case ir.KindMCPServerEntry, ir.KindRule, ir.KindPluginReference:
 		return emitUnsupportedWarning(emitted, node)
 	default:
 		return &adapterkit.Error{

@@ -12,12 +12,11 @@ import (
 // the adapter declines honestly rather than emitting dead files into
 // directories Cursor never reads.
 var unsupportedNotes = map[ir.Kind]string{
-	ir.KindCommand:         "Cursor commands live in a flat .cursor/commands/ dir; owning individual files there needs file-leaf engine support (planned). The command was not installed",
 	ir.KindPluginReference: "Cursor does not load project-level plugin references; the reference was not installed",
 }
 
 // emitUnsupportedWarning surfaces the unsupported declaration for a
-// command or plugin-reference node. No write_file is emitted.
+// plugin-reference node. No write_file is emitted.
 //
 // The runtime's capability-lied check (internal/adapter/runtime.go)
 // only fires for kinds the adapter declared as `supported`, so
