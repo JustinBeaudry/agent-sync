@@ -225,11 +225,11 @@ func (s *emitState) recordWritePath(path string) error {
 
 // dispatchNode routes one IR node to its kind-specific emitter.
 //
-// Supported kinds (rule, mcp-server-entry, agents-md) produce ops;
-// unsupported kinds (skill, command, plugin-reference) produce a
-// degradation warning and emit no files. The capability matrix in
-// capabilities.go is the authoritative source for which kinds are
-// supported; this switch must stay in agreement with it.
+// Supported kinds (rule, mcp-server-entry, agents-md, skill) produce ops;
+// unsupported kinds (command, plugin-reference) produce a degradation
+// warning and emit no files. The capability matrix in capabilities.go is
+// the authoritative source for which kinds are supported; this switch must
+// stay in agreement with it.
 //
 // At user scope, rule and agents-md are skipped (no op): Cursor has no
 // file-addressable user-global home for either (User Rules live in app
@@ -265,7 +265,12 @@ func dispatchNode(emitted *emittedOps, node irNode, state *emitState) error {
 			return nil // no user-global AGENTS.md home; see coverage.nonNativeAtUser
 		}
 		return emitAgentsMD(emitted, node)
-	case ir.KindSkill, ir.KindCommand, ir.KindPluginReference:
+	case ir.KindSkill:
+		// Supported at both scopes: Cursor reads .agents/skills/ and
+		// ~/.agents/skills/, so the shared skill tree resolves correctly under the
+		// home scope root without a remap.
+		return emitSkill(emitted, node, state)
+	case ir.KindCommand, ir.KindPluginReference:
 		return emitUnsupportedWarning(emitted, node)
 	default:
 		return &adapterkit.Error{

@@ -35,15 +35,15 @@ type conceptKindDeclaration struct {
 // test asserts the two are kept in sync; if you add a kind here,
 // add it there (and vice versa).
 //
-// Cursor declares three kinds unsupported: skill (no folder-per-skill
-// concept), command (no project-level command concept), and
-// plugin-reference (no project plugin registry). See capabilities.yaml
-// notes and docs/adapters/cursor.md for the rationale.
+// Cursor declares two kinds unsupported: command (no project-level command
+// concept — pending file-leaf support) and plugin-reference (no project plugin
+// registry). skill is supported via the shared .agents/skills tree. See
+// capabilities.yaml notes and docs/adapters/cursor.md for the rationale.
 var conceptKinds = map[ir.Kind]capmatrix.CapabilityStatus{
 	ir.KindAgentsMD:        capmatrix.Supported,
 	ir.KindRule:            capmatrix.Supported,
 	ir.KindMCPServerEntry:  capmatrix.Supported,
-	ir.KindSkill:           capmatrix.Unsupported,
+	ir.KindSkill:           capmatrix.Supported,
 	ir.KindCommand:         capmatrix.Unsupported,
 	ir.KindPluginReference: capmatrix.Unsupported,
 }
@@ -100,6 +100,13 @@ func declaredOutputs(scope string) []adapterkit.DeclaredOutput {
 	paths := resolvePathSet(scope)
 	outputs := []adapterkit.DeclaredOutput{
 		{Path: paths.mcpJSON, Mode: adapterkit.OutputModeToolOwnedEntry, JSONPointer: &mcpPointer},
+		// .agents/skills is the shared cross-tool skills tree (cursor, codex, pi,
+		// antigravity co-own it). shared-subdir → the engine manages only the
+		// agent-sync-<id> leaf dirs, never the parent, so foreign and
+		// sibling-adapter skills survive a sync (ADV-1). Declared at both scopes:
+		// the relative path resolves to ~/.agents/skills at user scope, which
+		// Cursor also reads.
+		{Path: skillsParent, Mode: adapterkit.OutputModeSharedSubdir},
 	}
 	if scope == scopeUser {
 		return outputs
