@@ -1,0 +1,13 @@
+Now, how do we make sure cursor, and codex have full parity?
+
+---
+
+yes
+
+---
+
+yes
+
+---
+
+/compound-engineering:ce-resolve-pr-feedback 40
