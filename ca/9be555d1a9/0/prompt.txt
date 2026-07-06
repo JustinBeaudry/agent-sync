@@ -1,0 +1,152 @@
+Final spec compliance review for Task 2 in /Users/justinbeaudry/Projects/agent-sync after commits ad94a67, 62e74e9, 767f817, 3c94549. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Task 2 requirements:
+- Changed scope limited to internal/hierarchy and internal/coverage files.
+- Add LevelWorkspace between LevelUser and LevelProject. String returns "workspace"; MarshalText still works; tests updated.
+- Discovery uses lightweight marker parsing of `.agent-sync.yaml` fields `scope` and `activation_root`, without requiring full manifest validity/canonical source.
+- Malformed ordinary manifests should not fail discovery; malformed files that visibly claim activation root (`scope: workspace` including quoted scalar forms, and `activation_root: true` including accepted boolean capitalizations) must fail closed.
+- If cwd is inside nearest activation root:
+  - user scope is not included at all.
+  - activation root appears as LevelWorkspace.
+  - project/directory scopes below it still appear as before, bounded by activation root.
+  - cwd == activation root returns exactly the workspace scope.
+- Nested activation roots fail closed; error includes "nested activation roots" and both manifest paths.
+- Outside activation roots, existing user -> project -> directory behavior unchanged.
+- Coverage Analyze treats LevelWorkspace like project/root level and produces no warnings.
+- Tests cover activation root stop, outside activation root includes user, nested activation roots fail, malformed non-activation manifests do not fail discovery, malformed activation-root markers fail closed including quoted/capitalized forms, cwd==activation root, workspace coverage no warnings.
+- Focused tests passed locally.
+
+Inspect current Task 2 diff from commit 0b3d76b through HEAD.
+
+---
+
+Final code quality review for Task 2 in /Users/justinbeaudry/Projects/agent-sync after commits ad94a67, 62e74e9, 767f817, 3c94549. Spec review is separate. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Changed files only: internal/hierarchy and internal/coverage. Prior quality findings should be fixed:
+- malformed activation-root markers should not fail open, including quoted workspace and capitalized booleans.
+- stale activationRootsBetween comment should be fixed.
+
+Review for correctness/maintainability around markerAt, looksLikeActivationRootMarker, hop budget, cwd==activation root, nested activation roots, malformed ordinary manifests versus malformed activation markers, duplicate scopes, stale comments, and tests.
+
+Focused tests passed locally:
+- go test ./internal/hierarchy ./internal/coverage -count=1
+- go test ./internal/cli -run 'TestCompose_MalformedUserManifestDefersCursor|TestRunHierarchySyncContinuesPastMalformedScope' -count=1
+
+---
+
+Implement Task 3: Use Manifest Scope In Prepared Requests in /Users/justinbeaudry/Projects/agent-sync. You are not alone in the codebase; do not revert changes made by others. Use TDD and commit your completed task. Return DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED with changed files, tests run, commit SHA.
+
+Context:
+- Tasks 1-2 are complete. manifest.ScopeWorkspace exists. hierarchy.LevelWorkspace exists.
+- Current prepareScope receives a discovered scope string and sets engine.Request.Scope to that string, ignoring a manifest-declared scope.
+- The plan requires manifest scope to win when present.
+- Important extra from Task 2 review: if workspace scope can flow to adapter InitializeParams, update adapter contract schema/comments/tests if they enumerate valid scope strings, so `workspace` is not undocumented or schema-invalid.
+
+Files likely touched:
+- internal/cli/setup.go
+- internal/cli/hierarchy_sync.go
+- internal/cli/hierarchy_sync_test.go
+- internal/cli/cmd_validate.go if needed
+- internal/adapter/contract/protocol.go and schema/tests if scope enum/comment exists there
+- any adapterkit mirror if it has scope comments/schema
+
+Requirements:
+1. Add a helper in setup.go:
+   func requestScope(m *manifest.Manifest, discovered string) string
+   Behavior: if m != nil && m.Scope != "" return m.Scope; else if discovered != "" return discovered; else return manifest.ScopeProject.
+2. In prepareScope, set engine.Request.Scope to requestScope(m, scope), not the raw caller value.
+3. In prepareEngine, Cursor composition must use the actual request scope, not hardcoded project:
+   actualScope := requestScope(prep.Manifest, "project") or prep.Request.Scope
+   applyCursorComposition(..., actualScope, ...)
+4. In runHierarchySync, applyCursorComposition should pass req.Scope, not sc.Level.String().
+5. Add test `TestPrepareScope_UsesManifestScopeWhenPresent` or equivalent in internal/cli/hierarchy_sync_test.go:
+   - Workspace temp dir with manifest:
+     version: 1
+     scope: workspace
+     activation_root: true
+     canonical:
+       local_dir: .agents
+     targets:
+       - codex
+   - Add minimal `.agents/AGENTS.md` or source content needed for materialization.
+   - Call prepareScope(context.Background(), rc, ws, manifestPath, "project", now)
+   - Assert prep.Request.Scope == "workspace".
+6. Add/adjust tests around Cursor composition if needed so project composition still fires for project manifests and does not fire for workspace manifests.
+7. Update any protocol schema/comment that says scope is only user/project/directory to include workspace. Run schema parity tests if touched.
+
+Commands:
+- First after adding test, focused failure expected:
+  go test ./internal/cli -run TestPrepareScope_UsesManifestScopeWhenPresent -count=1
+- After implementation:
+  go test ./internal/cli -run 'TestPrepareScope_UsesManifestScopeWhenPresent|TestCompose' -count=1
+- Also run adapter contract tests if protocol/schema touched:
+  go test ./internal/adapter/contract -count=1
+- Run full affected packages:
+  go test ./internal/cli ./internal/adapter/contract -count=1
+- Commit:
+  git add internal/cli internal/adapter/contract pkg/adapterkit
+  git commit -m "fix: honor manifest scope in engine requests"
+
+Adapt paths if some listed files are not touched. Keep changes tight.
+
+---
+
+Spec compliance review for Task 3 commit 309eda3 in /Users/justinbeaudry/Projects/agent-sync. Do not edit files. Return APPROVED or CHANGES_REQUIRED. Focus only on whether implementation matches the requested Task 3 spec and necessary contract updates.
+
+Task 3 requirements:
+- Add requestScope(m *manifest.Manifest, discovered string) behavior: manifest scope wins when non-empty; else discovered; else project.
+- prepareScope sets engine.Request.Scope using requestScope(m, scope).
+- prepareEngine Cursor composition uses actual request scope, not hardcoded project.
+- runHierarchySync applyCursorComposition passes req.Scope, not sc.Level.String().
+- Test proves prepareScope uses manifest `scope: workspace` even if caller passed `project`.
+- Project composition still works for project manifests and should not fire for workspace manifests.
+- Since workspace scope flows to adapter InitializeParams, protocol/schema/comments/tests that enumerate scope include workspace.
+- Required tests passed per implementer.
+
+Changed files included internal/cli/setup.go, hierarchy_sync.go/tests, compose_test.go, adapter contract/schema, adapter.go, engine/request.go, pkg/adapterkit/types.go, runtime_test.go. Please inspect current diff for commit 309eda3 and report spec gaps or overreach.
+
+---
+
+Task 3 needs spec-review fixes in /Users/justinbeaudry/Projects/agent-sync. Do not revert unrelated changes. Fix and commit.
+
+Current Task 3 commit: 309eda3. Spec reviewer found:
+1. internal/cli/cmd_update.go syncAfterRepin still calls applyCursorComposition with fallback local `scope`, not computed `req.Scope`. For a manifest `scope: workspace`, update-after-repin can wrongly fire project-only Cursor composition.
+2. docs/spec/adapter-protocol-v1.md still documents initialize scope as only user/project/directory; it must include workspace.
+3. requestScope forwards any non-empty manifest scope. Manifest validation still accepts `global`, but adapter initialize schema excludes global, so valid `scope: global` manifests can produce contract-invalid InitializeParams.
+
+Required fixes:
+- In syncAfterRepin, call `applyCursorComposition(..., req.Scope, ...)`, not local fallback `scope`.
+- Add test coverage in internal/cli if practical: update/syncAfterRepin with a workspace manifest + compose.cursor-rules-from-user should not compose as project. If direct test is awkward, add a focused test around syncAfterRepin or prepare/update path using existing helpers.
+- Update docs/spec/adapter-protocol-v1.md initialize params table to enumerate `user`, `workspace`, `project`, `directory`, and `global` if we continue forwarding global.
+- Update internal/adapter/contract/schema/initialize.json enum to include `global`.
+- Update comments in internal/adapter/contract/protocol.go, pkg/adapterkit/types.go, internal/engine/request.go, internal/adapter/adapter.go if they enumerate scope values, to include workspace and global or explain global is a legacy/accepted manifest scope treated by adapters as project unless they know it.
+- Add/adjust schema parity/protocol tests if needed. Search for tests that assert the scope enum.
+
+Commands:
+- `go test ./internal/cli -run 'Test.*Update|TestPrepareScope_UsesManifestScopeWhenPresent|TestCompose' -count=1` (adapt regex if too broad/slow)
+- `go test ./internal/adapter/contract ./internal/adapter ./internal/engine ./pkg/adapterkit -count=1`
+- `go test ./internal/cli ./internal/adapter/contract -count=1`
+
+Commit message: `fix: keep manifest scopes contract-valid`
+
+Return DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED with changed files, tests run, commit SHA.
+
+---
+
+Spec compliance re-review for Task 3 in /Users/justinbeaudry/Projects/agent-sync after commits 309eda3 and 5f3e9ad. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Task 3 requirements:
+- requestScope(m, discovered): manifest scope wins when non-empty; else discovered; else project.
+- prepareScope sets engine.Request.Scope using requestScope.
+- prepareEngine Cursor composition uses actual request scope, not hardcoded project.
+- runHierarchySync applyCursorComposition passes req.Scope.
+- update-after-repin sync path also uses actual req.Scope for Cursor composition.
+- Test proves prepareScope uses manifest `scope: workspace` even if caller passed `project`.
+- Project composition still works for project manifests and does not fire for workspace manifests.
+- Protocol/schema/comments/tests that enumerate scope include workspace and remain valid for all manifest scopes that can be forwarded, including legacy `global` as project alias.
+- Public adapter protocol docs updated if they enumerate initialize scope values.
+- Targeted tests passed locally:
+  go test ./internal/cli -run 'Test.*Update|TestPrepareScope_UsesManifestScopeWhenPresent|TestCompose' -count=1
+  go test ./internal/adapter/contract ./internal/adapter ./internal/engine ./pkg/adapterkit -count=1
+
+Please inspect current Task 3 diff from commit 3c94549 through HEAD and report any spec gaps.
