@@ -1,0 +1,124 @@
+Final Task 1 spec compliance re-review in /Users/justinbeaudry/Projects/agent-sync after commits 02f8b47, b8302bd, 0b3d76b. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Check Task 1 requirements plus review-loop fixes:
+- Manifest constants and ActivationRoot validation.
+- InitConfig scope/activation_root validation and rendering.
+- init --user writes home manifest with scope user and creates ~/.agents.
+- normal init and --dir write scope project.
+- inherited/global --workspace writes scope workspace.
+- --activation-root works only with --workspace and is rejected early for project/default, --dir, and --user.
+- Tests cover the positive and negative cases and pass.
+
+Inspect current diff from base 4e26a75 through HEAD.
+
+---
+
+Final Task 1 code quality review in /Users/justinbeaudry/Projects/agent-sync after commits 02f8b47, b8302bd, 0b3d76b. Spec compliance is approved. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Prior findings should be fixed:
+1. Default project init omitted scope: project.
+2. `init --activation-root` invalid combinations did not fail fast and lacked negative tests.
+
+Inspect the current Task 1 diff from base commit 4e26a75 through HEAD. Focus on changed files only: internal/manifest/*, internal/tui/wizard/*, internal/cli/cmd_init*. Look for correctness, maintainability, brittle tests, and CLI semantics.
+
+---
+
+Implement Task 2: Activation Root Discovery in /Users/justinbeaudry/Projects/agent-sync. Use current branch/worktree. You are not alone in the codebase: do not revert changes made by others. Use TDD. Commit your completed task. Return DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED, changed files, tests run, commit SHA.
+
+Context:
+- Task 1 is complete: manifest.ScopeWorkspace and Manifest.ActivationRoot exist and are validated.
+- Keep production code changes scoped to internal/hierarchy and internal/coverage.
+- Discovery may still set Emit according to existing conventions; a later task will add a CLI selector for single write target. For activation-root tests, assert levels/roots, not that workspace Emit is the final sync decision.
+
+Files:
+- Modify: internal/hierarchy/hierarchy.go
+- Modify: internal/hierarchy/discover.go
+- Modify: internal/hierarchy/discover_test.go
+- Modify: internal/hierarchy/hierarchy_test.go
+- Modify: internal/coverage/coverage.go
+- Modify: internal/coverage/coverage_test.go
+
+Requirements:
+1. Add LevelWorkspace between LevelUser and LevelProject. String() returns "workspace". MarshalText continues to work. Update hierarchy level tests.
+2. Discovery must find workspace activation roots by lightweight marker parsing of `.agent-sync.yaml` fields `scope` and `activation_root`, without requiring a full valid manifest/canonical source. Keep existing discovery tolerant of minimal test manifests like `version: 1`.
+3. If cwd is inside a nearest activation root:
+   - Do not include the user scope at all, even when home has a manifest.
+   - Include the activation root as LevelWorkspace.
+   - Then include project/directory scopes below it as before, bounded so the project-root search stops at activation root instead of home.
+   - If cwd is the activation root itself, return only that workspace scope unless deeper scopes apply.
+4. Nested activation roots are invalid. If more than one activation root exists between cwd and home, Discover must fail closed with an error mentioning "nested activation roots" and both manifest paths.
+5. Outside activation roots, existing user -> project -> directory behavior remains unchanged.
+6. Coverage Analyze should treat LevelWorkspace like project/root level, so no warnings for workspace level.
+
+Tests to add/adapt:
+- TestDiscover_ActivationRootStopsUserScope:
+  home has user manifest, workspace under home has `scope: workspace` and `activation_root: true`, repo under workspace has .git and project manifest. Discover(repo, Home: home) returns levels [LevelWorkspace, LevelProject], root of first scope is workspace. Do not assert final write-target Emit decision.
+- TestDiscover_OutsideActivationRootIncludesUserScope: normal repo outside activation root returns [LevelUser, LevelProject].
+- TestDiscover_NestedActivationRootsFailClosed: outer and inner activation roots, cwd below inner, error contains "nested activation roots" and both paths.
+- Add helper gotLevels if useful.
+- Add TestAnalyze_WorkspaceLevelActsLikeProjectRoot to coverage tests.
+
+Suggested implementation details:
+- Add imports in discover.go: goccy/go-yaml and internal/manifest.
+- Add lightweight struct:
+  type manifestMarker struct { Scope string `yaml:"scope"`; ActivationRoot bool `yaml:"activation_root"` }
+- Add markerAt(dir) that checks manifestAt, size <= manifest.MaxManifestSize, os.ReadFile, yaml.Unmarshal (no DisallowUnknownField needed for marker parsing), returns marker/path/ok/error.
+- Add activationRootsBetween(cwd, home, maxHops) scanning upward from cwd to home/root. Collect roots with marker.Scope == manifest.ScopeWorkspace && marker.ActivationRoot. Reverse to shallow->deep for deterministic errors/output. If len > 1, error.
+- In Discover, after resolving home and maxHops, call activationRootsBetween. If one activation exists, build output from activation root plus emit scopes below it and return without user scope. Search project root with findProjectRoot(absCwd, activationRoot, maxHops). Be careful: findProjectRoot currently stops before checking dir == home, so if cwd == activation root it should not classify activation root as project root.
+- Use dedupeScopes if needed so activation root does not appear twice.
+
+Commands:
+1. First run expected failing focused tests after adding tests:
+   go test ./internal/hierarchy ./internal/coverage -run 'TestDiscover_(ActivationRootStopsUserScope|OutsideActivationRootIncludesUserScope|NestedActivationRootsFailClosed)|TestAnalyze_WorkspaceLevelActsLikeProjectRoot|TestLevelString' -count=1
+2. After implementation:
+   go test ./internal/hierarchy ./internal/coverage -count=1
+3. Commit:
+   git add internal/hierarchy internal/coverage
+   git commit -m "feat: stop hierarchy discovery at activation roots"
+
+Important: Existing tests in internal/hierarchy rely on writeManifest(t, dir) signature. Adapt helpers carefully; don't break older tests. If you need to write custom manifest content, add a new helper rather than replacing existing uses.
+
+---
+
+Spec compliance review for Task 2 commit ad94a67 in /Users/justinbeaudry/Projects/agent-sync. Do not edit files. Return APPROVED or CHANGES_REQUIRED. Focus on spec compliance only.
+
+Task 2 requirements:
+- Changed scope limited to internal/hierarchy and internal/coverage files.
+- Add LevelWorkspace between LevelUser and LevelProject. String returns "workspace"; MarshalText still works; tests updated.
+- Discovery uses lightweight marker parsing of `.agent-sync.yaml` fields `scope` and `activation_root`, without requiring full manifest validity/canonical source.
+- If cwd is inside nearest activation root:
+  - user scope is not included at all, even if home has a manifest.
+  - activation root appears as LevelWorkspace.
+  - project/directory scopes below it still appear as before, bounded by activation root.
+  - cwd == activation root returns just workspace unless deeper scopes apply.
+- Nested activation roots fail closed; error includes "nested activation roots" and both manifest paths.
+- Outside activation roots, existing user -> project -> directory behavior unchanged.
+- Coverage Analyze treats LevelWorkspace like project/root level and produces no warnings.
+- Tests cover activation root stop, outside activation root includes user, nested activation roots fail, workspace coverage no warnings.
+- Focused and package tests were run and passed per implementer.
+
+Please inspect current diff for commit ad94a67 and report any missing/extra behavior.
+
+---
+
+Task 2 needs a fix. You implemented commit ad94a67. There is a regression in CLI tests because markerAt returns an error for malformed YAML on any manifest in the upward scan, but existing behavior requires discovery to be presence-based and continue; malformed scope failures should surface later in prepareScope/compose, not as top-level discovery failure unless the manifest is actually needed to identify activation roots.
+
+You are in /Users/justinbeaudry/Projects/agent-sync. Do not revert unrelated changes. Fix and commit.
+
+Failing command I ran:
+`go test ./internal/cli -run 'TestCompose_MalformedUserManifestDefersCursor|TestRunHierarchySync|TestDiscover' -count=1`
+
+Failures:
+- `TestCompose_MalformedUserManifestDefersCursor`: malformed user manifest must not fail project sync; got `sync: discover hierarchy: hierarchy: parse manifest marker ...`
+- `TestRunHierarchySyncContinuesPastMalformedScope`: malformed directory scope should be a per-scope prepare error, not top-level discover error.
+
+Required behavior:
+- activation-root discovery should be lightweight and best-effort for marker parsing. A syntactically malformed manifest that cannot be parsed as marker should NOT fail discovery unless we have already determined it is an activation root (which is impossible if marker parsing fails). Treat marker parse failure as "manifest exists, not an activation root" for discovery purposes.
+- Size/read/stat errors can still fail discovery if they indicate actual filesystem access problems; but YAML parse errors from markerAt should be non-fatal and return ok=false or marker zero with has=true but not activation. Choose the cleanest shape.
+- Add focused tests in internal/hierarchy if useful: a malformed non-activation manifest between cwd and home does not make Discover fail and still returns normal scopes by presence where appropriate.
+- Run:
+  go test ./internal/hierarchy ./internal/coverage -count=1
+  go test ./internal/cli -run 'TestCompose_MalformedUserManifestDefersCursor|TestRunHierarchySyncContinuesPastMalformedScope' -count=1
+- Commit with message like `fix: tolerate malformed non-activation manifests in discovery`.
+
+Return DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED with changed files, tests run, commit SHA.
