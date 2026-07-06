@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -12,6 +15,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
 	"github.com/agent-sync/agent-sync/internal/report"
+	"github.com/agent-sync/agent-sync/internal/tui"
 )
 
 // hookSkippedMarker records that a git-hook-driven sync yielded to an
@@ -90,8 +94,20 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
 			}
-			outcomes, notice, err := runHierarchySync(cmd.Context(), rc, cwd, home,
-				hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts}, now)
+			hOpts := hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts}
+			// Interactive runs offer to include a discovered user manifest
+			// instead of silently skipping it (plan R16). Never on the
+			// git-hook path — a `git pull` must not block on a prompt — and
+			// tui.Interactive already excludes --non-interactive, piped
+			// stdin, and accessible mode (AGENTS invariant #3).
+			if !userScope && !postMerge &&
+				tui.Interactive(rc.Access.IsTTY, rc.Access.NonInteractive, rc.Access.Accessible) {
+				hOpts.OfferUser = func(manifestPath string) bool {
+					return promptYes(deps.in(), cmd.ErrOrStderr(),
+						fmt.Sprintf("Also sync the user-level manifest at %s? [Y/n] ", manifestPath))
+				}
+			}
+			outcomes, notice, err := runHierarchySync(cmd.Context(), rc, cwd, home, hOpts, now)
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
 			}
@@ -192,6 +208,20 @@ func handleHierarchyPostMerge(rc *runtimeContext, outcomes []scopeOutcome, now t
 		_ = root.Close()
 	}
 	return handled
+}
+
+// promptYes writes a [Y/n] question to w (stderr — stdout stays data-only)
+// and reads one line from in. Enter and anything not starting with n/N is
+// yes. A read error (closed stdin, EOF) is a decline: never treat an
+// unanswerable prompt as consent to write the home directory.
+func promptYes(in io.Reader, w io.Writer, question string) bool {
+	_, _ = fmt.Fprint(w, question)
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && line == "" {
+		return false
+	}
+	answer := strings.TrimSpace(line)
+	return answer == "" || (answer[0] != 'n' && answer[0] != 'N')
 }
 
 func anyBlocked(s report.Summary) bool {

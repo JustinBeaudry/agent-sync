@@ -9,6 +9,58 @@ While the project is pre-1.0, minor version bumps may include breaking changes;
 the adapter wire protocol follows its own "freeze the frame, grow capabilities"
 compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
+## [Unreleased]
+
+### Added
+
+- **Zero-flag `init`.** `agent-sync init` no longer requires a source or
+  targets: with no source flag the canonical source defaults to the in-repo
+  `.agents` directory (created when missing, so the first sync soft-lands on
+  the zero-emit hint instead of a missing-source error), and with no
+  `--target` the target list is **discovered** from the workspace's tool
+  footprints (`.claude/` → claude, `.cursor/` → cursor, `.codex/` → codex,
+  `.pi/` → pi, `.agent/` → antigravity) and snapshotted into `targets:`,
+  sorted. Zero footprints still writes the manifest (empty `targets:` is the
+  spec-valid "not yet configured" state) with a hint naming `--target`. The
+  success line announces every inference —
+  `wrote .agent-sync.yaml (source: .agents [default]; targets: claude [discovered])` —
+  and detected-but-not-enabled footprints when explicit `--target` flags
+  override discovery. PATH adapters are never auto-discovered.
+- **Wizard defaults.** The init wizard accepts an empty Enter at the source
+  prompt as the `.agents` in-repo source (skipping the ref question) and
+  preselects discovered targets (all targets when none were discovered).
+- **User-scope sync offer + skipped-user notice.** An interactive plain
+  `sync` that discovers `~/.agent-sync.yaml` now asks
+  `Also sync the user-level manifest at ~/.agent-sync.yaml? [Y/n]` instead of
+  silently skipping it. Any run that skips an existing user manifest (e.g.
+  non-interactive) ends with
+  `note: user-level manifest at ... was not synced; pass --user to include it`
+  in text output and in the additive JSON `notice` field — previously the
+  hint fired only when there was nothing else to sync. Declining the prompt
+  suppresses the note for that run; `--post-merge` (git-hook) syncs never
+  prompt.
+
+### Fixed
+
+- **No more duplicated `<name>: started` lines during sync.** Bundled
+  in-process adapters were printing the adapterkit session banner (subprocess
+  proof-of-life for the runtime's stderr ring) straight to the CLI's stderr,
+  once per adapter session — so every target printed it twice per sync.
+  Bundled adapters now discard that banner; subprocess adapters are
+  unchanged.
+
+### Changed
+
+- **`init --target <name>` on a TTY no longer launches the wizard** — with
+  the defaulted `.agents` source the invocation is fully specified. Bare
+  `agent-sync init` still runs the wizard on a terminal.
+- **`agent-sync init --non-interactive` with no flags now succeeds** (it
+  previously failed asking for `--source/--local-path/--local-dir`); scripts
+  relying on that failure now get a defaulted manifest instead.
+- **Pin flags without a source are rejected explicitly:** `--ref`,
+  `--commit`, or `--floating` with no `--source`/`--local-path` now fail with
+  an error naming the conflict (the defaulted `.agents` source is unpinned).
+
 ## [0.7.0] - 2026-07-04
 
 ### Added

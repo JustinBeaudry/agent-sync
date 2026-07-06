@@ -1179,6 +1179,15 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 
 **Goal:** Implement the interactive wizards with every branching state fully specified (fresh/existing manifest, ancestor detected, remote unreachable, local-path mode, zero targets, pre-existing target outputs). Flag-parity with unit 16.
 
+> **Partial delivery (2026-07-06):** the shipped wizard remains the simpler
+> linear model, now with smart defaults from
+> `docs/plans/2026-07-06-001-feat-init-defaults-target-discovery-plan.md`:
+> empty-Enter accepts the `.agents` in-repo source (skipping the ref phase),
+> footprint discovery preselects targets, and the flag path defaults source +
+> targets the same way (`--target` alone now skips the wizard). The full
+> branching-state spec (`docs/wizard/init-states.md`) and the remaining
+> screens above are still open under this unit.
+
 **Requirements:** R13
 
 **Dependencies:** Units 2, 3, 5, 6, 8, 16.

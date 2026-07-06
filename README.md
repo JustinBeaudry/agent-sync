@@ -39,6 +39,9 @@ PATH. (Windows: grab the `.zip`.) Git must be on your PATH at runtime.
 New to agent-sync? [`docs/quickstart.md`](docs/quickstart.md) walks through
 authoring a canonical repo and running your first `init → sync → validate`,
 with a copyable example under [`examples/canonical/`](examples/canonical/).
+The short version: `agent-sync init` needs zero flags — the source defaults
+to the in-repo `.agents` directory and targets are discovered from the tool
+footprints (`.claude/`, `.cursor/`, ...) already in your workspace.
 
 ## What agent-sync does
 
@@ -58,7 +61,9 @@ with a copyable example under [`examples/canonical/`](examples/canonical/).
    compiles it via per-tool adapters, stages the output, and atomically
    swaps it into each tool's reserved subdirectory (e.g.
    `.claude/rules/agent-sync/`, `.cursor/rules/agent-sync/`, `.codex/skills/agent-sync-<id>/`,
-   `.agent/rules/agent-sync/` for Antigravity).
+   `.agent/rules/agent-sync/` for Antigravity). An interactive sync offers to
+   include the user-level (`~`) manifest in the same run; non-interactive runs
+   note when the user scope was skipped so it never drifts silently.
    Emitted skills carry a real `name` / `description` frontmatter block so
    they show up correctly in each tool's skill list, and every managed file
    records its source (`<url>@<short-sha>`) in its header.

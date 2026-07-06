@@ -25,11 +25,12 @@ func (e *MissingFlagError) ExitCode() int { return exitUsage }
 
 // requireFlag returns a MissingFlagError when non-interactive mode is
 // active and a needed value was not supplied. Commands call this at the
-// point they would otherwise prompt. It is a general helper; `init` is the
-// only caller today (the --source/--local-path/--local-dir source choice),
-// and more commands will use it as they grow interactive prompts.
+// point they would otherwise prompt. It is a general helper with no
+// production caller today — init's source choice used it until the .agents
+// source default removed the requirement — kept for commands that grow
+// interactive prompts.
 //
-//nolint:unparam // general helper; init's source-choice flags are the only wiring today
+//nolint:unparam,unused // general helper awaiting its next caller
 func requireFlag(nonInteractive, provided bool, flag, why string) error {
 	if provided || !nonInteractive {
 		return nil

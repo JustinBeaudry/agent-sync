@@ -129,8 +129,76 @@ func typeString(m *initModel, s string) {
 	}
 }
 
+// TestInitModel_EmptyEnterDefaultsToAgentsLocalDir pins plan R10: an empty
+// Enter on the source screen accepts the in-repo .agents default and skips
+// the ref phase (ref + local_dir is invalid).
+func TestInitModel_EmptyEnterDefaultsToAgentsLocalDir(t *testing.T) {
+	m := newInitModel(true, []string{"claude"}, nil)
+
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.cfg.LocalDir != ".agents" {
+		t.Fatalf("LocalDir = %q, want .agents", m.cfg.LocalDir)
+	}
+	if m.phase != phaseTargets {
+		t.Fatalf("phase = %v, want phaseTargets (ref must be skipped for local_dir)", m.phase)
+	}
+
+	// Finish the flow: accept targets, confirm.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(key('y'))
+	if !m.committed {
+		t.Fatal("expected committed=true")
+	}
+	if err := m.cfg.Validate(); err != nil {
+		t.Fatalf("committed config must validate: %v", err)
+	}
+}
+
+// TestInitModel_DiscoveredTargetsPreselected pins plan R9: when discovery
+// found footprints, only those start selected.
+func TestInitModel_DiscoveredTargetsPreselected(t *testing.T) {
+	m := newInitModel(true, []string{"claude", "cursor", "pi"}, []string{"cursor"})
+
+	for _, tc := range m.targets {
+		want := tc.name == "cursor"
+		if tc.selected != want {
+			t.Fatalf("target %s selected = %v, want %v", tc.name, tc.selected, want)
+		}
+	}
+}
+
+// TestInitModel_ZeroDiscoveredPreselectsAll pins the greenfield fallback
+// (plan R9): zero discovered footprints keeps today's select-all default.
+func TestInitModel_ZeroDiscoveredPreselectsAll(t *testing.T) {
+	m := newInitModel(true, []string{"claude", "cursor"}, nil)
+
+	for _, tc := range m.targets {
+		if !tc.selected {
+			t.Fatalf("target %s should start selected when nothing was discovered", tc.name)
+		}
+	}
+}
+
+// TestInitModel_ConfirmRendersLocalDirAndEmptyTargets: the confirm screen
+// must show the defaulted source and an explicit "(none)" for zero targets.
+func TestInitModel_ConfirmRendersLocalDirAndEmptyTargets(t *testing.T) {
+	m := newInitModel(true, []string{"claude"}, nil)
+
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // empty source → .agents
+	m.Update(key(' '))                       // deselect claude
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm targets (none)
+
+	view := m.View()
+	if !strings.Contains(view, ".agents") {
+		t.Fatalf("confirm view should render the .agents source:\n%s", view)
+	}
+	if !strings.Contains(view, "(none)") {
+		t.Fatalf("confirm view should render (none) for empty targets:\n%s", view)
+	}
+}
+
 func TestInitModel_FullFlowProducesConfig(t *testing.T) {
-	m := newInitModel(true, []string{"claude", "cursor"})
+	m := newInitModel(true, []string{"claude", "cursor"}, nil)
 
 	// Phase source: type a URL, Enter.
 	typeString(m, "https://github.com/org/repo.git")
@@ -172,7 +240,7 @@ func TestInitModel_FullFlowProducesConfig(t *testing.T) {
 }
 
 func TestInitModel_EscAborts(t *testing.T) {
-	m := newInitModel(true, []string{"claude"})
+	m := newInitModel(true, []string{"claude"}, nil)
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.committed {
 		t.Fatal("esc should not commit")

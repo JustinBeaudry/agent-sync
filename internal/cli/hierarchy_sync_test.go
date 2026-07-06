@@ -765,3 +765,230 @@ func TestRenderHierarchyJSON(t *testing.T) {
 		t.Errorf("second scope error = %q, want kaboom", doc.Scopes[1].Error)
 	}
 }
+
+// writeUserManifest adds a user-level manifest + authored skill at home.
+func writeUserManifest(t *testing.T, home string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/skills/user-skill/SKILL.md", "user skill body\n")
+}
+
+func hierarchyEngineOpts(rc *runtimeContext, now time.Time) engine.Options {
+	return engine.Options{
+		Mode:   report.ModeAtomic,
+		Now:    func() time.Time { return now },
+		Logger: rc.Logger,
+	}
+}
+
+// TestRunHierarchySync_OfferUserAccepted pins plan R16: an accepted offer
+// includes the user scope in the same run, exactly as --user would.
+func TestRunHierarchySync_OfferUserAccepted(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	writeUserManifest(t, home)
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+
+	asked := 0
+	outcomes, notice, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{
+			IncludeUser: false,
+			EngineOpts:  hierarchyEngineOpts(rc, now),
+			OfferUser:   func(string) bool { asked++; return true },
+		},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	if asked != 1 {
+		t.Fatalf("offer asked %d times, want 1", asked)
+	}
+	foundUser := false
+	for _, o := range outcomes {
+		if o.Scope.Level == hierarchy.LevelUser {
+			foundUser = true
+		}
+	}
+	if !foundUser {
+		t.Fatalf("accepted offer must emit the user scope; outcomes: %d", len(outcomes))
+	}
+	mustExist(t, filepath.Join(home, ".claude", "skills", "agent-sync-user-skill", "SKILL.md"))
+	if notice != "" {
+		t.Fatalf("notice = %q, want empty when the user scope was synced", notice)
+	}
+}
+
+// TestRunHierarchySync_OfferUserDeclined pins plan R16/R17: a decline skips
+// the user scope for this run and suppresses the skipped-user notice (the
+// user answered; no nagging).
+func TestRunHierarchySync_OfferUserDeclined(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	writeUserManifest(t, home)
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+
+	outcomes, notice, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{
+			IncludeUser: false,
+			EngineOpts:  hierarchyEngineOpts(rc, now),
+			OfferUser:   func(string) bool { return false },
+		},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	for _, o := range outcomes {
+		if o.Scope.Level == hierarchy.LevelUser {
+			t.Fatal("declined offer must not emit the user scope")
+		}
+	}
+	mustNotExist(t, filepath.Join(home, ".claude"))
+	if notice != "" {
+		t.Fatalf("notice = %q, want empty after an explicit decline", notice)
+	}
+}
+
+// TestRunHierarchySync_NoOfferWithoutUserManifest: the offer only fires when
+// there is a user manifest to sync.
+func TestRunHierarchySync_NoOfferWithoutUserManifest(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+
+	asked := 0
+	_, notice, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{
+			IncludeUser: false,
+			EngineOpts:  hierarchyEngineOpts(rc, now),
+			OfferUser:   func(string) bool { asked++; return true },
+		},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	if asked != 0 {
+		t.Fatalf("offer asked %d times, want 0 (no user manifest)", asked)
+	}
+	if notice != "" {
+		t.Fatalf("notice = %q, want empty (nothing was skipped)", notice)
+	}
+}
+
+// TestRunHierarchySync_SkippedUserNotice pins plan R17: without a prompt
+// (non-interactive), a user manifest that was not synced yields a persistent
+// notice even though project scopes emitted fine.
+func TestRunHierarchySync_SkippedUserNotice(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	writeUserManifest(t, home)
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+
+	outcomes, notice, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{IncludeUser: false, EngineOpts: hierarchyEngineOpts(rc, now)},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	if len(outcomes) == 0 {
+		t.Fatal("expected project/directory outcomes")
+	}
+	if !strings.Contains(notice, "--user") {
+		t.Fatalf("notice = %q, want a skipped-user notice pointing at --user", notice)
+	}
+	mustNotExist(t, filepath.Join(home, ".claude"))
+}
+
+// TestRunHierarchySync_NoNoticeWithUserFlag: --user syncs the user scope, so
+// there is nothing to notice.
+func TestRunHierarchySync_NoNoticeWithUserFlag(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	writeUserManifest(t, home)
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+
+	_, notice, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{IncludeUser: true, EngineOpts: hierarchyEngineOpts(rc, now)},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	if notice != "" {
+		t.Fatalf("notice = %q, want empty under --user", notice)
+	}
+}
+
+// TestRenderHierarchyText_NoticePlacement pins plan R17/R18 rendering: with
+// outcomes, the notice trails the labeled scope blocks as a note: line (and
+// each scope renders exactly one == header); with zero outcomes the existing
+// nothing-to-sync prefix is preserved.
+func TestRenderHierarchyText_NoticePlacement(t *testing.T) {
+	outcomes := []scopeOutcome{
+		{Scope: hierarchy.Scope{Root: "/repo", Level: hierarchy.LevelProject}},
+		{Scope: hierarchy.Scope{Root: "/home/u", Level: hierarchy.LevelUser}},
+	}
+
+	var b bytes.Buffer
+	if err := renderHierarchyText(&b, outcomes, "user-level manifest at /home/u/.agent-sync.yaml was not synced; pass --user to include it"); err != nil {
+		t.Fatalf("renderHierarchyText: %v", err)
+	}
+	out := b.String()
+	if got := strings.Count(out, "== "); got != 2 {
+		t.Fatalf("scope headers = %d, want exactly 2:\n%s", got, out)
+	}
+	if !strings.Contains(out, "note: user-level manifest") {
+		t.Fatalf("notice should render as a trailing note::\n%s", out)
+	}
+	if strings.Contains(out, "nothing to sync") {
+		t.Fatalf("nothing-to-sync prefix is reserved for zero-emit runs:\n%s", out)
+	}
+	if idx := strings.Index(out, "note:"); idx < strings.LastIndex(out, "== ") {
+		t.Fatalf("note must trail the scope blocks:\n%s", out)
+	}
+
+	b.Reset()
+	if err := renderHierarchyText(&b, nil, "no .agent-sync.yaml found"); err != nil {
+		t.Fatalf("renderHierarchyText: %v", err)
+	}
+	if !strings.Contains(b.String(), "nothing to sync: no .agent-sync.yaml found") {
+		t.Fatalf("zero-emit rendering changed:\n%s", b.String())
+	}
+}
+
+// TestSyncCommandSkippedUserNoticeJSON drives the real command end-to-end:
+// a piped (non-interactive) sync with an unsynced user manifest carries the
+// notice in the JSON document alongside the emitted scopes.
+func TestSyncCommandSkippedUserNoticeJSON(t *testing.T) {
+	home, _, nested := hierarchyTree(t)
+	writeUserManifest(t, home)
+
+	out, errOut, err := runSyncHierarchy(t, nested, home)
+	if err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+	var doc struct {
+		Notice string            `json:"notice"`
+		Scopes []json.RawMessage `json:"scopes"`
+	}
+	if uerr := json.Unmarshal([]byte(out), &doc); uerr != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", uerr, out)
+	}
+	if len(doc.Scopes) != 2 {
+		t.Fatalf("scopes = %d, want 2", len(doc.Scopes))
+	}
+	if !strings.Contains(doc.Notice, "--user") {
+		t.Fatalf("notice = %q, want skipped-user notice", doc.Notice)
+	}
+	mustNotExist(t, filepath.Join(home, ".claude"))
+}

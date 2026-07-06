@@ -76,6 +76,9 @@ func run(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 		Version: adapterVersion,
 		Stdin:   stdin,
 		Stdout:  stdout,
+		// See claude/bundled.go: discard the adapterkit stderr banner for
+		// in-process runs.
+		Stderr: io.Discard,
 		// See claude/bundled.go: bundled adapters skip cookie validation at the
 		// runtime layer, but the SDK's startup magic-cookie format check still
 		// observes the env-var, so we supply a constant 32-hex string the

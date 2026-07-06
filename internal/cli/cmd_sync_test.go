@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,5 +151,62 @@ func TestSync_FloatingLocalPathUnsupported(t *testing.T) {
 	_, _, err := runSync(t, ws)
 	if err == nil {
 		t.Fatal("expected error for floating local_path")
+	}
+}
+
+// TestPromptYes pins the [Y/n] semantics: Enter and y are consent, n and an
+// unanswerable (closed) stdin are not — never write home on a read error.
+func TestPromptYes(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"enter defaults yes", "\n", true},
+		{"y", "y\n", true},
+		{"yes", "yes\n", true},
+		{"n", "n\n", false},
+		{"no", "No\n", false},
+		{"eof without input", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var errBuf bytes.Buffer
+			got := promptYes(strings.NewReader(tc.in), &errBuf, "sync user? [Y/n] ")
+			if got != tc.want {
+				t.Fatalf("promptYes(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+			if !strings.Contains(errBuf.String(), "[Y/n]") {
+				t.Fatalf("prompt not written: %q", errBuf.String())
+			}
+		})
+	}
+}
+
+// TestSync_NoAdapterStartedBannerOnStderr pins plan R18: bundled in-process
+// adapters must not spray per-session "<name>: started" banners onto the
+// CLI's stderr (the adapterkit banner is subprocess proof-of-life for the
+// stderr ring; in-process it is duplicate noise printed once per session).
+// The banner bypasses the cobra writers, so capture the real os.Stderr.
+func TestSync_NoAdapterStartedBannerOnStderr(t *testing.T) {
+	ws := writeLocalDirWorkspace(t)
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	os.Stderr = w
+	_, _, syncErr := runSync(t, ws, "--offline")
+	os.Stderr = oldStderr
+	_ = w.Close()
+	captured, _ := io.ReadAll(r)
+	_ = r.Close()
+
+	if syncErr != nil {
+		t.Fatalf("sync failed: %v", syncErr)
+	}
+	if strings.Contains(string(captured), "started") {
+		t.Fatalf("bundled adapter session banner leaked to stderr:\n%s", captured)
 	}
 }
