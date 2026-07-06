@@ -131,9 +131,11 @@ type InitializeParams struct {
 	ReservedPrefix   string   `json:"reserved_prefix"`
 	IRVersion        string   `json:"ir_version"`
 	// Scope is the hierarchy level this emit targets: "user", "project",
-	// "workspace", or "directory". It lets an adapter choose
+	// "workspace", "directory", or "global". It lets an adapter choose
 	// scope-appropriate output paths (e.g. the Claude adapter writes
 	// ~/.claude/CLAUDE.md at user scope vs ./CLAUDE.md at project scope).
+	// "global" is accepted as a legacy alias and should be treated as
+	// project by adapters unless they explicitly distinguish it.
 	// Additive and optional under the "freeze the frame, grow
 	// capabilities" policy: an adapter that ignores it, or an absent
 	// value, MUST be treated as "project".
