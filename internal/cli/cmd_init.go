@@ -22,14 +22,16 @@ import (
 
 func newInitCommand(deps RootDeps) *cobra.Command {
 	var (
-		source    string
-		localPath string
-		localDir  string
-		ref       string
-		commit    string
-		floating  bool
-		targets   []string
-		dir       string
+		source         string
+		localPath      string
+		localDir       string
+		ref            string
+		commit         string
+		floating       bool
+		targets        []string
+		dir            string
+		user           bool
+		activationRoot bool
 	)
 
 	cmd := &cobra.Command{
@@ -46,12 +48,33 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				return err
 			}
 
-			// The destination directory comes from --dir, falling back to the
-			// global --workspace flag, so `agent-sync --workspace X init ...` writes
-			// to X.
+			scope := ""
+			// --user writes into the resolved home directory and marks the
+			// manifest as the user scope.
 			destDir := dir
-			if destDir == "" {
-				destDir = rc.Flags.Workspace
+			if user {
+				if dir != "" {
+					return errors.New("init: --user cannot be combined with --dir")
+				}
+				if rc.Flags.Workspace != "" {
+					return errUserWithWorkspace
+				}
+				home, hErr := resolveHome()
+				if hErr != nil {
+					return fmt.Errorf("init: resolve home: %w", hErr)
+				}
+				destDir = home
+				scope = manifest.ScopeUser
+			} else {
+				// The destination directory comes from --dir, falling back to the
+				// global --workspace flag, so `agent-sync --workspace X init ...`
+				// writes to X and sets scope=workspace.
+				if destDir == "" {
+					destDir = rc.Flags.Workspace
+					if destDir != "" {
+						scope = manifest.ScopeWorkspace
+					}
+				}
 			}
 			// A bad destination must fail as a directory error before any
 			// discovery or targets messaging can mask it (plan R8). An empty
@@ -79,14 +102,16 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 			}
 
 			cfg := wizard.InitConfig{
-				Dir:       destDir,
-				SourceURL: source,
-				LocalPath: localPath,
-				LocalDir:  localDir,
-				Ref:       ref,
-				Commit:    commit,
-				Floating:  floating,
-				Targets:   targets,
+				Dir:            destDir,
+				SourceURL:      source,
+				LocalPath:      localPath,
+				LocalDir:       localDir,
+				Ref:            ref,
+				Commit:         commit,
+				Floating:       floating,
+				Scope:          scope,
+				ActivationRoot: activationRoot,
+				Targets:        targets,
 			}
 			// sourceDefaulted / discovered / notEnabled record what init
 			// inferred, so the success line announces it (plan R14): a
@@ -123,6 +148,8 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				cfg = wcfg
 				cfg.Dir = destDir
 				cfg.Floating = floating
+				cfg.Scope = scope
+				cfg.ActivationRoot = activationRoot
 			} else {
 				if source == "" && localPath == "" && localDir == "" {
 					// No source flag: default to the in-repo .agents working-tree
@@ -223,6 +250,8 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 	cmd.Flags().BoolVar(&floating, "floating", false, "do not pin to a SHA (pinning is the default)")
 	cmd.Flags().StringArrayVar(&targets, "target", nil, "target adapter to enable (repeatable)")
 	cmd.Flags().StringVar(&dir, "dir", "", "workspace directory (default: current directory)")
+	cmd.Flags().BoolVar(&user, "user", false, "create a user-level manifest at the home directory (~)")
+	cmd.Flags().BoolVar(&activationRoot, "activation-root", false, "mark manifest as the workspace activation root (requires workspace scope)")
 	return cmd
 }
 

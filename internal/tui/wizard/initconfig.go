@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/agent-sync/agent-sync/internal/manifest"
 )
 
 // InitConfig is every decision needed to write a fresh manifest. Both the
@@ -37,6 +39,13 @@ type InitConfig struct {
 	// Floating opts out of pinning (invariant #4: pinning is default).
 	Floating bool
 
+	// Scope declares where this manifest is intended to apply.
+	Scope string
+
+	// ActivationRoot marks this manifest as the workspace activation root and
+	// requires scope=workspace.
+	ActivationRoot bool
+
 	// Targets are the selected adapter target names.
 	Targets []string
 }
@@ -55,6 +64,16 @@ func (c InitConfig) Validate() error {
 	}
 	if n != 1 {
 		return errors.New("wizard: set exactly one of source URL, local path, or local directory")
+	}
+
+	scope := strings.TrimSpace(c.Scope)
+	switch scope {
+	case "", manifest.ScopeUser, manifest.ScopeProject, manifest.ScopeWorkspace, manifest.ScopeGlobal:
+	default:
+		return errors.New("wizard: scope must be one of user, project, workspace, global")
+	}
+	if c.ActivationRoot && scope != manifest.ScopeWorkspace {
+		return errors.New("wizard: activation_root requires scope=workspace")
 	}
 
 	// An in-repo local_dir source is unpinned by nature: a ref/commit/floating
@@ -91,6 +110,12 @@ func (c InitConfig) ManifestYAML() ([]byte, error) {
 	}
 	var b strings.Builder
 	b.WriteString("version: 1\n")
+	if c.Scope != "" {
+		fmt.Fprintf(&b, "scope: %s\n", c.Scope)
+	}
+	if c.ActivationRoot {
+		b.WriteString("activation_root: true\n")
+	}
 	b.WriteString("canonical:\n")
 	switch {
 	case c.SourceURL != "":

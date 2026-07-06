@@ -19,6 +19,23 @@ func runInit(t *testing.T, args ...string) (string, string, error) {
 	return out.String(), errBuf.String(), err
 }
 
+func runInitFromDir(t *testing.T, dir string, args ...string) (string, string, error) {
+	t.Helper()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir %q: %v", dir, err)
+	}
+	t.Cleanup(func() {
+		if chdirErr := os.Chdir(prev); chdirErr != nil {
+			t.Fatalf("restore cwd %q: %v", prev, chdirErr)
+		}
+	})
+	return runInit(t, args...)
+}
+
 func TestInit_NonInteractiveLocalPathWritesLoadableManifest(t *testing.T) {
 	requireGit(t)
 	canonical, sha := makeCanonicalRepo(t)
@@ -43,6 +60,55 @@ func TestInit_NonInteractiveLocalPathWritesLoadableManifest(t *testing.T) {
 	}
 	if m.Canonical.Commit != sha || m.TrustedSHA != sha {
 		t.Fatalf("manifest not pinned: commit=%q trusted=%q want %q", m.Canonical.Commit, m.TrustedSHA, sha)
+	}
+}
+
+func TestInitUserScope(t *testing.T) {
+	ws := t.TempDir()
+	home := t.TempDir()
+	prev := resolveHome
+	resolveHome = func() (string, error) {
+		return home, nil
+	}
+	t.Cleanup(func() {
+		resolveHome = prev
+	})
+
+	_, errOut, err := runInitFromDir(t, ws, "--user", "--target", "codex")
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(home, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("written manifest does not load: %v", lerr)
+	}
+	if m.Scope != manifest.ScopeUser {
+		t.Fatalf("scope = %q, want %q", m.Scope, manifest.ScopeUser)
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".agents")); statErr != nil {
+		t.Fatalf("expected ~/.agents to be created: %v", statErr)
+	}
+}
+
+func TestInit_WorkspaceActivationRoot(t *testing.T) {
+	ws := t.TempDir()
+	_, errOut, err := runInit(t,
+		"--workspace", ws,
+		"--activation-root",
+		"--target", "codex",
+	)
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("written manifest does not load: %v", lerr)
+	}
+	if m.Scope != manifest.ScopeWorkspace {
+		t.Fatalf("scope = %q, want %q", m.Scope, manifest.ScopeWorkspace)
+	}
+	if !m.ActivationRoot {
+		t.Fatal("activation_root = false, want true")
 	}
 }
 
