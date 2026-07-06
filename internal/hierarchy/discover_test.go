@@ -356,6 +356,37 @@ func TestDiscover_OutsideActivationRootIncludesUserScope(t *testing.T) {
 	}
 }
 
+func TestDiscover_MalformedManifestSkipsActivationButDoesNotFail(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	mid := filepath.Join(repo, "packages", "api")
+	cwd := filepath.Join(mid, "src")
+	mkGit(t, repo)
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+	writeManifest(t, home)       // user scope
+	writeManifest(t, repo)       // project scope
+	writeManifestContent(t, mid, ":\n  not: [valid") // malformed directory manifest
+
+	scopes, err := Discover(cwd, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	// Discovery must stay presence-based: user and both project / directory manifests
+	// are returned even though the directory manifest is malformed.
+	wantRoots := []string{home, repo, mid}
+	wantLevels := []Level{LevelUser, LevelProject, LevelDirectory}
+	if len(scopes) != len(wantRoots) {
+		t.Fatalf("got %d scopes, want %d: %+v", len(scopes), len(wantRoots), scopes)
+	}
+	for i := range scopes {
+		if scopes[i].Root != wantRoots[i] || scopes[i].Level != wantLevels[i] {
+			t.Errorf("scope[%d] = {%q, %v}, want {%q, %v}", i, scopes[i].Root, scopes[i].Level, wantRoots[i], wantLevels[i])
+		}
+	}
+}
+
 func TestDiscover_NestedActivationRootsFailClosed(t *testing.T) {
 	home := t.TempDir()
 	outer := filepath.Join(home, "workspace")

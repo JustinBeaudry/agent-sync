@@ -30,9 +30,9 @@ func manifestAt(dir string) (string, bool) {
 }
 
 // markerAt reports whether dir has a manifest and, if so, returns marker fields
-// from that manifest. Unlike manifest.LoadFile, it is intentionally lightweight:
-// only scope and activation_root are read to let discovery remain tolerant for
-// minimal manifests and partially valid legacy content.
+// from that manifest when YAML parses successfully. Unlike manifest.LoadFile, it
+// is intentionally lightweight: only scope and activation_root are read. YAML
+// parse failures are tolerated as non-fatal so discovery remains presence-based.
 func markerAt(dir string) (manifestMarker, string, bool, error) {
 	path, has := manifestAt(dir)
 	if !has {
@@ -54,7 +54,9 @@ func markerAt(dir string) (manifestMarker, string, bool, error) {
 	}
 	var marker manifestMarker
 	if err := yaml.Unmarshal(b, &marker); err != nil {
-		return manifestMarker{}, path, false, fmt.Errorf("hierarchy: parse manifest marker %s: %w", path, err)
+		// Keep discovery behavior presence-based when the manifest is malformed:
+		// surface parse errors at prepare/sync time instead.
+		return manifestMarker{}, path, true, nil
 	}
 	return marker, path, true, nil
 }
