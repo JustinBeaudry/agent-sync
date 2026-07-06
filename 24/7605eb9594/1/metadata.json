@@ -1,0 +1,169 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "247605eb9594",
+  "session_id": "9cdf9786-bbd1-4133-bb7e-25f962bf9cb2",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-06T15:31:47.965096Z",
+  "branch": "feat/init-defaults-user-sync-ux",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md",
+    "docs/quickstart.md",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5",
+  "turn_id": "95b0f5fe1a85",
+  "checkpoint_transcript_start": 661,
+  "transcript_lines_at_start": 661,
+  "token_usage": {
+    "input_tokens": 365,
+    "cache_creation_tokens": 11527,
+    "cache_read_tokens": 3611099,
+    "output_tokens": 7197,
+    "api_call_count": 10
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01Kjh1fmCzUgLpJqiBbJUwyY",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-plan"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "95b0f5fe1a85",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 50,
+        "end": 51,
+        "entry_ids": [
+          "3f258e70-2dfd-4310-97bc-d4e8f263ab90"
+        ],
+        "tool_use_id": "toolu_01Kjh1fmCzUgLpJqiBbJUwyY"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01Kjh1fmCzUgLpJqiBbJUwyY"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-plan",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01SzWomUE2DZaiywrZerfZjR",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-doc-review"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "95b0f5fe1a85",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 153,
+        "end": 154,
+        "entry_ids": [
+          "cc2f0c2b-9049-4e54-bb83-cd4142e0c324"
+        ],
+        "tool_use_id": "toolu_01SzWomUE2DZaiywrZerfZjR"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01SzWomUE2DZaiywrZerfZjR"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-doc-review",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_014WcYL58VztXM9Doue5EtAc",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "superpowers:writing-plans"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "95b0f5fe1a85",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 255,
+        "end": 256,
+        "entry_ids": [
+          "f8d8e072-2792-489c-a6d5-8215d2e8d5b4"
+        ],
+        "tool_use_id": "toolu_014WcYL58VztXM9Doue5EtAc"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_014WcYL58VztXM9Doue5EtAc"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: superpowers:writing-plans",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01NcMw4BcNPfu5HX64jmP7on",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "superpowers:test-driven-development"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "95b0f5fe1a85",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 350,
+        "end": 351,
+        "entry_ids": [
+          "5c2e4e74-bb60-4057-93b4-d242cd37cac8"
+        ],
+        "tool_use_id": "toolu_01NcMw4BcNPfu5HX64jmP7on"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01NcMw4BcNPfu5HX64jmP7on"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: superpowers:test-driven-development",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 6
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-06T15:31:47.931343Z",
+    "agent_lines": 114,
+    "agent_removed": 10,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 114,
+    "total_lines_changed": 124,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
