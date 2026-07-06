@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "de3f32e5f97a",
+  "strategy": "manual-commit",
+  "branch": "feat/agent-harness-hierarchy",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "internal/cli/materialize.go",
+    "internal/harness/decode.go",
+    "internal/harness/decode_test.go",
+    "internal/harness/types.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/de/3f32e5f97a/0/metadata.json",
+      "transcript": "/de/3f32e5f97a/0/full.jsonl",
+      "content_hash": "/de/3f32e5f97a/0/content_hash.txt",
+      "prompt": "/de/3f32e5f97a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2315,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 230272,
+    "output_tokens": 423,
+    "api_call_count": 3
+  }
+}

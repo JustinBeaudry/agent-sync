@@ -1,0 +1,147 @@
+You are doing the Task 3 spec-compliance review for the agent-sync repo at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only the diff range 3c94549..HEAD on branch feat/agent-harness-hierarchy.
+
+Task 3 from the approved implementation plan:
+
+## Task 3: Use Manifest Scope In Prepared Requests
+
+Files planned:
+- Modify: internal/cli/setup.go
+- Modify: internal/cli/hierarchy_sync.go
+- Modify: internal/cli/hierarchy_sync_test.go
+- Modify: internal/cli/cmd_validate.go
+
+Step 1: Write failing request-scope test in internal/cli/hierarchy_sync_test.go verifying prepareScope loads a workspace manifest with scope: workspace and activation_root: true, then sets prep.Request.Scope to workspace even if discovered scope is project.
+
+Step 2: Add requestScope helper in internal/cli/setup.go:
+func requestScope(m *manifest.Manifest, discovered string) string {
+    if m != nil && m.Scope != "" { return m.Scope }
+    if discovered != "" { return discovered }
+    return manifest.ScopeProject
+}
+Change engine.Request{Scope: scope} to use requestScope(m, scope). Change prepareEngine comment from always project scope to project fallback unless the loaded manifest declares a scope.
+
+Step 3: Ensure Cursor composition remains project-only:
+- In prepareEngine, compute actualScope := requestScope(prep.Manifest, "project") and pass it to applyCursorComposition.
+- In runHierarchySync, pass req.Scope to applyCursorComposition instead of sc.Level.String().
+
+Step 4: Verify CLI scope tests pass:
+go test ./internal/cli -run 'TestPrepareScope_UsesManifestScopeWhenPresent|TestCompose' -count=1
+
+Step 5: Commit as fix: honor manifest scope in engine requests.
+
+Additional accepted follow-up contract requirements in this task range:
+- adapter protocol docs, JSON schema, adapterkit exported types/comments, engine/request comments, and manifest docs should consistently accept user, project, workspace, directory, and legacy global where appropriate.
+- manifest scope accepts user, workspace, project, global; global is a legacy/project alias.
+- Cursor rule composition remains project-only, but legacy scope: global must behave as the project alias for that composition gate. scope: workspace must not compose user rules.
+- activation_root is part of manifest v1 and valid only with scope: workspace.
+
+Please answer with exactly one of:
+- APPROVED: if the implementation satisfies Task 3 and the follow-up contract/doc scope consistency requirements.
+- CHANGES_REQUIRED: with a concise bullet list of concrete gaps, each with file/line evidence and why it violates the Task 3 spec or public contract.
+
+Be adversarial about contract drift: if any schema, public docs, exported adapterkit types/comments, CLI setup/update/validate/hierarchy paths, or composition tests still encode the old user|project|global-only world or pass discovered hierarchy level instead of manifest scope, call it out.
+
+---
+
+You are doing a code-quality/correctness review for Task 3 in the agent-sync repo at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only diff range 3c94549..HEAD on branch feat/agent-harness-hierarchy.
+
+Task intent: loaded manifest scope should override discovered hierarchy scope when building engine.Request; Cursor composition should use the actual request scope; workspace scopes must not compose user Cursor rules; legacy scope: global is accepted as a project alias; adapter protocol/schema/docs/exported comments should consistently include workspace/directory/global where appropriate; activation_root is documented/validated as manifest v1 field valid only with scope workspace.
+
+Focused tests already passed locally:
+- go test ./internal/cli -run 'Test.*Update|TestPrepareScope_UsesManifestScopeWhenPresent|TestCompose' -count=1
+- go test ./internal/adapter/contract ./internal/adapter ./internal/engine ./pkg/adapterkit ./internal/manifest -count=1
+
+Review for code quality and correctness issues only: hidden runtime bugs, brittle tests, confusing helper boundaries, missed paths, contract/schema mismatch, or risky behavior. Do not require cosmetic churn.
+
+Please answer with exactly one of:
+- APPROVED: if there are no blocking quality/correctness issues.
+- CHANGES_REQUIRED: concise bullets with file/line evidence, severity, and a concrete fix recommendation.
+
+---
+
+You are implementing Task 4 in the agent-sync repo at /Users/justinbeaudry/Projects/agent-sync on branch feat/agent-harness-hierarchy.
+
+You are not alone in the codebase: do not revert edits made by others, and adjust to the current code. Own only these files/modules:
+- create internal/harness/types.go
+- create internal/harness/decode.go
+- create internal/harness/decode_test.go
+- modify internal/cli/materialize.go only as needed to include decoded fragments in materialized output
+
+Do not modify other files unless absolutely required; if required, explain why.
+
+Follow TDD: add the failing tests first, confirm they fail because internal/harness does not exist or Decode is missing, then implement. Commit your changes when tests pass.
+
+Task 4: Decode Native Fragments
+
+Plan requirements:
+1. Create internal/harness/decode_test.go with tests equivalent to:
+- fakeSource implements ir.SourceTree using map[string][]byte and git.TreeEntry.
+- TestDecodeFragments_CodexFeatureFlag: source has configs/codex/features/hooks/fragment.yaml:
+  id: hooks
+  target: codex
+  path: .codex/config.toml
+  merge: toml-key
+  locator: features.hooks
+  payload: payload.toml
+  and payload.toml contains [features]\nhooks = true\n. Decode(src, "", DecodeOptions{Scope: "workspace"}) returns one fragment, no warnings, identity equals "codex\x00.codex/config.toml\x00toml-key\x00features.hooks", defaults VisibilityTeam/InheritanceDescendants/SafetyPassive.
+- TestDecodeFragments_RejectsPayloadTraversal: payload: ../payload.toml returns a non-nil error.
+- TestDecodeFragments_UserDefaultsArePersonalRootOnly: scope user defaults VisibilityPersonal and InheritanceRootOnly.
+
+2. Create internal/harness/types.go:
+- package harness
+- import internal/ir
+- define Visibility, Inheritance, Safety, MergeKind string types
+- constants:
+  VisibilityPersonal = "personal", VisibilityTeam = "team", VisibilityMachineLocal = "machine-local"
+  InheritanceRootOnly = "root-only", InheritanceDescendants = "descendants"
+  SafetyPassive = "passive", SafetyToolAccess = "tool-access", SafetyExecutable = "executable"
+  MergeTOMLKey = "toml-key", MergeCodexHooks = "codex-hooks"
+- Fragment struct fields: ID, Target, Path string; Merge MergeKind; Locator string; Visibility Visibility; Inheritance Inheritance; Safety Safety; PayloadPath string; Payload []byte; Scope string; Provenance ir.Provenance.
+- Fragment.Identity() returns Target + "\x00" + Path + "\x00" + string(Merge) + "\x00" + Locator.
+- Warning struct { Code, Message, Path string }
+- DecodeOptions struct { Scope string }
+
+3. Create internal/harness/decode.go:
+- Decode(src ir.SourceTree, ref string, opts DecodeOptions) ([]Fragment, []Warning, error)
+- Use src.ReadTree(ref) and find files whose path.Base is fragment.yaml and strings.HasPrefix(path, "configs/"). Sort manifest paths deterministically.
+- Parse fragment YAML strictly with github.com/goccy/go-yaml and yaml.DisallowUnknownField(). Expected YAML fields: id, target, path, merge, locator, visibility, inheritance, safety, payload.
+- buildFragment should validate required fields id,target,path,merge,payload; locator required for merge toml-key and codex-hooks; accepted merge kinds are MergeTOMLKey and MergeCodexHooks.
+- payload path is resolved relative to the fragment.yaml directory. Reject empty, absolute/rooted, any path traversal, or paths outside the fragment directory. Use path.Clean/path.Join style for canonical slash paths.
+- Read payload bytes with src.BlobContent(ref, payloadPath). Store PayloadPath and Payload.
+- Defaults: scope "user" => VisibilityPersonal + InheritanceRootOnly unless explicitly set. Other scopes => VisibilityTeam + InheritanceDescendants unless explicitly set. Safety defaults SafetyPassive.
+- Validate visibility/inheritance/safety values against constants when present/defaulted.
+- Provenance should identify the fragment manifest path using ir.Provenance{Path: manifestPath}. Scope should be opts.Scope.
+- Return warnings nil for now; invalid manifests are errors with useful context including manifest path.
+
+4. Modify internal/cli/materialize.go:
+- import internal/harness.
+- materialized struct gets Fragments []harness.Fragment.
+- decodeAt should call harness.Decode(src, ref, harness.DecodeOptions{Scope: ???}). Since Task 3 now has manifest scope available only at materialize caller, change decodeAt signature/options as needed to pass scope through from materialize(...) callers. For local_dir/local_path/url, pass the loaded manifest's scope if present, else project fallback. Keep SourceURL/Commit/Warn behavior intact.
+- Do not wire fragments into engine.Request yet; Task 5 will do that.
+
+Tests to run:
+- go test ./internal/harness -run TestDecodeFragments -count=1
+- go test ./internal/cli ./internal/harness -count=1
+
+Status format in final:
+- DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED
+- files changed
+- tests run and results
+- commit SHA
+- any concerns
+
+---
+
+Correction to my Task 4 prompt: use the approved plan's defaulting logic, not my over-broad paraphrase.
+
+Defaults should be:
+- scope == "user": VisibilityPersonal + InheritanceRootOnly
+- scope == "workspace": VisibilityTeam + InheritanceDescendants
+- all other scopes, including project/global/directory/empty: VisibilityTeam + InheritanceRootOnly
+- Safety defaults SafetyPassive
+
+Please add/keep tests that cover workspace and user defaults from the plan; optionally add a project default test if useful. Continue with the same file ownership and status format.
