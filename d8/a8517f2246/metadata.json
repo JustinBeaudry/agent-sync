@@ -3,9 +3,16 @@
   "checkpoint_id": "d8a8517f2246",
   "strategy": "manual-commit",
   "branch": "feat/init-defaults-user-sync-ux",
-  "checkpoints_count": 1,
+  "checkpoints_count": 7,
   "files_touched": [
-    "internal/adapter/bundled/antigravity/bundled.go"
+    "CHANGELOG.md",
+    "docs/plans/2026-07-06-001-feat-init-defaults-target-discovery-plan.md",
+    "internal/adapter/bundled/antigravity/bundled.go",
+    "internal/adapter/bundled/claude/bundled.go",
+    "internal/adapter/bundled/codex/bundled.go",
+    "internal/adapter/bundled/cursor/bundled.go",
+    "internal/adapter/bundled/pi/bundled.go",
+    "internal/cli/cmd_sync_test.go"
   ],
   "sessions": [
     {
@@ -13,13 +20,19 @@
       "transcript": "/d8/a8517f2246/0/full.jsonl",
       "content_hash": "/d8/a8517f2246/0/content_hash.txt",
       "prompt": "/d8/a8517f2246/0/prompt.txt"
+    },
+    {
+      "metadata": "/d8/a8517f2246/1/metadata.json",
+      "transcript": "/d8/a8517f2246/1/full.jsonl",
+      "content_hash": "/d8/a8517f2246/1/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
-    "input_tokens": 74821,
-    "cache_creation_tokens": 2538216,
-    "cache_read_tokens": 181228074,
-    "output_tokens": 345549,
-    "api_call_count": 365
+    "input_tokens": 75590,
+    "cache_creation_tokens": 2553693,
+    "cache_read_tokens": 188737668,
+    "output_tokens": 355431,
+    "api_call_count": 385
   }
 }
