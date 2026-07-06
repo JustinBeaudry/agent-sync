@@ -48,7 +48,7 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				return err
 			}
 
-			scope := ""
+			scope := manifest.ScopeProject
 			// --user writes into the resolved home directory and marks the
 			// manifest as the user scope.
 			destDir := dir

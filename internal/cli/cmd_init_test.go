@@ -90,6 +90,36 @@ func TestInitUserScope(t *testing.T) {
 	}
 }
 
+func TestInit_DefaultProjectScope(t *testing.T) {
+	ws := t.TempDir()
+	_, errOut, err := runInitFromDir(t, ws, "--target", "codex")
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("written manifest does not load: %v", lerr)
+	}
+	if m.Scope != manifest.ScopeProject {
+		t.Fatalf("scope = %q, want %q", m.Scope, manifest.ScopeProject)
+	}
+}
+
+func TestInit_DirProjectScope(t *testing.T) {
+	ws := t.TempDir()
+	_, errOut, err := runInit(t, "--dir", ws, "--target", "codex")
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("written manifest does not load: %v", lerr)
+	}
+	if m.Scope != manifest.ScopeProject {
+		t.Fatalf("scope = %q, want %q", m.Scope, manifest.ScopeProject)
+	}
+}
+
 func TestInit_WorkspaceActivationRoot(t *testing.T) {
 	ws := t.TempDir()
 	_, errOut, err := runInit(t,
