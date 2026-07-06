@@ -3,10 +3,23 @@ package hierarchy
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/agent-sync/agent-sync/internal/workspace"
 )
+
+func writeManifestContent(t *testing.T, dir, content string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %q: %v", dir, err)
+	}
+	path := filepath.Join(dir, workspace.ManifestName)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write manifest %q: %v", path, err)
+	}
+	return path
+}
 
 // writeManifest creates a minimal manifest file at dir/.agent-sync.yaml.
 func writeManifest(t *testing.T, dir string) string {
@@ -19,6 +32,14 @@ func writeManifest(t *testing.T, dir string) string {
 		t.Fatalf("write manifest %q: %v", path, err)
 	}
 	return path
+}
+
+func gotLevels(scopes []Scope) []Level {
+	levels := make([]Level, 0, len(scopes))
+	for _, scope := range scopes {
+		levels = append(levels, scope.Level)
+	}
+	return levels
 }
 
 // mkGit creates a .git directory marking dir as a git project root.
@@ -269,6 +290,92 @@ func TestDiscoverFullHierarchy(t *testing.T) {
 	}
 	if !scopes[1].Emit || !scopes[2].Emit {
 		t.Error("project/directory scopes must have Emit = true")
+	}
+}
+
+func TestDiscover_ActivationRootStopsUserScope(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "workspace")
+	repo := filepath.Join(workspaceRoot, "repo")
+	mkGit(t, repo)
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	writeManifest(t, home) // user scope
+	writeManifestContent(t, workspaceRoot, "version: 1\nscope: workspace\nactivation_root: true\n")
+	writeManifest(t, repo) // project scope
+
+	scopes, err := Discover(repo, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	wantRoots := []string{workspaceRoot, repo}
+	wantLevels := []Level{LevelWorkspace, LevelProject}
+	if len(scopes) != len(wantRoots) {
+		t.Fatalf("got %d scopes, want %d: %+v", len(scopes), len(wantRoots), scopes)
+	}
+	for i := range scopes {
+		if scopes[i].Root != wantRoots[i] {
+			t.Errorf("scope[%d].Root = %q, want %q", i, scopes[i].Root, wantRoots[i])
+		}
+		if scopes[i].Level != wantLevels[i] {
+			t.Errorf("scope[%d].Level = %v, want %v", i, scopes[i].Level, wantLevels[i])
+		}
+	}
+	if got := gotLevels(scopes); len(got) != len(wantLevels) {
+		t.Fatalf("unexpected levels count: %v", got)
+	}
+}
+
+func TestDiscover_OutsideActivationRootIncludesUserScope(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	mkGit(t, repo)
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	writeManifest(t, home) // user scope
+	writeManifest(t, repo) // project scope
+
+	scopes, err := Discover(repo, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	wantRoots := []string{home, repo}
+	wantLevels := []Level{LevelUser, LevelProject}
+	if len(scopes) != len(wantRoots) {
+		t.Fatalf("got %d scopes, want %d: %+v", len(scopes), len(wantRoots), scopes)
+	}
+	for i := range scopes {
+		if scopes[i].Root != wantRoots[i] {
+			t.Errorf("scope[%d].Root = %q, want %q", i, scopes[i].Root, wantRoots[i])
+		}
+		if scopes[i].Level != wantLevels[i] {
+			t.Errorf("scope[%d].Level = %v, want %v", i, scopes[i].Level, wantLevels[i])
+		}
+	}
+}
+
+func TestDiscover_NestedActivationRootsFailClosed(t *testing.T) {
+	home := t.TempDir()
+	outer := filepath.Join(home, "workspace")
+	inner := filepath.Join(outer, "team")
+	repo := filepath.Join(inner, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	outerManifest := writeManifestContent(t, outer, "version: 1\nscope: workspace\nactivation_root: true\n")
+	innerManifest := writeManifestContent(t, inner, "version: 1\nscope: workspace\nactivation_root: true\n")
+
+	_, err := Discover(repo, Options{Home: home})
+	if err == nil {
+		t.Fatal("expected discover to fail with nested activation roots")
+	}
+	if !strings.Contains(err.Error(), "nested activation roots") {
+		t.Fatalf("error = %v, want nested activation roots", err)
+	}
+	if !strings.Contains(err.Error(), outerManifest) || !strings.Contains(err.Error(), innerManifest) {
+		t.Fatalf("error = %q, want include %q and %q", err, outerManifest, innerManifest)
 	}
 }
 

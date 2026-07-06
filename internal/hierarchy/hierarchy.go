@@ -19,6 +19,9 @@ const (
 	// LevelUser is the manifest at the user's home directory (~). It is
 	// the broadest scope and has the lowest precedence.
 	LevelUser Level = iota
+	// LevelWorkspace is the manifest with scope: workspace. It has an activation
+	// root boundary and sits between user and project in precedence order.
+	LevelWorkspace
 	// LevelProject is the manifest at the project root (the nearest
 	// ancestor of cwd containing a .git entry).
 	LevelProject
@@ -32,6 +35,8 @@ func (l Level) String() string {
 	switch l {
 	case LevelUser:
 		return "user"
+	case LevelWorkspace:
+		return "workspace"
 	case LevelProject:
 		return "project"
 	case LevelDirectory:
@@ -55,7 +60,7 @@ type Scope struct {
 	Root string
 	// ManifestPath is the absolute path to the scope's .agent-sync.yaml.
 	ManifestPath string
-	// Level classifies the scope (user / project / directory).
+	// Level classifies the scope (user / workspace / project / directory).
 	Level Level
 	// Emit is true when this scope should be synced in the current run.
 	// Project and directory scopes are always Emit=true; the user scope is
