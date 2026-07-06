@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "d8a8517f2246",
+  "strategy": "manual-commit",
+  "branch": "feat/init-defaults-user-sync-ux",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/adapter/bundled/antigravity/bundled.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d8/a8517f2246/0/metadata.json",
+      "transcript": "/d8/a8517f2246/0/full.jsonl",
+      "content_hash": "/d8/a8517f2246/0/content_hash.txt",
+      "prompt": "/d8/a8517f2246/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 74821,
+    "cache_creation_tokens": 2538216,
+    "cache_read_tokens": 181228074,
+    "output_tokens": 345549,
+    "api_call_count": 365
+  }
+}
