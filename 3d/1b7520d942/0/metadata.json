@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "3d1b7520d942",
+  "session_id": "019f3863-aa77-7f42-9591-fc2a5d7de153",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-06T22:28:18.595155Z",
+  "branch": "feat/agent-harness-hierarchy",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "internal/cli/compose_test.go",
+    "internal/cli/hierarchy_sync.go",
+    "internal/cli/setup.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "ce4ead1f0097",
+  "checkpoint_transcript_start": 179,
+  "transcript_lines_at_start": 179,
+  "session_metrics": {
+    "turn_count": 21
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-06T22:28:18.577975Z",
+    "agent_lines": 15,
+    "agent_removed": 56,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 15,
+    "total_lines_changed": 71,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+You are doing Task 5 spec-compliance re-review for agent-sync at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only diff range 3c3eef6..HEAD on branch feat/agent-harness-hierarchy. That range is Task 5 plus review fixes.
+
+Task 5: Resolve Inherited Portable Assets And Native Fragments
+
+Spec requirements:
+1. Resolver behavior:
+- Layer type has Scope, Nodes, Skills, Fragments, SourceURL, Commit.
+- ResolveNodes processes layers broad-to-close; current layer is always included; non-current included only if portableLayerInherits returns true for same scope or workspace. Shadow by kind+NUL+id, first-seen order retained. Inherited non-current nodes get SourceURL/SourceCommit. Skill map follows shadowing.
+- ResolveFragments processes broad-to-close; current layer always included; non-current included only by canInherit (same scope OR descendants+team); shadow by identity, first-seen order retained.
+- Tests cover workspace skill inheritance, project shadowing, user non-inheritance by default, fragment shadowing, personal ancestor skip, and team descendant include.
+
+2. Engine request:
+- internal/engine/request.go imports internal/harness and adds Request.Fragments []harness.Fragment with comment that these are resolved native harness fragments applied by core allowlisted surfaces, not adapters.
+
+3. Single-scope setup:
+- prepareScope sets Fragments: mat.Fragments in engine.Request.
+- Explicit --workspace remains single-scope/predictable: it uses only that root's own materialized nodes/fragments plus existing explicit Cursor composition behavior, not hierarchy ancestors.
+
+4. Hierarchy sync:
+- selectWriteScopes copies scopes, clears Emit, then selects exactly one write target: includeUser selects first user scope only; otherwise closest non-user scope only.
+- runHierarchySync calls selectWriteScopes immediately after discovery.
+- The interactive user-scope offer/prompt is removed from hierarchySyncOptions/newSyncCommand/runHierarchySync.
+- Plain project sync may read inherited layers but must not become a second write to $HOME. sync --user selects user as the single write target.
+- Read-only materialization helper loads each discovered scope non-interactively, opens fsroot, materializes with Offline rc.Flags.Offline || URL != "", and returns errors to caller.
+- Do not call engine.Sync with an incomplete effective non-user ancestor layer set: if a required non-user ancestor layer fails to materialize, selected sync/validate must fail before mutation so inherited outputs are not orphan-deleted. Existing user composition best-effort behavior may remain for unreadable user scope.
+- Layers for an emitted scope are built in discovered order up to that scope. The selected/current layer must come from the already-prepared request, not from read-only materialization. It must use req.Scope as targetScope, not just sc.Level.String(), so manifest scope overrides/legacy global alias are honored.
+- In emitted sync, after req := prep.Request and options assignment, apply resolved nodes/skills/fragments before Cursor composition, coverage analysis, and engine.Sync.
+- Activation roots already removed user from discovery; composition must respect that and not rediscover/read home behind the hierarchy's back.
+- Existing compose.cursor-rules-from-user remains explicit user-to-project exception outside activation roots; this task should not replace or broaden it.
+- sync --user must not prepare/materialize/discover adapters for project scopes merely to suppress user-scope coverage warnings.
+
+5. prepareEngine / validate:
+- If rc.Flags.Workspace == "", prepareEngine uses hierarchy discovery + selectWriteScopes to pick the selected write scope, prepareScope for it, materialize read-only layers, fail on required non-user ancestor materialization errors, apply resolved layers, then Cursor composition gated by discovered user scope. This makes validate match plain sync.
+- If rc.Flags.Workspace != "", keep explicit single-scope behavior and use only that scope's own materialized nodes/fragments.
+
+6. Review-fix regression tests should cover:
+- activation root stops user composition even when project compose.cursor-rules-from-user is enabled.
+- unreadable inherited workspace layer blocks mutation and preserves existing inherited output.
+- sync --user keeps user coverage warning rather than probing project composition.
+
+Local tests passed:
+- go test ./internal/harness ./internal/cli -run 'TestResolve(Nodes|Fragments)|TestSelectWriteScopes|TestApplyResolvedLayers|TestRunHierarchySync|TestCompose' -count=1
+- go test ./internal/engine ./internal/cli ./internal/harness -count=1
+
+Please answer exactly:
+- APPROVED if Task 5 satisfies the spec.
+- CHANGES_REQUIRED with concise bullets, file/line evidence, and concrete fix if not.
+
+Be adversarial about one-write-target semantics, user root reads under activation roots, incomplete inherited layers, explicit --workspace behavior, request-scope vs discovered-level confusion, and cases where current selected materialization could be dropped.
