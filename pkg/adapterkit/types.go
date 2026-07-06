@@ -131,11 +131,12 @@ type InitializeParams struct {
 	ReservedPrefix   string   `json:"reserved_prefix"`
 	IRVersion        string   `json:"ir_version"`
 	// Scope is the hierarchy level this emit targets: "user", "project",
-	// or "directory". It lets an adapter choose scope-appropriate output
-	// paths (e.g. the Claude adapter writes ~/.claude/CLAUDE.md at user
-	// scope vs ./CLAUDE.md at project scope). Additive and optional under
-	// the "freeze the frame, grow capabilities" policy: an adapter that
-	// ignores it, or an absent value, MUST be treated as "project".
+	// "workspace", or "directory". It lets an adapter choose
+	// scope-appropriate output paths (e.g. the Claude adapter writes
+	// ~/.claude/CLAUDE.md at user scope vs ./CLAUDE.md at project scope).
+	// Additive and optional under the "freeze the frame, grow
+	// capabilities" policy: an adapter that ignores it, or an absent
+	// value, MUST be treated as "project".
 	Scope string `json:"scope,omitempty"`
 	// SourceURL identifies the canonical source of this session's IR:
 	// the credential-stripped canonical git URL or the path string for

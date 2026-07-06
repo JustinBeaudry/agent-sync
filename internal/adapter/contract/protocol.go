@@ -138,9 +138,10 @@ type InitializeParams struct {
 	ReservedPrefix   string   `json:"reserved_prefix"`
 	IRVersion        string   `json:"ir_version"`
 	// Scope is the hierarchy level this emit targets: "user", "project",
-	// or "directory". Additive/optional under "freeze the frame, grow
-	// capabilities"; absent or unknown ⇒ treated as "project". Mirrors
-	// adapterkit.InitializeParams.Scope and the initialize.json schema.
+	// "workspace", or "directory". Additive/optional under
+	// "freeze the frame, grow capabilities"; absent or unknown ⇒ treated as
+	// "project". Mirrors adapterkit.InitializeParams.Scope and the
+	// initialize.json schema.
 	Scope string `json:"scope,omitempty"`
 	// SourceURL identifies the canonical source of this session's IR:
 	// the cache-canonicalized git URL (userinfo, query, and fragment

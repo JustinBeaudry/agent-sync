@@ -17,6 +17,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/report"
 	"github.com/agent-sync/agent-sync/internal/trust"
 )
@@ -64,6 +65,40 @@ func newTestRuntime() *runtimeContext {
 		Access: Access{NonInteractive: true},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Flags:  PersistentFlags{NonInteractive: true},
+	}
+}
+
+func TestPrepareScope_UsesManifestScopeWhenPresent(t *testing.T) {
+	ws := t.TempDir()
+	manifestPath := filepath.Join(ws, ".agent-sync.yaml")
+	manifestText := "version: 1\n" +
+		"scope: " + manifest.ScopeWorkspace + "\n" +
+		"activation_root: true\n" +
+		"canonical:\n" +
+		"  local_dir: .agents\n" +
+		"targets:\n" +
+		"  - codex\n"
+	if err := os.WriteFile(manifestPath, []byte(manifestText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, ws, ".agents/AGENTS.md", "team standards\n")
+
+	rc := newTestRuntime()
+	prep, err := prepareScope(
+		context.Background(),
+		rc,
+		ws,
+		manifestPath,
+		"project",
+		time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("prepareScope: %v", err)
+	}
+	defer prep.Close()
+
+	if prep.Request.Scope != manifest.ScopeWorkspace {
+		t.Fatalf("request scope = %q, want %q", prep.Request.Scope, manifest.ScopeWorkspace)
 	}
 }
 

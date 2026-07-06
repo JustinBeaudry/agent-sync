@@ -30,6 +30,16 @@ func bundledAdapters() []*adapter.BundledAdapter {
 	}
 }
 
+func requestScope(m *manifest.Manifest, discovered string) string {
+	if m != nil && m.Scope != "" {
+		return m.Scope
+	}
+	if discovered != "" {
+		return discovered
+	}
+	return manifest.ScopeProject
+}
+
 // prepared bundles the per-invocation engine inputs shared by sync and
 // validate: an opened workspace root (the caller must Close it), the
 // loaded manifest, and a fully-built engine.Request. Close releases the
@@ -73,8 +83,9 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	// validate and loses composed rules under watch/--workspace. Best-effort on
 	// home resolution: if it fails, composition simply no-ops (as it does when no
 	// user manifest exists).
+	actualScope := requestScope(prep.Manifest, "project")
 	if home, herr := resolveHome(); herr == nil {
-		applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, "project", home, now)
+		applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, actualScope, home, now)
 	}
 	return prep, nil
 }
@@ -125,7 +136,7 @@ func prepareScope(ctx context.Context, rc *runtimeContext, scopeRoot, manifestPa
 	req := engine.Request{
 		Root:          root,
 		WorkspacePath: scopeRoot,
-		Scope:         scope,
+		Scope:         requestScope(m, scope),
 		Registry:      reg,
 		Targets:       m.Targets,
 		Nodes:         mat.Nodes,

@@ -20,9 +20,9 @@ type SessionOptions struct {
 	IRVersion string
 
 	// Scope is the hierarchy level this session emits for ("user",
-	// "project", or "directory"). Sent in InitializeParams so the adapter
-	// can pick scope-appropriate output paths. Empty ⇒ the runtime sends
-	// "project" (the back-compat default).
+	// "project", "workspace", or "directory"). Sent in
+	// InitializeParams so the adapter can pick scope-appropriate output
+	// paths. Empty ⇒ the runtime sends "project" (the back-compat default).
 	Scope string
 
 	// SourceURL identifies the canonical source of this session's IR,

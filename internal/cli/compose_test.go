@@ -70,6 +70,24 @@ func TestCompose_SuppressesUserRuleWarningWhenActive(t *testing.T) {
 	}
 }
 
+func TestCompose_WorkspaceManifestDoesNotComposeUserRules(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/from-user.md", "workspace composition should not inherit user rules\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectWorkspaceManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/project-only.md", "project rule\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "project-only"))
+	mustNotExist(t, rulePath(repo, "from-user"))
+}
+
 // TestCompose_ComposedRuleDoesNotLeakToOtherAdapters is the regression guard for
 // the empty-Targets over-delivery bug: a user rule authored with no frontmatter
 // targets means "all adapters", but composition is Cursor-only (D1). In a
@@ -187,6 +205,15 @@ func TestCompose_KeepsUserRuleWarningWhenInactive(t *testing.T) {
 // composeProjectManifest is a project manifest targeting cursor with the
 // hierarchy-composition opt-in enabled.
 const composeProjectManifest = "version: 1\n" +
+	"canonical:\n" +
+	"  local_dir: .agents\n" +
+	"targets:\n" +
+	"  - cursor\n" +
+	"compose:\n" +
+	"  cursor-rules-from-user: true\n"
+
+const composeProjectWorkspaceManifest = "version: 1\n" +
+	"scope: " + manifest.ScopeWorkspace + "\n" +
 	"canonical:\n" +
 	"  local_dir: .agents\n" +
 	"targets:\n" +

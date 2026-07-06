@@ -126,7 +126,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			// set (plan U4/D1/D2), via the shared entry point also used by the
 			// single-scope path. composeActive gates the U5 coverage-warning
 			// suppression below — set only when rules were actually composed.
-			if applyCursorComposition(ctx, rc, &req, prep.Manifest, sc.Level.String(), home, now) {
+			if applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, home, now) {
 				composeActive = true
 			}
 			// Coverage warnings are computed from the decoded IR (the distinct
