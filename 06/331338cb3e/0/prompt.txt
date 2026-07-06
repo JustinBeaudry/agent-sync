@@ -1,0 +1,74 @@
+You are doing the Task 4 spec-compliance re-review for agent-sync at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only diff range 250dae2..HEAD on branch feat/agent-harness-hierarchy. That range should contain Task 4 commits only.
+
+Task 4: Decode Native Fragments
+
+Required files:
+- create internal/harness/types.go
+- create internal/harness/decode.go
+- create internal/harness/decode_test.go
+- modify internal/cli/materialize.go
+
+Spec requirements:
+1. Tests equivalent to these exist and pass:
+- Decode a configs/codex/features/hooks/fragment.yaml with id hooks, target codex, path .codex/config.toml, merge toml-key, locator features.hooks, payload payload.toml. payload is [features]\nhooks = true\n. Decode(scope workspace) returns one fragment, no warnings, identity "codex\x00.codex/config.toml\x00toml-key\x00features.hooks", defaults team/descendants/passive.
+- Reject payload traversal with payload ../payload.toml and also raw hidden traversal like nested/../payload.toml.
+- Decode(scope user) defaults personal/root-only.
+
+2. types.go exposes:
+- Visibility, Inheritance, Safety, MergeKind string types.
+- constants: personal/team/machine-local, root-only/descendants, passive/tool-access/executable, toml-key/codex-hooks.
+- Fragment fields: ID, Target, Path string; Merge MergeKind; Locator string; Visibility Visibility; Inheritance Inheritance; Safety Safety; PayloadPath string; Payload []byte; Scope string; Provenance ir.Provenance.
+- Fragment.Identity() returns Target + NUL + Path + NUL + merge + NUL + Locator.
+- Warning { Code, Message, Path string }.
+- DecodeOptions { Scope string }.
+
+3. decode.go:
+- Decode(src ir.SourceTree, ref string, opts DecodeOptions) ([]Fragment, []Warning, error).
+- Uses ReadTree(ref), finds path.Base == fragment.yaml and prefix configs/, sorts deterministically.
+- Strict YAML parse with goccy/go-yaml and DisallowUnknownField. Fields id,target,path,merge,locator,visibility,inheritance,safety,payload.
+- validates required id,target,path,merge,payload; locator required for toml-key and codex-hooks; accepted merge kinds toml-key and codex-hooks only.
+- payload resolved relative to fragment.yaml directory. Reject empty, absolute/rooted, any traversal, or outside fragment directory. Use slash paths.
+- Reads payload with BlobContent(ref,payloadPath), stores PayloadPath/Payload.
+- Defaults exactly: scope user => personal/root-only; scope workspace => team/descendants; all other scopes including project/global/directory/empty => team/root-only; safety defaults passive.
+- Validates visibility/inheritance/safety values.
+- Does not silently coerce explicit machine-local inheritance.
+- Provenance is ir.Provenance{Path: manifestPath}; Scope is opts.Scope.
+- Warnings nil for now; invalid manifests are errors with useful context including manifest path.
+
+4. materialize.go:
+- imports internal/harness.
+- materialized has Fragments []harness.Fragment.
+- decodeAt calls harness.Decode and appends any harness warnings to materialized Warnings as ir.Warning.
+- materialize callers pass loaded manifest scope if present, else manifest.ScopeProject.
+- Does not wire fragments into engine.Request yet.
+- Existing SourceURL/Commit/Warn behavior intact.
+
+Local tests passed after fixes:
+- go test ./internal/harness -run TestDecodeFragments -count=1
+- go test ./internal/cli ./internal/harness -count=1
+
+Please answer exactly:
+- APPROVED if the range satisfies Task 4.
+- CHANGES_REQUIRED with concise bullets containing file/line evidence and concrete fix if not.
+
+Be adversarial about hidden spec drift, especially payload path containment, defaulting, strict YAML, deterministic ordering, and materialize scope propagation.
+
+---
+
+You are doing a code-quality/correctness review for Task 4 in agent-sync at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only diff range 250dae2..HEAD on branch feat/agent-harness-hierarchy.
+
+Task intent: add internal/harness fragment decoder for configs/**/fragment.yaml, validate strict fragment metadata and payload containment, decode payload bytes, expose Fragment types, and include decoded fragments in CLI materialization without wiring them into engine.Request yet.
+
+Spec review has already approved. Focus only on correctness/quality risks: hidden bugs, path containment holes, nil/empty scope issues, brittle tests, confusing APIs, unnecessary behavior, or materialize regressions. Do not request cosmetic churn.
+
+Local tests passed:
+- go test ./internal/harness -run TestDecodeFragments -count=1
+- go test ./internal/cli ./internal/harness -count=1
+
+Please answer exactly:
+- APPROVED if there are no blocking quality/correctness issues.
+- CHANGES_REQUIRED with concise bullets including file/line evidence, severity, and concrete fix recommendation.
