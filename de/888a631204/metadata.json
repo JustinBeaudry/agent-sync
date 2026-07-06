@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "de888a631204",
+  "strategy": "manual-commit",
+  "branch": "feat/agent-harness-hierarchy",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "internal/cli/cmd_sync.go",
+    "internal/cli/hierarchy_sync.go",
+    "internal/cli/hierarchy_sync_test.go",
+    "internal/cli/setup.go",
+    "internal/engine/request.go",
+    "internal/harness/resolve_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/de/888a631204/0/metadata.json",
+      "transcript": "/de/888a631204/0/full.jsonl",
+      "content_hash": "/de/888a631204/0/content_hash.txt",
+      "prompt": "/de/888a631204/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 212364,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 8465152,
+    "output_tokens": 62390,
+    "api_call_count": 119
+  }
+}

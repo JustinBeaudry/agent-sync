@@ -1,0 +1,53 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "de888a631204",
+  "session_id": "019f3863-aa77-7f42-9591-fc2a5d7de153",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-06T21:25:49.513063Z",
+  "branch": "feat/agent-harness-hierarchy",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "internal/cli/hierarchy_sync.go",
+    "internal/cli/setup.go",
+    "internal/engine/request.go",
+    "internal/cli/cmd_sync.go",
+    "internal/cli/hierarchy_sync_test.go",
+    "internal/harness/resolve_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.3-codex-spark",
+  "turn_id": "e58e18a10519",
+  "checkpoint_transcript_start": 104,
+  "transcript_lines_at_start": 104,
+  "token_usage": {
+    "input_tokens": 212364,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 8465152,
+    "output_tokens": 62390,
+    "api_call_count": 119
+  },
+  "session_metrics": {
+    "turn_count": 21
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-06T21:25:49.466724Z",
+    "agent_lines": 430,
+    "agent_removed": 214,
+    "human_added": 94,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 524,
+    "total_lines_changed": 738,
+    "agent_percentage": 87.26287262872629,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
