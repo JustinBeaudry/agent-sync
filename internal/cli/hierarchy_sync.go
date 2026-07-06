@@ -14,6 +14,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/coverage"
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/manifest"
@@ -42,14 +43,12 @@ type scopeOutcome struct {
 type hierarchySyncOptions struct {
 	IncludeUser bool
 	EngineOpts  engine.Options // mode, adopt, target filter, expect-deletions, logger, now
-	// OfferUser, when non-nil and IncludeUser is false, is invoked once when
-	// discovery finds a user-level manifest that would otherwise be skipped
-	// (plan R16). Returning true includes the user scope in this run exactly
-	// as --user would; returning false skips it AND suppresses the
-	// skipped-user notice (the user answered — no nagging). nil means "never
-	// ask" — the non-interactive/scripted path. The callback is the TTY seam:
-	// the orchestrator itself never touches stdin.
-	OfferUser func(manifestPath string) bool
+}
+
+type preparedLayer struct {
+	Scope        hierarchy.Scope
+	Materialized materialized
+	Manifest     *manifest.Manifest
 }
 
 // runHierarchySync discovers the emit scopes from cwd and runs engine.Sync
@@ -72,30 +71,26 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 	if err != nil {
 		return nil, "", fmt.Errorf("discover hierarchy: %w", err)
 	}
+	scopes = selectWriteScopes(scopes, opts.IncludeUser)
 
-	// User-scope offer (plan R16): a user manifest discovered read-only gets
-	// one chance to join the run. An accepted offer re-discovers with the
-	// user scope emitted — identical to --user. A declined offer is recorded
-	// so the skipped-user notice below stays quiet for this run.
-	userDeclined := false
-	if !opts.IncludeUser && opts.OfferUser != nil {
-		if us, ok := skippedUserScope(scopes); ok {
-			if opts.OfferUser(us.ManifestPath) {
-				scopes, err = hierarchy.Discover(cwd, hierarchy.Options{Home: home, IncludeUser: true})
-				if err != nil {
-					return nil, "", fmt.Errorf("discover hierarchy: %w", err)
-				}
-			} else {
-				userDeclined = true
-			}
+	preparedLayers := make([]preparedLayer, 0, len(scopes))
+	for _, sc := range scopes {
+		pl, ok := materializeLayerReadOnly(ctx, rc, sc, now)
+		if !ok {
+			continue
 		}
+		preparedLayers = append(preparedLayers, pl)
 	}
 
 	// composeActive records whether Cursor-rule composition fired for any
-	// project scope in this run. Under `sync --user` the user scope is emitted
-	// (and processed before the project scope), so its coverage warnings are
-	// post-filtered after the loop once composeActive is known. See U5/D5.
+	// project scope in this run. Under `sync --user`, no project scope is
+	// emitted, so we evaluate composition separately from the emit loop and still
+	// suppress a user-scope Cursor rule warning when composition is known to be
+	// active from the discovered project scope.
 	composeActive := false
+	if opts.IncludeUser {
+		composeActive = cursorCompositionWouldFire(ctx, rc, scopes, preparedLayers, home, now)
+	}
 
 	var outcomes []scopeOutcome
 	for _, sc := range scopes {
@@ -122,6 +117,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			defer prep.Close()
 			req := prep.Request
 			req.Options = opts.EngineOpts
+			applyResolvedLayers(&req, sc, preparedLayers)
 			// Fold the user-scope Cursor rule layer into this project scope's node
 			// set (plan U4/D1/D2), via the shared entry point also used by the
 			// single-scope path. composeActive gates the U5 coverage-warning
@@ -163,15 +159,136 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 	switch {
 	case len(outcomes) == 0:
 		notice = emptyRunNotice(scopes, cwd)
-	case !userDeclined:
+	default:
 		// Plan R17: a user manifest that exists but was not synced is worth a
 		// persistent pointer even when project scopes emitted fine — today's
 		// silence is how user-scope config quietly drifts stale.
-		if us, ok := skippedUserScope(scopes); ok {
+		us, ok := skippedUserScope(scopes)
+		if ok {
 			notice = fmt.Sprintf("user-level manifest at %s was not synced; pass --user to include it", us.ManifestPath)
 		}
 	}
 	return outcomes, notice, nil
+}
+
+// cursorCompositionWouldFire checks whether composition would append any Cursor
+// rules when syncing the closest project-like emitted target. This is needed when
+// --user is requested: we emit only the user scope, but we still want to suppress
+// the user-scope Cursor rule warning when project composition is active.
+func cursorCompositionWouldFire(ctx context.Context, rc *runtimeContext, scopes []hierarchy.Scope, preparedLayers []preparedLayer, home string, now time.Time) bool {
+	for i := len(scopes) - 1; i >= 0; i-- {
+		sc := scopes[i]
+		if sc.Level == hierarchy.LevelUser {
+			continue
+		}
+		if !isProjectCompositionScope(sc.Level.String()) {
+			continue
+		}
+		prep, err := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now)
+		if err != nil {
+			if rc != nil && rc.Logger != nil {
+				rc.Logger.Warn("compose: cannot probe project scope for warning suppression", "path", sc.ManifestPath, "err", err)
+			}
+			continue
+		}
+		req := prep.Request
+		applyResolvedLayers(&req, sc, preparedLayers)
+		active := applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, home, now)
+		prep.Close()
+		if active {
+			return true
+		}
+	}
+	return false
+}
+
+func selectWriteScopes(scopes []hierarchy.Scope, includeUser bool) []hierarchy.Scope {
+	out := make([]hierarchy.Scope, len(scopes))
+	copy(out, scopes)
+	for i := range out {
+		out[i].Emit = false
+	}
+
+	if includeUser {
+		for i := range out {
+			if out[i].Level == hierarchy.LevelUser {
+				out[i].Emit = true
+				return out
+			}
+		}
+		return out
+	}
+
+	for i := len(out) - 1; i >= 0; i-- {
+		if out[i].Level == hierarchy.LevelUser {
+			continue
+		}
+		out[i].Emit = true
+		break
+	}
+
+	return out
+}
+
+func materializeLayerReadOnly(ctx context.Context, rc *runtimeContext, sc hierarchy.Scope, now time.Time) (preparedLayer, bool) {
+	m, err := manifest.LoadFile(sc.ManifestPath, manifest.LoadOptions{NonInteractive: true})
+	if err != nil {
+		if rc != nil && rc.Logger != nil {
+			rc.Logger.Warn("harness: cannot load manifest", "path", sc.ManifestPath, "err", err)
+		}
+		return preparedLayer{}, false
+	}
+
+	root, err := fsroot.OpenWorkspaceRoot(sc.Root)
+	if err != nil {
+		if rc != nil && rc.Logger != nil {
+			rc.Logger.Warn("harness: cannot open scope root", "root", sc.Root, "err", err)
+		}
+		return preparedLayer{}, false
+	}
+	defer func() { _ = root.Close() }()
+
+	offline := m.Canonical.URL != ""
+	if rc != nil {
+		offline = offline || rc.Flags.Offline
+	}
+	mat, err := materialize(ctx, m, materializeOptions{Offline: offline, Now: now, Root: root})
+	if err != nil {
+		if rc != nil && rc.Logger != nil {
+			rc.Logger.Warn("harness: cannot materialize scope", "path", sc.ManifestPath, "err", err)
+		}
+		return preparedLayer{}, false
+	}
+
+	return preparedLayer{
+		Scope:        sc,
+		Materialized: mat,
+		Manifest:     m,
+	}, true
+}
+
+func layersForScope(sc hierarchy.Scope, preparedLayers []preparedLayer) []harness.Layer {
+	var out []harness.Layer
+	for _, pl := range preparedLayers {
+		out = append(out, harness.Layer{
+			Scope:     pl.Scope.Level.String(),
+			Nodes:     pl.Materialized.Nodes,
+			Skills:    pl.Materialized.Skills,
+			Fragments: pl.Materialized.Fragments,
+			SourceURL: pl.Materialized.SourceURL,
+			Commit:    pl.Materialized.Commit,
+		})
+		if pl.Scope.ManifestPath == sc.ManifestPath {
+			break
+		}
+	}
+	return out
+}
+
+func applyResolvedLayers(req *engine.Request, sc hierarchy.Scope, preparedLayers []preparedLayer) {
+	layers := layersForScope(sc, preparedLayers)
+	req.Nodes, req.Skills = harness.ResolveNodes(layers, sc.Level.String())
+	req.Fragments = harness.ResolveFragments(layers, sc.Level.String())
 }
 
 // skippedUserScope returns the discovered user-level scope that is not being

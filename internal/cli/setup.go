@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/agent-sync/agent-sync/internal/adapter"
@@ -14,6 +15,7 @@ import (
 	piadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/pi"
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/workspace"
 )
@@ -68,25 +70,76 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 		return prepared{}, errors.New("cli: prepareEngine called with nil runtime context")
 	}
 	flags := rc.Flags
-	ws, err := workspace.Find(flags.Workspace, workspace.Options{Workspace: flags.Workspace})
-	if err != nil {
-		return prepared{}, fmt.Errorf("locate workspace: %w", err)
+	if flags.Workspace != "" {
+		ws, err := workspace.Find(flags.Workspace, workspace.Options{Workspace: flags.Workspace})
+		if err != nil {
+			return prepared{}, fmt.Errorf("locate workspace: %w", err)
+		}
+		// Single-scope path (explicit --workspace / validate / watch):
+		// project fallback unless the loaded manifest declares a scope.
+		prep, err := prepareScope(ctx, rc, ws.Root, ws.ManifestPath, "project", now)
+		if err != nil {
+			return prepared{}, err
+		}
+		// Apply Cursor-rule composition here too, so validate, watch, and
+		// --workspace sync see the same composed desired state as a plain `sync`.
+		// Without it, a composed project reports false WouldDelete drift under
+		// validate and loses composed rules under watch/--workspace. Best-effort
+		// on home resolution: if it fails, composition simply no-ops (as it
+		// does when no user manifest exists).
+		actualScope := requestScope(prep.Manifest, "project")
+		if home, herr := resolveHome(); herr == nil {
+			applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, actualScope, home, now)
+		}
+		return prep, nil
 	}
-	// Single-scope path (explicit --workspace / validate / watch): project
-	// fallback unless the loaded manifest declares a scope.
-	prep, err := prepareScope(ctx, rc, ws.Root, ws.ManifestPath, "project", now)
+
+	// Default nearest-scope path now starts from hierarchy discovery so we can
+	// resolve inherited nodes and fragments from ancestors.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return prepared{}, fmt.Errorf("prepare engine: resolve cwd: %w", err)
+	}
+	home, err := resolveHome()
+	if err != nil {
+		return prepared{}, fmt.Errorf("prepare engine: %w", err)
+	}
+	scopes, err := hierarchy.Discover(cwd, hierarchy.Options{Home: home})
+	if err != nil {
+		return prepared{}, fmt.Errorf("discover hierarchy: %w", err)
+	}
+	scopes = selectWriteScopes(scopes, false)
+
+	preparedLayers := make([]preparedLayer, 0, len(scopes))
+	for _, sc := range scopes {
+		pl, ok := materializeLayerReadOnly(ctx, rc, sc, now)
+		if !ok {
+			continue
+		}
+		preparedLayers = append(preparedLayers, pl)
+	}
+
+	var targetScope hierarchy.Scope
+	for _, sc := range scopes {
+		if sc.Emit {
+			targetScope = sc
+			break
+		}
+	}
+	if targetScope.ManifestPath == "" && targetScope.Root == "" {
+		return prepared{}, fmt.Errorf("prepare engine: no scope to sync from hierarchy discovery")
+	}
+
+	// Single write scope still needs a full prepare for adapter discovery and
+	// request construction, then gets resolved ancestors merged in here.
+	prep, err := prepareScope(ctx, rc, targetScope.Root, targetScope.ManifestPath, targetScope.Level.String(), now)
 	if err != nil {
 		return prepared{}, err
 	}
-	// Apply Cursor-rule composition here too, so validate, watch, and
-	// --workspace sync see the same composed desired state as a plain `sync`.
-	// Without it, a composed project reports false WouldDelete drift under
-	// validate and loses composed rules under watch/--workspace. Best-effort on
-	// home resolution: if it fails, composition simply no-ops (as it does when no
-	// user manifest exists).
-	actualScope := requestScope(prep.Manifest, "project")
+	applyResolvedLayers(&prep.Request, targetScope, preparedLayers)
+
 	if home, herr := resolveHome(); herr == nil {
-		applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, actualScope, home, now)
+		applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, prep.Request.Scope, home, now)
 	}
 	return prep, nil
 }
@@ -142,6 +195,7 @@ func prepareScope(ctx context.Context, rc *runtimeContext, scopeRoot, manifestPa
 		Targets:       m.Targets,
 		Nodes:         mat.Nodes,
 		Skills:        mat.Skills,
+		Fragments:     mat.Fragments,
 		Commit:        mat.Commit,
 		SourceURL:     mat.SourceURL,
 		Options:       engine.Options{Now: func() time.Time { return now }, Logger: rc.Logger},

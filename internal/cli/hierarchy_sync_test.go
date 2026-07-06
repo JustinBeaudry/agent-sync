@@ -102,7 +102,7 @@ func TestPrepareScope_UsesManifestScopeWhenPresent(t *testing.T) {
 	}
 }
 
-func TestRunHierarchySyncEmitsEachScope(t *testing.T) {
+func TestRunHierarchySyncEmitsClosestScope(t *testing.T) {
 	home, repo, nested := hierarchyTree(t)
 	rc := newTestRuntime()
 	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
@@ -120,14 +120,11 @@ func TestRunHierarchySyncEmitsEachScope(t *testing.T) {
 		t.Fatalf("runHierarchySync: %v", err)
 	}
 
-	if len(outcomes) != 2 {
-		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	if len(outcomes) != 1 {
+		t.Fatalf("got %d outcomes, want 1", len(outcomes))
 	}
-	if outcomes[0].Scope.Level != hierarchy.LevelProject {
-		t.Errorf("first scope level = %s, want project", outcomes[0].Scope.Level)
-	}
-	if outcomes[1].Scope.Level != hierarchy.LevelDirectory {
-		t.Errorf("second scope level = %s, want directory", outcomes[1].Scope.Level)
+	if outcomes[0].Scope.Level != hierarchy.LevelDirectory {
+		t.Fatalf("scope level = %s, want directory", outcomes[0].Scope.Level)
 	}
 	for _, o := range outcomes {
 		if o.Err != nil {
@@ -135,10 +132,10 @@ func TestRunHierarchySyncEmitsEachScope(t *testing.T) {
 		}
 	}
 
-	// Project scope emitted under repo/.claude.
-	mustExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
-	// Directory scope emitted under packages/api/.claude.
+	// Closest scope (directory) emitted under packages/api/.claude.
 	mustExist(t, filepath.Join(nested, ".claude", "skills", "agent-sync-api-skill", "SKILL.md"))
+	// Project scope was inherited for layer resolution but not synced.
+	mustNotExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
 	// The user scope was NOT emitted: no .claude under home itself.
 	mustNotExist(t, filepath.Join(home, ".claude"))
 
@@ -172,7 +169,7 @@ func TestSyncCommandHierarchy(t *testing.T) {
 		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
 	}
 
-	mustExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
+	mustNotExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
 	mustExist(t, filepath.Join(nested, ".claude", "skills", "agent-sync-api-skill", "SKILL.md"))
 	// A repo sync without --user must never write under the home directory.
 	mustNotExist(t, filepath.Join(home, ".claude"))
@@ -205,60 +202,79 @@ func TestRunHierarchySyncContinuesPastMalformedScope(t *testing.T) {
 		now,
 	)
 	// Discovery succeeded (both manifests are present), so the orchestrator
-	// returns no top-level error — the bad scope is reported per-scope.
+	// returns no top-level error — the bad selected scope is reported.
 	if err != nil {
 		t.Fatalf("runHierarchySync returned a top-level error: %v", err)
 	}
 
-	if len(outcomes) != 2 {
-		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	// Directory scope is the selected emit scope and it should report the YAML error.
+	if len(outcomes) != 1 {
+		t.Fatalf("got %d outcomes, want 1", len(outcomes))
 	}
-	// Outcomes are shallow→deep: project (valid) first, directory (bad) second.
-	valid, bad := outcomes[0], outcomes[1]
-	if valid.Scope.Level != hierarchy.LevelProject {
-		t.Fatalf("first scope level = %s, want project", valid.Scope.Level)
+	if outcomes[0].Scope.Level != hierarchy.LevelDirectory {
+		t.Fatalf("scope level = %s, want directory", outcomes[0].Scope.Level)
 	}
-	if bad.Scope.Level != hierarchy.LevelDirectory {
-		t.Fatalf("second scope level = %s, want directory", bad.Scope.Level)
-	}
-
-	// (b) Exactly one outcome errored (the malformed scope), and the valid
-	// scope has a nil error with a populated summary.
-	if valid.Err != nil {
-		t.Errorf("valid scope errored: %v", valid.Err)
-	}
-	if valid.Summary.Workspace == "" {
-		t.Errorf("valid scope summary not populated: %+v", valid.Summary)
-	}
-	if bad.Err == nil {
+	if outcomes[0].Err == nil {
 		t.Fatal("malformed scope must report an error")
 	}
-	errored := 0
-	for _, o := range outcomes {
-		if o.Err != nil {
-			errored++
+
+	mustNotExist(t, filepath.Join(nested, ".claude"))
+	if got := hierarchyExitCode(outcomes); got == 0 {
+		t.Error("aggregate exit code must be non-zero when the selected scope fails")
+	}
+
+	// Project scope was not emitted; selection is closest non-user scope.
+	mustNotExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
+}
+
+func TestSelectWriteScopes_DefaultSelectsClosestNonUser(t *testing.T) {
+	scopes := []hierarchy.Scope{
+		{Level: hierarchy.LevelUser, Emit: true, ManifestPath: "/home/.agent-sync.yaml"},
+		{Level: hierarchy.LevelWorkspace, Emit: true, ManifestPath: "/ws/.agent-sync.yaml"},
+		{Level: hierarchy.LevelProject, Emit: true, ManifestPath: "/repo/.agent-sync.yaml"},
+		{Level: hierarchy.LevelDirectory, Emit: true, ManifestPath: "/repo/pkg/.agent-sync.yaml"},
+	}
+
+	got := selectWriteScopes(scopes, false)
+	emit := 0
+	for _, sc := range got {
+		if sc.Emit {
+			emit++
 		}
 	}
-	if errored != 1 {
-		t.Errorf("got %d errored outcomes, want exactly 1", errored)
+	if emit != 1 {
+		t.Fatalf("emit scopes = %d, want 1", emit)
+	}
+	if got[len(got)-1].Level != hierarchy.LevelDirectory || !got[len(got)-1].Emit {
+		t.Fatalf("got %#v, want directory scope as selected emit", got[len(got)-1])
+	}
+}
+
+func TestSelectWriteScopes_UserFlagSelectsOnlyUser(t *testing.T) {
+	scopes := []hierarchy.Scope{
+		{Level: hierarchy.LevelWorkspace, Emit: true, ManifestPath: "/ws/.agent-sync.yaml"},
+		{Level: hierarchy.LevelProject, Emit: true, ManifestPath: "/repo/.agent-sync.yaml"},
+		{Level: hierarchy.LevelUser, Emit: false, ManifestPath: "/home/.agent-sync.yaml"},
 	}
 
-	// (a) The valid scope still emitted its .claude files on disk despite the
-	// sibling scope failing.
-	mustExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
-	// The malformed scope emitted nothing.
-	mustNotExist(t, filepath.Join(nested, ".claude"))
-
-	// (c) The aggregate exit code is non-zero because a scope failed.
-	if got := hierarchyExitCode(outcomes); got == 0 {
-		t.Error("aggregate exit code must be non-zero when a scope fails")
+	got := selectWriteScopes(scopes, true)
+	emit := 0
+	for _, sc := range got {
+		if sc.Emit {
+			emit++
+		}
+	}
+	if emit != 1 {
+		t.Fatalf("emit scopes = %d, want 1", emit)
+	}
+	if got[2].Level != hierarchy.LevelUser || !got[2].Emit {
+		t.Fatalf("got %#v, want user scope as selected emit", got[2])
 	}
 }
 
 // TestHierarchySyncEmitsCoverageWarning checks that a directory-level scope
 // emitting a skill for target claude carries a coverage warning (claude does
-// not read nested skills natively), while the project-level scope emitting the
-// same skill carries none (project level is always native).
+// not read nested skills natively).
 func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
 	home, _, nested := hierarchyTree(t)
 	rc := newTestRuntime()
@@ -276,20 +292,12 @@ func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runHierarchySync: %v", err)
 	}
-	if len(outcomes) != 2 {
-		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	if len(outcomes) != 1 {
+		t.Fatalf("got %d outcomes, want 1", len(outcomes))
 	}
-	proj, dir := outcomes[0], outcomes[1]
-	if proj.Scope.Level != hierarchy.LevelProject {
-		t.Fatalf("first scope level = %s, want project", proj.Scope.Level)
-	}
+	dir := outcomes[0]
 	if dir.Scope.Level != hierarchy.LevelDirectory {
-		t.Fatalf("second scope level = %s, want directory", dir.Scope.Level)
-	}
-
-	// Project scope: skill at project level is native, so no warnings.
-	if len(proj.Warnings) != 0 {
-		t.Errorf("project scope should carry no coverage warnings, got: %+v", proj.Warnings)
+		t.Fatalf("scope level = %s, want directory", dir.Scope.Level)
 	}
 	// Directory scope: claude does not read nested skills natively → 1 warning.
 	if len(dir.Warnings) != 1 {
@@ -818,105 +826,6 @@ func hierarchyEngineOpts(rc *runtimeContext, now time.Time) engine.Options {
 	}
 }
 
-// TestRunHierarchySync_OfferUserAccepted pins plan R16: an accepted offer
-// includes the user scope in the same run, exactly as --user would.
-func TestRunHierarchySync_OfferUserAccepted(t *testing.T) {
-	home, _, nested := hierarchyTree(t)
-	writeUserManifest(t, home)
-	rc := newTestRuntime()
-	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-
-	asked := 0
-	outcomes, notice, err := runHierarchySync(
-		context.Background(), rc, nested, home,
-		hierarchySyncOptions{
-			IncludeUser: false,
-			EngineOpts:  hierarchyEngineOpts(rc, now),
-			OfferUser:   func(string) bool { asked++; return true },
-		},
-		now,
-	)
-	if err != nil {
-		t.Fatalf("runHierarchySync: %v", err)
-	}
-	if asked != 1 {
-		t.Fatalf("offer asked %d times, want 1", asked)
-	}
-	foundUser := false
-	for _, o := range outcomes {
-		if o.Scope.Level == hierarchy.LevelUser {
-			foundUser = true
-		}
-	}
-	if !foundUser {
-		t.Fatalf("accepted offer must emit the user scope; outcomes: %d", len(outcomes))
-	}
-	mustExist(t, filepath.Join(home, ".claude", "skills", "agent-sync-user-skill", "SKILL.md"))
-	if notice != "" {
-		t.Fatalf("notice = %q, want empty when the user scope was synced", notice)
-	}
-}
-
-// TestRunHierarchySync_OfferUserDeclined pins plan R16/R17: a decline skips
-// the user scope for this run and suppresses the skipped-user notice (the
-// user answered; no nagging).
-func TestRunHierarchySync_OfferUserDeclined(t *testing.T) {
-	home, _, nested := hierarchyTree(t)
-	writeUserManifest(t, home)
-	rc := newTestRuntime()
-	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-
-	outcomes, notice, err := runHierarchySync(
-		context.Background(), rc, nested, home,
-		hierarchySyncOptions{
-			IncludeUser: false,
-			EngineOpts:  hierarchyEngineOpts(rc, now),
-			OfferUser:   func(string) bool { return false },
-		},
-		now,
-	)
-	if err != nil {
-		t.Fatalf("runHierarchySync: %v", err)
-	}
-	for _, o := range outcomes {
-		if o.Scope.Level == hierarchy.LevelUser {
-			t.Fatal("declined offer must not emit the user scope")
-		}
-	}
-	mustNotExist(t, filepath.Join(home, ".claude"))
-	if notice != "" {
-		t.Fatalf("notice = %q, want empty after an explicit decline", notice)
-	}
-}
-
-// TestRunHierarchySync_NoOfferWithoutUserManifest: the offer only fires when
-// there is a user manifest to sync.
-func TestRunHierarchySync_NoOfferWithoutUserManifest(t *testing.T) {
-	home, _, nested := hierarchyTree(t)
-	rc := newTestRuntime()
-	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-
-	asked := 0
-	_, notice, err := runHierarchySync(
-		context.Background(), rc, nested, home,
-		hierarchySyncOptions{
-			IncludeUser: false,
-			EngineOpts:  hierarchyEngineOpts(rc, now),
-			OfferUser:   func(string) bool { asked++; return true },
-		},
-		now,
-	)
-	if err != nil {
-		t.Fatalf("runHierarchySync: %v", err)
-	}
-	if asked != 0 {
-		t.Fatalf("offer asked %d times, want 0 (no user manifest)", asked)
-	}
-	if notice != "" {
-		t.Fatalf("notice = %q, want empty (nothing was skipped)", notice)
-	}
-}
-
 // TestRunHierarchySync_SkippedUserNotice pins plan R17: without a prompt
 // (non-interactive), a user manifest that was not synced yields a persistent
 // notice even though project scopes emitted fine.
@@ -935,7 +844,7 @@ func TestRunHierarchySync_SkippedUserNotice(t *testing.T) {
 		t.Fatalf("runHierarchySync: %v", err)
 	}
 	if len(outcomes) == 0 {
-		t.Fatal("expected project/directory outcomes")
+		t.Fatal("expected one emitted scope")
 	}
 	if !strings.Contains(notice, "--user") {
 		t.Fatalf("notice = %q, want a skipped-user notice pointing at --user", notice)
@@ -1019,8 +928,8 @@ func TestSyncCommandSkippedUserNoticeJSON(t *testing.T) {
 	if uerr := json.Unmarshal([]byte(out), &doc); uerr != nil {
 		t.Fatalf("output is not valid JSON: %v\n%s", uerr, out)
 	}
-	if len(doc.Scopes) != 2 {
-		t.Fatalf("scopes = %d, want 2", len(doc.Scopes))
+	if len(doc.Scopes) != 1 {
+		t.Fatalf("scopes = %d, want 1", len(doc.Scopes))
 	}
 	if !strings.Contains(doc.Notice, "--user") {
 		t.Fatalf("notice = %q, want skipped-user notice", doc.Notice)
