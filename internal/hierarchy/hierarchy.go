@@ -3,8 +3,8 @@
 // specific (highest precedence).
 //
 // Unlike internal/workspace (which resolves the single nearest manifest),
-// this package collects every manifest in the scope chain: the user-home
-// manifest, the project manifest (at the nearest .git ancestor), and any
+// this package collects every manifest in the scope chain: the user-home,
+// optional workspace, project manifest (at the nearest .git ancestor), and any
 // intermediate directory manifests between the project root and cwd.
 //
 // It is a pure leaf package: it walks the filesystem and returns data. It
@@ -63,8 +63,9 @@ type Scope struct {
 	// Level classifies the scope (user / workspace / project / directory).
 	Level Level
 	// Emit is true when this scope should be synced in the current run.
-	// Project and directory scopes are always Emit=true; the user scope is
-	// Emit=true only when Options.IncludeUser is set (the --user flag).
+	// Workspace, project, and directory scopes are always Emit=true; the user
+	// scope is Emit=true only when Options.IncludeUser is set (the --user
+	// flag).
 	Emit bool
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/workspace"
@@ -16,6 +17,12 @@ type manifestMarker struct {
 	Scope          string `yaml:"scope"`
 	ActivationRoot bool   `yaml:"activation_root"`
 }
+
+var (
+	activationRootScopePattern    = regexp.MustCompile(`(?m)^\s*scope\s*:\s*workspace\s*(#.*)?$`)
+	activationRootEnabledPattern  = regexp.MustCompile(`(?m)^\s*activation_root\s*:\s*true\s*(#.*)?$`)
+	activationRootMarkerMalformed = "hierarchy: malformed activation-root marker"
+)
 
 // manifestAt reports the manifest path in dir, if a regular .agent-sync.yaml
 // file exists there. A directory or other non-regular entry with the
@@ -32,7 +39,9 @@ func manifestAt(dir string) (string, bool) {
 // markerAt reports whether dir has a manifest and, if so, returns marker fields
 // from that manifest when YAML parses successfully. Unlike manifest.LoadFile, it
 // is intentionally lightweight: only scope and activation_root are read. YAML
-// parse failures are tolerated as non-fatal so discovery remains presence-based.
+// parse failures are tolerated as non-fatal so discovery remains presence-based
+// except when raw bytes still look like an activation-root marker, which is
+// treated as a boundary and fails closed.
 func markerAt(dir string) (manifestMarker, string, bool, error) {
 	path, has := manifestAt(dir)
 	if !has {
@@ -54,11 +63,21 @@ func markerAt(dir string) (manifestMarker, string, bool, error) {
 	}
 	var marker manifestMarker
 	if err := yaml.Unmarshal(b, &marker); err != nil {
-		// Keep discovery behavior presence-based when the manifest is malformed:
-		// surface parse errors at prepare/sync time instead.
+		if looksLikeActivationRootMarker(b) {
+			return manifestMarker{}, path, true, fmt.Errorf("%s %s: %w", activationRootMarkerMalformed, path, err)
+		}
+		// Keep discovery behavior presence-based when the malformed manifest is
+		// not an activation-root marker.
 		return manifestMarker{}, path, true, nil
 	}
 	return marker, path, true, nil
+}
+
+// looksLikeActivationRootMarker performs a conservative marker-only check for
+// activation-root manifests, avoiding any full YAML parsing in the error path.
+func looksLikeActivationRootMarker(raw []byte) bool {
+	s := string(raw)
+	return activationRootScopePattern.MatchString(s) && activationRootEnabledPattern.MatchString(s)
 }
 
 // hasGit reports whether dir contains a .git entry (directory for a normal

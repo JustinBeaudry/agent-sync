@@ -365,8 +365,8 @@ func TestDiscover_MalformedManifestSkipsActivationButDoesNotFail(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatalf("mkdir cwd: %v", err)
 	}
-	writeManifest(t, home)       // user scope
-	writeManifest(t, repo)       // project scope
+	writeManifest(t, home)                           // user scope
+	writeManifest(t, repo)                           // project scope
 	writeManifestContent(t, mid, ":\n  not: [valid") // malformed directory manifest
 
 	scopes, err := Discover(cwd, Options{Home: home})
@@ -384,6 +384,58 @@ func TestDiscover_MalformedManifestSkipsActivationButDoesNotFail(t *testing.T) {
 		if scopes[i].Root != wantRoots[i] || scopes[i].Level != wantLevels[i] {
 			t.Errorf("scope[%d] = {%q, %v}, want {%q, %v}", i, scopes[i].Root, scopes[i].Level, wantRoots[i], wantLevels[i])
 		}
+	}
+}
+
+func TestDiscover_MalformedWorkspaceActivationManifestFailsClosed(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "workspace")
+	repo := filepath.Join(workspaceRoot, "repo")
+	cwd := filepath.Join(repo, "packages", "api")
+	mkGit(t, repo)
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+	writeManifest(t, home) // user scope
+	manifest := writeManifestContent(t, workspaceRoot, "version: 1\nscope: workspace\nactivation_root: true\n:\n  not: [valid")
+	writeManifest(t, repo) // project scope
+
+	scopes, err := Discover(cwd, Options{Home: home})
+	if err == nil {
+		t.Fatalf("expected malformed activation-root manifest to fail discovery, got scopes=%+v", scopes)
+	}
+	if len(scopes) != 0 {
+		t.Fatalf("expected no scopes on fail-closed activation-root parse error, got %+v", scopes)
+	}
+	if !strings.Contains(err.Error(), manifest) {
+		t.Fatalf("error = %q, want include manifest path %q", err, manifest)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "activation-root") || !strings.Contains(strings.ToLower(err.Error()), "malformed") {
+		t.Fatalf("error = %q, want activation-root malformed wording", err)
+	}
+}
+
+func TestDiscover_CwdAtWorkspaceActivationRoot(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "workspace")
+	writeManifest(t, home) // user scope
+	writeManifestContent(t, workspaceRoot, "version: 1\nscope: workspace\nactivation_root: true\n")
+
+	scopes, err := Discover(workspaceRoot, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(scopes) != 1 {
+		t.Fatalf("got %d scopes, want 1: %+v", len(scopes), scopes)
+	}
+	if scopes[0].Root != workspaceRoot {
+		t.Errorf("scope.Root = %q, want %q", scopes[0].Root, workspaceRoot)
+	}
+	if scopes[0].Level != LevelWorkspace {
+		t.Errorf("scope.Level = %v, want %v", scopes[0].Level, LevelWorkspace)
+	}
+	if scopes[0].ManifestPath == "" {
+		t.Fatal("workspace scope missing manifest path")
 	}
 }
 
