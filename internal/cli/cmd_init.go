@@ -76,6 +76,9 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 					}
 				}
 			}
+			if activationRoot && scope != manifest.ScopeWorkspace {
+				return fmt.Errorf("init: --activation-root requires --workspace (scope must be %q)", manifest.ScopeWorkspace)
+			}
 			// A bad destination must fail as a directory error before any
 			// discovery or targets messaging can mask it (plan R8). An empty
 			// destDir means the cwd, which exists.

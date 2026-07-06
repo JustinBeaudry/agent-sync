@@ -105,6 +105,48 @@ func TestInit_DefaultProjectScope(t *testing.T) {
 	}
 }
 
+func TestInit_DefaultScopeRejectsActivationRoot(t *testing.T) {
+	ws := t.TempDir()
+	_, errOut, err := runInitFromDir(t, ws, "--activation-root", "--target", "codex")
+	if err == nil {
+		t.Fatal("expected init to fail when --activation-root is used without --workspace")
+	}
+	if !strings.Contains(err.Error(), "--activation-root") || !strings.Contains(err.Error(), "--workspace") {
+		t.Fatalf("error should mention --activation-root and --workspace, got: %v\n%s", err, errOut)
+	}
+}
+
+func TestInit_DirScopeRejectsActivationRoot(t *testing.T) {
+	ws := t.TempDir()
+	_, errOut, err := runInit(t, "--dir", ws, "--activation-root", "--target", "codex")
+	if err == nil {
+		t.Fatal("expected --dir init with --activation-root to fail")
+	}
+	if !strings.Contains(err.Error(), "--activation-root") || !strings.Contains(err.Error(), "--workspace") {
+		t.Fatalf("error should mention --activation-root and --workspace, got: %v\n%s", err, errOut)
+	}
+}
+
+func TestInit_UserScopeRejectsActivationRoot(t *testing.T) {
+	ws := t.TempDir()
+	home := t.TempDir()
+	prev := resolveHome
+	resolveHome = func() (string, error) {
+		return home, nil
+	}
+	t.Cleanup(func() {
+		resolveHome = prev
+	})
+
+	_, errOut, err := runInitFromDir(t, ws, "--user", "--activation-root", "--target", "codex")
+	if err == nil {
+		t.Fatal("expected --user init with --activation-root to fail")
+	}
+	if !strings.Contains(err.Error(), "--activation-root") || !strings.Contains(err.Error(), "--workspace") {
+		t.Fatalf("error should mention --activation-root and --workspace, got: %v\n%s", err, errOut)
+	}
+}
+
 func TestInit_DirProjectScope(t *testing.T) {
 	ws := t.TempDir()
 	_, errOut, err := runInit(t, "--dir", ws, "--target", "codex")
