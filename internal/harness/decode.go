@@ -30,9 +30,14 @@ func Decode(src ir.SourceTree, ref string, opts DecodeOptions) ([]Fragment, []Wa
 	if err != nil {
 		return nil, nil, fmt.Errorf("harness: read tree: %w", err)
 	}
+	entryModes := make(map[string]uint32, len(entries))
 	var manifestPaths []string
 	for _, e := range entries {
+		entryModes[e.Path] = e.Mode
 		if path.Base(e.Path) == "fragment.yaml" && strings.HasPrefix(e.Path, "configs/") {
+			if !isRegularFileMode(e.Mode) {
+				return nil, nil, fmt.Errorf("harness: %s is not a regular file", e.Path)
+			}
 			manifestPaths = append(manifestPaths, e.Path)
 		}
 	}
@@ -48,7 +53,7 @@ func Decode(src ir.SourceTree, ref string, opts DecodeOptions) ([]Fragment, []Wa
 		if err := yaml.UnmarshalWithOptions(data, &fy, yaml.DisallowUnknownField()); err != nil {
 			return nil, nil, fmt.Errorf("harness: parse %s: %s", manifestPath, yaml.FormatError(err, false, true))
 		}
-		frag, err := buildFragment(src, ref, opts.Scope, manifestPath, fy)
+		frag, err := buildFragment(src, ref, opts.Scope, manifestPath, fy, entryModes)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -57,7 +62,7 @@ func Decode(src ir.SourceTree, ref string, opts DecodeOptions) ([]Fragment, []Wa
 	return out, nil, nil
 }
 
-func buildFragment(src ir.SourceTree, ref, scope, manifestPath string, fy fragmentYAML) (Fragment, error) {
+func buildFragment(src ir.SourceTree, ref, scope, manifestPath string, fy fragmentYAML, entryModes map[string]uint32) (Fragment, error) {
 	if !ir.IsValidID(fy.ID) {
 		return Fragment{}, fmt.Errorf("harness: %s has invalid id %q", manifestPath, fy.ID)
 	}
@@ -90,6 +95,13 @@ func buildFragment(src ir.SourceTree, ref, scope, manifestPath string, fy fragme
 	payloadPath, err := cleanPayloadPath(path.Dir(manifestPath), fy.Payload)
 	if err != nil {
 		return Fragment{}, fmt.Errorf("harness: %s payload: %w", manifestPath, err)
+	}
+	mode, ok := entryModes[payloadPath]
+	if !ok {
+		return Fragment{}, fmt.Errorf("harness: %s payload %s is not listed in the source tree", manifestPath, payloadPath)
+	}
+	if !isRegularFileMode(mode) {
+		return Fragment{}, fmt.Errorf("harness: %s payload %s is not a regular file", manifestPath, payloadPath)
 	}
 	payload, err := src.BlobContent(ref, payloadPath)
 	if err != nil {
@@ -166,6 +178,15 @@ func isValidInheritance(i Inheritance) bool {
 func isValidSafety(s Safety) bool {
 	switch s {
 	case SafetyPassive, SafetyToolAccess, SafetyExecutable:
+		return true
+	default:
+		return false
+	}
+}
+
+func isRegularFileMode(mode uint32) bool {
+	switch mode {
+	case 0o100644, 0o100755:
 		return true
 	default:
 		return false

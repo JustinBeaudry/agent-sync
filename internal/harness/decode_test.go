@@ -8,10 +8,14 @@ import (
 )
 
 type fakeSource struct {
-	files map[string][]byte
+	files   map[string][]byte
+	entries []git.TreeEntry
 }
 
 func (f fakeSource) ReadTree(string) ([]git.TreeEntry, error) {
+	if f.entries != nil {
+		return append([]git.TreeEntry(nil), f.entries...), nil
+	}
 	out := make([]git.TreeEntry, 0, len(f.files))
 	for p := range f.files {
 		out = append(out, git.TreeEntry{
@@ -122,6 +126,61 @@ hooks = false
 	}
 	if frags[0].Visibility != VisibilityMachineLocal || frags[0].Inheritance != InheritanceDescendants {
 		t.Fatalf("machine-local fields were coerced: %+v", frags[0])
+	}
+}
+
+func TestDecodeFragments_RejectsPayloadMissingFromTreeEntries(t *testing.T) {
+	src := fakeSource{
+		files: map[string][]byte{
+			"configs/codex/features/hooks/fragment.yaml": []byte(`id: hooks
+target: codex
+path: .codex/config.toml
+merge: toml-key
+locator: features.hooks
+payload: payload.toml
+`),
+			// BlobContent can read this path, but ReadTree did not report it. This
+			// models local_dir symlink skips: the decoder must not open paths that
+			// were not listed as regular source files.
+			"configs/codex/features/hooks/payload.toml": []byte(`[features]
+hooks = false
+`),
+		},
+		entries: []git.TreeEntry{{
+			Path: "configs/codex/features/hooks/fragment.yaml",
+			Mode: 0o100644,
+		}},
+	}
+
+	_, _, err := Decode(src, "", DecodeOptions{Scope: "workspace"})
+	if err == nil {
+		t.Fatal("Decode returned nil error for payload missing from tree entries")
+	}
+}
+
+func TestDecodeFragments_RejectsSymlinkPayloadEntry(t *testing.T) {
+	src := fakeSource{
+		files: map[string][]byte{
+			"configs/codex/features/hooks/fragment.yaml": []byte(`id: hooks
+target: codex
+path: .codex/config.toml
+merge: toml-key
+locator: features.hooks
+payload: payload.toml
+`),
+			"configs/codex/features/hooks/payload.toml": []byte(`[features]
+hooks = false
+`),
+		},
+		entries: []git.TreeEntry{
+			{Path: "configs/codex/features/hooks/fragment.yaml", Mode: 0o100644},
+			{Path: "configs/codex/features/hooks/payload.toml", Mode: 0o120000},
+		},
+	}
+
+	_, _, err := Decode(src, "", DecodeOptions{Scope: "workspace"})
+	if err == nil {
+		t.Fatal("Decode returned nil error for symlink payload entry")
 	}
 }
 
