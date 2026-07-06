@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "e0497d55d6cf",
+  "strategy": "manual-commit",
+  "branch": "feat/init-defaults-user-sync-ux",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "internal/cli/cmd_sync.go",
+    "internal/cli/hierarchy_sync.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e0/497d55d6cf/0/metadata.json",
+      "transcript": "/e0/497d55d6cf/0/full.jsonl",
+      "content_hash": "/e0/497d55d6cf/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 404,
+    "cache_creation_tokens": 20992,
+    "cache_read_tokens": 3448268,
+    "output_tokens": 12936,
+    "api_call_count": 10
+  }
+}
