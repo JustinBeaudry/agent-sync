@@ -62,8 +62,35 @@ The body goes here.
 
 ## 2. Initialize a workspace
 
-From the directory you want managed, point a workspace at your canonical repo.
-Pinning to a commit SHA is the default (and required for a local path):
+The zero-flag path covers the common case:
+
+```bash
+agent-sync init --non-interactive
+```
+
+With no source flag, the canonical source defaults to the in-repo `.agents`
+directory (created for you if missing). With no `--target`, init **discovers**
+your targets by probing the workspace for each tool's footprint directory —
+`.claude/` enables `claude`, `.cursor/` enables `cursor`, `.codex/` → `codex`,
+`.pi/` → `pi`, `.agent/` → `antigravity` — and snapshots the result into the
+manifest's `targets:` list. The success line tells you exactly what was
+inferred:
+
+```text
+wrote .agent-sync.yaml (source: .agents [default]; targets: claude, cursor [discovered])
+```
+
+Zero footprints found is not an error — the manifest is written with an empty
+`targets:` list and a hint; add targets later with `--target` or by editing
+the manifest. PATH adapters (`agent-sync-adapter-<name>`) are never
+auto-discovered — name them explicitly with `--target`.
+
+On a terminal, bare `agent-sync init` runs an interactive wizard with the same
+defaults: press Enter at the source prompt to accept `.agents`, and discovered
+targets come preselected. (Passing `--target` skips the wizard — the
+invocation is fully specified with the defaulted source.)
+
+Explicit flags always win:
 
 ```bash
 # Remote canonical repo (resolves the ref to a SHA for you):
@@ -74,16 +101,22 @@ agent-sync init --source https://github.com/your-org/agent-config --ref main \
 agent-sync init --local-path ../agent-config --commit <40-char-sha> \
   --target claude --target cursor
 
-# Or per-repo skills authored right in this repo (no git, no pin):
+# Or name the in-repo directory and targets yourself:
 agent-sync init --local-dir .agents --target claude --target codex
 ```
 
 The `url`/`local_path` forms write a `.agent-sync.yaml` with a pinned `commit`
-and `trusted_sha`. The `--local-dir` form points the workspace at an in-repo
-directory (here `.agents`) read straight from the working tree: no commit, no
-trust prompt, and it works offline — author skills under `.agents/skills/<id>/`,
-rules under `.agents/rules/`, and so on, then sync. On a terminal, `agent-sync
-init` with no flags runs an interactive wizard.
+and `trusted_sha`; pin flags (`--ref`/`--commit`/`--floating`) therefore
+require one of those source flags — the defaulted `.agents` source is
+unpinned. The `--local-dir` form points the workspace at an in-repo directory
+read straight from the working tree: no commit, no trust prompt, and it works
+offline — author skills under `.agents/skills/<id>/`, rules under
+`.agents/rules/`, and so on, then sync.
+
+One naming caveat: discovery matches exact directory names, so the `.agents`
+sources dir never enables `antigravity` (footprint `.agent`), and at a home
+directory Antigravity is not discoverable at all (its user-scope footprint is
+`.gemini`, not `.agent`) — pass `--target antigravity` there.
 
 ---
 
@@ -94,7 +127,21 @@ agent-sync sync
 ```
 
 This materializes the pinned content, compiles it through each target's
-adapter, and writes native files:
+adapter, and writes native files.
+
+If a user-level manifest exists at `~/.agent-sync.yaml`, an interactive
+`sync` asks whether to include it in the same run:
+
+```text
+Also sync the user-level manifest at /Users/you/.agent-sync.yaml? [Y/n]
+```
+
+Non-interactive runs never prompt — they sync the project scopes and end with
+a note that the user scope was skipped (`pass --user to include it`), in text
+output and in the JSON `notice` field, so a stale user scope is never silent.
+`agent-sync sync --user` remains the scriptable way to include it.
+
+The files written:
 
 - **Reserved subdirectories** (agent-sync owns the whole directory):
   `.claude/rules/agent-sync/`, `.cursor/rules/agent-sync/`,
