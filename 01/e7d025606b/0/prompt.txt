@@ -1,0 +1,53 @@
+Final spec compliance review for Task 2 in /Users/justinbeaudry/Projects/agent-sync after commits ad94a67 and 62e74e9. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Task 2 requirements:
+- Changed scope limited to internal/hierarchy and internal/coverage files.
+- Add LevelWorkspace between LevelUser and LevelProject. String returns "workspace"; MarshalText still works; tests updated.
+- Discovery uses lightweight marker parsing of `.agent-sync.yaml` fields `scope` and `activation_root`, without requiring full manifest validity/canonical source. Malformed YAML marker parse should not make discovery fail; existing malformed-scope behavior must continue.
+- If cwd is inside nearest activation root:
+  - user scope is not included at all, even if home has a manifest.
+  - activation root appears as LevelWorkspace.
+  - project/directory scopes below it still appear as before, bounded by activation root.
+  - cwd == activation root returns just workspace unless deeper scopes apply.
+- Nested activation roots fail closed; error includes "nested activation roots" and both manifest paths.
+- Outside activation roots, existing user -> project -> directory behavior unchanged.
+- Coverage Analyze treats LevelWorkspace like project/root level and produces no warnings.
+- Tests cover activation root stop, outside activation root includes user, nested activation roots fail, malformed non-activation manifests do not fail discovery, workspace coverage no warnings.
+- Focused tests pass locally:
+  go test ./internal/hierarchy ./internal/coverage -count=1
+  go test ./internal/cli -run 'TestCompose_MalformedUserManifestDefersCursor|TestRunHierarchySyncContinuesPastMalformedScope' -count=1
+
+Please inspect current diff for these commits and report any spec gaps.
+
+---
+
+Code quality review for Task 2 in /Users/justinbeaudry/Projects/agent-sync after commits ad94a67 and 62e74e9. Spec review is being run separately; focus on quality/correctness risks in changed files only. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Changed area: internal/hierarchy and internal/coverage. Key behavior: lightweight marker parsing for activation roots, activation root stop semantics, malformed marker tolerance, nested activation root detection, workspace coverage no warnings.
+
+Please inspect the current diff from before Task 2 (commit 0b3d76b) through HEAD. Look for edge cases like hop budget, cwd==activation root, duplicate scopes, malformed manifests, path ordering, error behavior, comments becoming inaccurate, and tests that are brittle or insufficient.
+
+---
+
+Task 2 needs a quality-review fix in /Users/justinbeaudry/Projects/agent-sync. Do not revert unrelated changes. Fix and commit.
+
+Current Task 2 commits: ad94a67 and 62e74e9. Quality reviewer found a P1: markerAt now swallows all YAML parse errors, so a malformed activation-root manifest above a repo can be treated as non-activation and discovery can include user scope.
+
+Required behavior:
+- Preserve previous fix: ordinary malformed manifests without activation-root markers should not fail discovery; existing tests `TestCompose_MalformedUserManifestDefersCursor` and `TestRunHierarchySyncContinuesPastMalformedScope` must continue passing.
+- New fail-closed behavior: if marker YAML parse fails BUT raw file text appears to claim both `scope: workspace` and `activation_root: true`, discovery must fail closed instead of ignoring it. Error should mention activation root / malformed marker and the manifest path.
+- Add a regression test in `internal/hierarchy/discover_test.go` for a malformed workspace activation manifest above a repo. Home has user manifest. Workspace manifest text should include `scope: workspace` and `activation_root: true` plus invalid YAML. Cwd is a project below workspace. Assert Discover returns an error (preferred) and does not return scopes; error contains the workspace manifest path and activation/root wording.
+- Add a simple test for cwd == activation root: home has user manifest, workspace dir has valid `scope: workspace` + `activation_root: true`, Discover(workspace, Home: home) returns exactly one LevelWorkspace rooted at workspace and no user scope.
+- Update stale comments in `internal/hierarchy/hierarchy.go` if they still imply only user/project/directory or that project/directory scopes are always Emit=true while workspace exists.
+
+Implementation hint:
+- In markerAt, on yaml.Unmarshal error, inspect raw bytes with a conservative helper like `looksLikeActivationRootMarker(b []byte) bool`. It can use line-based or regex matching for `scope: workspace` and `activation_root: true`; keep it simple and avoid full YAML parsing. If helper returns true, return an error. Otherwise return zero marker as non-activation as today.
+- This is not security-sensitive parsing; it is fail-closed boundary detection. False positives are acceptable if the file literally contains those keys.
+
+Run:
+- `go test ./internal/hierarchy ./internal/coverage -count=1`
+- `go test ./internal/cli -run 'TestCompose_MalformedUserManifestDefersCursor|TestRunHierarchySyncContinuesPastMalformedScope' -count=1`
+
+Commit message: `fix: fail closed on malformed activation-root markers`
+
+Return DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED with changed files, tests run, commit SHA.
