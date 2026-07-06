@@ -15,6 +15,7 @@ import (
 
 	"github.com/agent-sync/agent-sync/internal/coverage"
 	"github.com/agent-sync/agent-sync/internal/engine"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/manifest"
@@ -269,6 +270,70 @@ func TestSelectWriteScopes_UserFlagSelectsOnlyUser(t *testing.T) {
 	}
 	if got[2].Level != hierarchy.LevelUser || !got[2].Emit {
 		t.Fatalf("got %#v, want user scope as selected emit", got[2])
+	}
+}
+
+func TestApplyResolvedLayersUsesRequestScope(t *testing.T) {
+	sc := hierarchy.Scope{Level: hierarchy.LevelProject, ManifestPath: "/repo/.agent-sync.yaml"}
+	req := engine.Request{
+		Scope: manifest.ScopeGlobal,
+		Fragments: []harness.Fragment{{
+			ID:          "hooks",
+			Target:      "codex",
+			Path:        ".codex/config.toml",
+			Merge:       harness.MergeTOMLKey,
+			Locator:     "features.hooks",
+			Scope:       manifest.ScopeGlobal,
+			Inheritance: harness.InheritanceRootOnly,
+			Visibility:  harness.VisibilityTeam,
+			Payload:     []byte("current\n"),
+		}},
+	}
+
+	applyResolvedLayers(&req, sc, []hierarchy.Scope{sc}, nil)
+	if len(req.Fragments) != 1 {
+		t.Fatalf("fragments = %+v, want current global fragment", req.Fragments)
+	}
+	if string(req.Fragments[0].Payload) != "current\n" {
+		t.Fatalf("payload = %q, want current", req.Fragments[0].Payload)
+	}
+}
+
+func TestApplyResolvedLayersKeepsCurrentScopeWhenReadOnlyLayerMissing(t *testing.T) {
+	workspace := hierarchy.Scope{Level: hierarchy.LevelWorkspace, ManifestPath: "/ws/.agent-sync.yaml"}
+	project := hierarchy.Scope{Level: hierarchy.LevelProject, ManifestPath: "/ws/repo/.agent-sync.yaml"}
+	req := engine.Request{
+		Scope: manifest.ScopeProject,
+		Nodes: []ir.Node{{
+			ID:   "project-skill",
+			Kind: ir.KindSkill,
+			Body: []byte("project\n"),
+		}},
+		Skills: map[string]ir.Skill{
+			"project-skill": {Node: ir.Node{ID: "project-skill", Kind: ir.KindSkill}},
+		},
+		SourceURL: "project-source",
+	}
+	preparedLayers := []preparedLayer{{
+		Scope: workspace,
+		Materialized: materialized{
+			Nodes: []ir.Node{{ID: "workspace-skill", Kind: ir.KindSkill, Body: []byte("workspace\n")}},
+			Skills: map[string]ir.Skill{
+				"workspace-skill": {Node: ir.Node{ID: "workspace-skill", Kind: ir.KindSkill}},
+			},
+			SourceURL: "workspace-source",
+		},
+	}}
+
+	applyResolvedLayers(&req, project, []hierarchy.Scope{workspace, project}, preparedLayers)
+	if len(req.Nodes) != 2 {
+		t.Fatalf("nodes = %+v, want workspace plus current project", req.Nodes)
+	}
+	if _, ok := req.Skills["project-skill"]; !ok {
+		t.Fatalf("current project skill missing: %+v", req.Skills)
+	}
+	if req.Nodes[1].ID != "project-skill" {
+		t.Fatalf("last node = %+v, want current project node", req.Nodes[1])
 	}
 }
 

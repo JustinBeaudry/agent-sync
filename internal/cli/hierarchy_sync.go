@@ -117,7 +117,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			defer prep.Close()
 			req := prep.Request
 			req.Options = opts.EngineOpts
-			applyResolvedLayers(&req, sc, preparedLayers)
+			applyResolvedLayers(&req, sc, scopes, preparedLayers)
 			// Fold the user-scope Cursor rule layer into this project scope's node
 			// set (plan U4/D1/D2), via the shared entry point also used by the
 			// single-scope path. composeActive gates the U5 coverage-warning
@@ -192,7 +192,7 @@ func cursorCompositionWouldFire(ctx context.Context, rc *runtimeContext, scopes 
 			continue
 		}
 		req := prep.Request
-		applyResolvedLayers(&req, sc, preparedLayers)
+		applyResolvedLayers(&req, sc, scopes, preparedLayers)
 		active := applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, home, now)
 		prep.Close()
 		if active {
@@ -267,28 +267,50 @@ func materializeLayerReadOnly(ctx context.Context, rc *runtimeContext, sc hierar
 	}, true
 }
 
-func layersForScope(sc hierarchy.Scope, preparedLayers []preparedLayer) []harness.Layer {
-	var out []harness.Layer
+func layersForScope(sc hierarchy.Scope, scopes []hierarchy.Scope, preparedLayers []preparedLayer, current harness.Layer) []harness.Layer {
+	preparedByManifest := make(map[string]preparedLayer, len(preparedLayers))
 	for _, pl := range preparedLayers {
-		out = append(out, harness.Layer{
-			Scope:     pl.Scope.Level.String(),
-			Nodes:     pl.Materialized.Nodes,
-			Skills:    pl.Materialized.Skills,
-			Fragments: pl.Materialized.Fragments,
-			SourceURL: pl.Materialized.SourceURL,
-			Commit:    pl.Materialized.Commit,
-		})
-		if pl.Scope.ManifestPath == sc.ManifestPath {
+		preparedByManifest[pl.Scope.ManifestPath] = pl
+	}
+	var out []harness.Layer
+	for _, discovered := range scopes {
+		if discovered.ManifestPath == sc.ManifestPath {
+			out = append(out, current)
 			break
+		}
+		if pl, ok := preparedByManifest[discovered.ManifestPath]; ok {
+			out = append(out, layerFromPrepared(pl))
 		}
 	}
 	return out
 }
 
-func applyResolvedLayers(req *engine.Request, sc hierarchy.Scope, preparedLayers []preparedLayer) {
-	layers := layersForScope(sc, preparedLayers)
-	req.Nodes, req.Skills = harness.ResolveNodes(layers, sc.Level.String())
-	req.Fragments = harness.ResolveFragments(layers, sc.Level.String())
+func layerFromPrepared(pl preparedLayer) harness.Layer {
+	return harness.Layer{
+		Scope:     pl.Scope.Level.String(),
+		Nodes:     pl.Materialized.Nodes,
+		Skills:    pl.Materialized.Skills,
+		Fragments: pl.Materialized.Fragments,
+		SourceURL: pl.Materialized.SourceURL,
+		Commit:    pl.Materialized.Commit,
+	}
+}
+
+func layerFromRequest(req *engine.Request) harness.Layer {
+	return harness.Layer{
+		Scope:     req.Scope,
+		Nodes:     req.Nodes,
+		Skills:    req.Skills,
+		Fragments: req.Fragments,
+		SourceURL: req.SourceURL,
+		Commit:    req.Commit,
+	}
+}
+
+func applyResolvedLayers(req *engine.Request, sc hierarchy.Scope, scopes []hierarchy.Scope, preparedLayers []preparedLayer) {
+	layers := layersForScope(sc, scopes, preparedLayers, layerFromRequest(req))
+	req.Nodes, req.Skills = harness.ResolveNodes(layers, req.Scope)
+	req.Fragments = harness.ResolveFragments(layers, req.Scope)
 }
 
 // skippedUserScope returns the discovered user-level scope that is not being

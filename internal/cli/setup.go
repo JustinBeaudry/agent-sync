@@ -136,7 +136,7 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	if err != nil {
 		return prepared{}, err
 	}
-	applyResolvedLayers(&prep.Request, targetScope, preparedLayers)
+	applyResolvedLayers(&prep.Request, targetScope, scopes, preparedLayers)
 
 	if home, herr := resolveHome(); herr == nil {
 		applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, prep.Request.Scope, home, now)
