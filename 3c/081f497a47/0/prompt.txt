@@ -1,0 +1,40 @@
+You are doing the Task 3 spec-compliance review for the agent-sync repo at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only the diff range 3c94549..HEAD on branch feat/agent-harness-hierarchy.
+
+Task 3 from the approved implementation plan:
+
+## Task 3: Use Manifest Scope In Prepared Requests
+
+Files planned:
+- Modify: internal/cli/setup.go
+- Modify: internal/cli/hierarchy_sync.go
+- Modify: internal/cli/hierarchy_sync_test.go
+- Modify: internal/cli/cmd_validate.go
+
+Step 1: Write failing request-scope test in internal/cli/hierarchy_sync_test.go verifying prepareScope loads a workspace manifest with scope: workspace and activation_root: true, then sets prep.Request.Scope to workspace even if discovered scope is project.
+
+Step 2: Add requestScope helper in internal/cli/setup.go:
+func requestScope(m *manifest.Manifest, discovered string) string {
+    if m != nil && m.Scope != "" { return m.Scope }
+    if discovered != "" { return discovered }
+    return manifest.ScopeProject
+}
+Change engine.Request{Scope: scope} to use requestScope(m, scope). Change prepareEngine comment from always project scope to project fallback unless loaded manifest declares a scope.
+
+Step 3: Ensure Cursor composition remains project-only:
+- In prepareEngine, compute actualScope := requestScope(prep.Manifest, "project") and pass it to applyCursorComposition.
+- In runHierarchySync, pass req.Scope to applyCursorComposition instead of sc.Level.String().
+
+Step 4: Verify CLI scope tests pass:
+go test ./internal/cli -run 'TestPrepareScope_UsesManifestScopeWhenPresent|TestCompose' -count=1
+
+Step 5: Commit as fix: honor manifest scope in engine requests.
+
+Additional context: follow-up review found adapter/manifest docs and schema needed to include the newly valid workspace scope and legacy global alias consistently. That follow-up is included in 3c94549..HEAD.
+
+Please answer with exactly one of:
+- APPROVED: if the implementation satisfies Task 3 and the follow-up contract/doc scope consistency requirements.
+- CHANGES_REQUIRED: with a concise bullet list of concrete gaps, each with file/line evidence and why it violates the Task 3 spec or public contract.
+
+Be adversarial about contract drift: if any schema, public docs, exported adapterkit types/comments, or CLI paths still encode the old user|project|global-only world or pass discovered hierarchy level instead of manifest scope, call it out.
