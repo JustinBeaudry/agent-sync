@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -86,10 +88,12 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				Floating:  floating,
 				Targets:   targets,
 			}
-			// sourceDefaulted records that no source flag was given and the
-			// canonical source fell back to the in-repo .agents dir, so the
-			// success line can announce the inference (plan R14).
+			// sourceDefaulted / discovered / notEnabled record what init
+			// inferred, so the success line announces it (plan R14): a
+			// defaulting feature that prints only "wrote ..." hides
+			// misdiscovery until sync.
 			sourceDefaulted := false
+			var discovered, notEnabled []string
 
 			interactive := tui.Interactive(rc.Access.IsTTY, rc.Access.NonInteractive, rc.Access.Accessible)
 			if shouldRunInitWizard(interactive, source, localPath, localDir, targets) {
@@ -106,17 +110,48 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				cfg = wcfg
 				cfg.Dir = destDir
 				cfg.Floating = floating
-			} else if source == "" && localPath == "" && localDir == "" {
-				// No source flag: default to the in-repo .agents working-tree
-				// source (plan R1). Pin flags contradict that default — the
-				// .agents source is unpinned — so name the conflict instead of
-				// letting the generic local-dir validation confuse the user
-				// (plan R3).
-				if pinFlag := firstPinFlag(ref, commit, floating); pinFlag != "" {
-					return fmt.Errorf("init: %s requires --source or --local-path; without a source flag init defaults to the unpinned .agents in-repo source", pinFlag)
+			} else {
+				if source == "" && localPath == "" && localDir == "" {
+					// No source flag: default to the in-repo .agents working-tree
+					// source (plan R1). Pin flags contradict that default — the
+					// .agents source is unpinned — so name the conflict instead of
+					// letting the generic local-dir validation confuse the user
+					// (plan R3).
+					if pinFlag := firstPinFlag(ref, commit, floating); pinFlag != "" {
+						return fmt.Errorf("init: %s requires --source or --local-path; without a source flag init defaults to the unpinned .agents in-repo source", pinFlag)
+					}
+					cfg.LocalDir = defaultLocalDir
+					sourceDefaulted = true
 				}
-				cfg.LocalDir = defaultLocalDir
-				sourceDefaulted = true
+
+				// Targets: explicit --target flags win outright (plan R5); with
+				// none, snapshot the workspace's tool footprints (plan R4). Zero
+				// discovered is not an error — an empty targets list is the
+				// spec-valid "not yet configured" state — but it gets a hint so
+				// the user knows why nothing will sync (plan R6).
+				probeDir := destDir
+				if probeDir == "" {
+					probeDir = "."
+				}
+				found, warns := discoverTargets(probeDir, bundledAdapters())
+				for _, w := range warns {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+				}
+				if len(targets) == 0 {
+					cfg.Targets = found
+					discovered = found
+					if len(found) == 0 {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+							"hint: no target tool footprints (.claude, .cursor, ...) found in %s; enable targets with --target or edit targets: in %s (PATH adapters are never auto-discovered)\n",
+							probeDir, workspace.ManifestName)
+					}
+				} else {
+					for _, name := range found {
+						if !slices.Contains(targets, name) {
+							notEnabled = append(notEnabled, name)
+						}
+					}
+				}
 			}
 
 			// Pin-at-init (invariant #4): resolve the ref to a SHA unless
@@ -156,11 +191,21 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 						"dir", cfg.LocalDir, "err", err)
 				}
 			}
-			srcNote := ""
+			var notes []string
 			if sourceDefaulted {
-				srcNote = fmt.Sprintf(" (source: %s [default])", defaultLocalDir)
+				notes = append(notes, fmt.Sprintf("source: %s [default]", defaultLocalDir))
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "wrote %s%s\n", target, srcNote)
+			if len(discovered) > 0 {
+				notes = append(notes, fmt.Sprintf("targets: %s [discovered]", strings.Join(discovered, ", ")))
+			}
+			if len(notEnabled) > 0 {
+				notes = append(notes, fmt.Sprintf("also detected (not enabled): %s", strings.Join(notEnabled, ", ")))
+			}
+			suffix := ""
+			if len(notes) > 0 {
+				suffix = fmt.Sprintf(" (%s)", strings.Join(notes, "; "))
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "wrote %s%s\n", target, suffix)
 			return nil
 		},
 	}

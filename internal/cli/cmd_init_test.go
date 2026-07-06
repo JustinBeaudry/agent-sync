@@ -159,6 +159,121 @@ func TestInit_NonexistentDestDirFails(t *testing.T) {
 	}
 }
 
+// TestInit_DiscoversTargetsFromFootprints pins plan R4: with no --target,
+// init snapshots the workspace's tool footprints into targets:, sorted, and
+// the success line announces what was inferred.
+func TestInit_DiscoversTargetsFromFootprints(t *testing.T) {
+	ws := t.TempDir()
+	for _, d := range []string{".codex", ".claude"} {
+		if err := os.Mkdir(filepath.Join(ws, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out, errOut, err := runInit(t, "--dir", ws)
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("manifest load: %v", lerr)
+	}
+	if len(m.Targets) != 2 || m.Targets[0] != "claude" || m.Targets[1] != "codex" {
+		t.Fatalf("targets = %v, want [claude codex]", m.Targets)
+	}
+	if !strings.Contains(out, "discovered") {
+		t.Fatalf("success line should announce discovered targets, got: %q", out)
+	}
+}
+
+// TestInit_ZeroFootprintsSucceedsWithHint pins plan R6: zero discovered
+// targets is not an error — the manifest is written with an empty targets
+// list (spec-valid "not yet configured") plus a stderr hint naming --target.
+func TestInit_ZeroFootprintsSucceedsWithHint(t *testing.T) {
+	ws := t.TempDir()
+	_, errOut, err := runInit(t, "--dir", ws)
+	if err != nil {
+		t.Fatalf("zero-footprint init must succeed: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("manifest load: %v", lerr)
+	}
+	if len(m.Targets) != 0 {
+		t.Fatalf("targets = %v, want empty", m.Targets)
+	}
+	if !strings.Contains(errOut, "--target") {
+		t.Fatalf("stderr should hint at --target, got: %q", errOut)
+	}
+}
+
+// TestInit_ExplicitTargetSkipsDiscovery pins plan R5/R14: --target overrides
+// discovery entirely, and detected-but-not-enabled footprints are noted so
+// the drop is never silent.
+func TestInit_ExplicitTargetSkipsDiscovery(t *testing.T) {
+	ws := t.TempDir()
+	if err := os.Mkdir(filepath.Join(ws, ".cursor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errOut, err := runInit(t, "--dir", ws, "--target", "claude")
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("manifest load: %v", lerr)
+	}
+	if len(m.Targets) != 1 || m.Targets[0] != "claude" {
+		t.Fatalf("targets = %v, want [claude] (explicit wins)", m.Targets)
+	}
+	if !strings.Contains(out, "cursor") || !strings.Contains(out, "not enabled") {
+		t.Fatalf("output should note the detected-but-not-enabled cursor footprint, got: %q", out)
+	}
+}
+
+// TestInit_ExplicitSourceStillGetsDiscovery: discovery governs targets on
+// every non-wizard path, not just the defaulted source (plan R4).
+func TestInit_ExplicitSourceStillGetsDiscovery(t *testing.T) {
+	requireGit(t)
+	canonical, sha := makeCanonicalRepo(t)
+	ws := t.TempDir()
+	if err := os.Mkdir(filepath.Join(ws, ".pi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errOut, err := runInit(t, "--dir", ws, "--local-path", canonical, "--commit", sha)
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	m, lerr := manifest.LoadFile(filepath.Join(ws, ".agent-sync.yaml"), manifest.LoadOptions{})
+	if lerr != nil {
+		t.Fatalf("manifest load: %v", lerr)
+	}
+	if len(m.Targets) != 1 || m.Targets[0] != "pi" {
+		t.Fatalf("targets = %v, want [pi] (discovered)", m.Targets)
+	}
+}
+
+// TestInit_BareThenSyncEmitsDiscoveredTarget closes the loop (plan U3): a
+// zero-flag init in a workspace with a .claude footprint and authored .agents
+// skills syncs Claude output with no further flags.
+func TestInit_BareThenSyncEmitsDiscoveredTarget(t *testing.T) {
+	ws := t.TempDir()
+	if err := os.Mkdir(filepath.Join(ws, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, ws, ".agents/skills/foo/SKILL.md", "authored skill body\n")
+
+	if _, errOut, err := runInit(t, "--dir", ws); err != nil {
+		t.Fatalf("init: %v\n%s", err, errOut)
+	}
+	if _, errOut, err := runSync(t, ws, "--offline"); err != nil {
+		t.Fatalf("sync after bare init: %v\n%s", err, errOut)
+	}
+	mustExist(t, filepath.Join(ws, ".claude", "skills", "agent-sync-foo", "SKILL.md"))
+}
+
 // TestShouldRunInitWizard pins the wizard gate (plan R12): the wizard runs
 // only for a fully-unspecified interactive init — any source flag or
 // explicit --target makes the invocation fully specified via defaults.
