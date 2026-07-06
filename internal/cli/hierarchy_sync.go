@@ -74,23 +74,24 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 	scopes = selectWriteScopes(scopes, opts.IncludeUser)
 
 	preparedLayers := make([]preparedLayer, 0, len(scopes))
+	layerErrors := make(map[string]error)
 	for _, sc := range scopes {
-		pl, ok := materializeLayerReadOnly(ctx, rc, sc, now)
-		if !ok {
+		pl, lerr := materializeLayerReadOnly(ctx, rc, sc, now)
+		if lerr != nil {
+			layerErrors[sc.ManifestPath] = lerr
+			if rc != nil && rc.Logger != nil {
+				rc.Logger.Warn("harness: cannot materialize scope", "path", sc.ManifestPath, "err", lerr)
+			}
 			continue
 		}
 		preparedLayers = append(preparedLayers, pl)
 	}
 
-	// composeActive records whether Cursor-rule composition fired for any
-	// project scope in this run. Under `sync --user`, no project scope is
-	// emitted, so we evaluate composition separately from the emit loop and still
-	// suppress a user-scope Cursor rule warning when composition is known to be
-	// active from the discovered project scope.
+	userScope, hasUserScope := hierarchyUserScope(scopes)
+
+	// composeActive records whether Cursor-rule composition fired for the selected
+	// project scope in this run.
 	composeActive := false
-	if opts.IncludeUser {
-		composeActive = cursorCompositionWouldFire(ctx, rc, scopes, preparedLayers, home, now)
-	}
 
 	var outcomes []scopeOutcome
 	for _, sc := range scopes {
@@ -109,6 +110,10 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		// coverage.Analyze / engine.Sync.
 		out := func() scopeOutcome {
 			out := scopeOutcome{Scope: sc}
+			if failed, ferr, ok := requiredAncestorLayerError(sc, scopes, layerErrors); ok {
+				out.Err = fmt.Errorf("materialize inherited layer %s: %w", failed.ManifestPath, ferr)
+				return out
+			}
 			prep, perr := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now)
 			if perr != nil {
 				out.Err = perr
@@ -122,7 +127,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			// set (plan U4/D1/D2), via the shared entry point also used by the
 			// single-scope path. composeActive gates the U5 coverage-warning
 			// suppression below — set only when rules were actually composed.
-			if applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, home, now) {
+			if applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, userScope, hasUserScope, now) {
 				composeActive = true
 			}
 			// Coverage warnings are computed from the decoded IR (the distinct
@@ -171,37 +176,6 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 	return outcomes, notice, nil
 }
 
-// cursorCompositionWouldFire checks whether composition would append any Cursor
-// rules when syncing the closest project-like emitted target. This is needed when
-// --user is requested: we emit only the user scope, but we still want to suppress
-// the user-scope Cursor rule warning when project composition is active.
-func cursorCompositionWouldFire(ctx context.Context, rc *runtimeContext, scopes []hierarchy.Scope, preparedLayers []preparedLayer, home string, now time.Time) bool {
-	for i := len(scopes) - 1; i >= 0; i-- {
-		sc := scopes[i]
-		if sc.Level == hierarchy.LevelUser {
-			continue
-		}
-		if !isProjectCompositionScope(sc.Level.String()) {
-			continue
-		}
-		prep, err := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now)
-		if err != nil {
-			if rc != nil && rc.Logger != nil {
-				rc.Logger.Warn("compose: cannot probe project scope for warning suppression", "path", sc.ManifestPath, "err", err)
-			}
-			continue
-		}
-		req := prep.Request
-		applyResolvedLayers(&req, sc, scopes, preparedLayers)
-		active := applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, home, now)
-		prep.Close()
-		if active {
-			return true
-		}
-	}
-	return false
-}
-
 func selectWriteScopes(scopes []hierarchy.Scope, includeUser bool) []hierarchy.Scope {
 	out := make([]hierarchy.Scope, len(scopes))
 	copy(out, scopes)
@@ -230,21 +204,15 @@ func selectWriteScopes(scopes []hierarchy.Scope, includeUser bool) []hierarchy.S
 	return out
 }
 
-func materializeLayerReadOnly(ctx context.Context, rc *runtimeContext, sc hierarchy.Scope, now time.Time) (preparedLayer, bool) {
+func materializeLayerReadOnly(ctx context.Context, rc *runtimeContext, sc hierarchy.Scope, now time.Time) (preparedLayer, error) {
 	m, err := manifest.LoadFile(sc.ManifestPath, manifest.LoadOptions{NonInteractive: true})
 	if err != nil {
-		if rc != nil && rc.Logger != nil {
-			rc.Logger.Warn("harness: cannot load manifest", "path", sc.ManifestPath, "err", err)
-		}
-		return preparedLayer{}, false
+		return preparedLayer{}, fmt.Errorf("load manifest: %w", err)
 	}
 
 	root, err := fsroot.OpenWorkspaceRoot(sc.Root)
 	if err != nil {
-		if rc != nil && rc.Logger != nil {
-			rc.Logger.Warn("harness: cannot open scope root", "root", sc.Root, "err", err)
-		}
-		return preparedLayer{}, false
+		return preparedLayer{}, fmt.Errorf("open scope root: %w", err)
 	}
 	defer func() { _ = root.Close() }()
 
@@ -254,17 +222,38 @@ func materializeLayerReadOnly(ctx context.Context, rc *runtimeContext, sc hierar
 	}
 	mat, err := materialize(ctx, m, materializeOptions{Offline: offline, Now: now, Root: root})
 	if err != nil {
-		if rc != nil && rc.Logger != nil {
-			rc.Logger.Warn("harness: cannot materialize scope", "path", sc.ManifestPath, "err", err)
-		}
-		return preparedLayer{}, false
+		return preparedLayer{}, fmt.Errorf("materialize: %w", err)
 	}
 
 	return preparedLayer{
 		Scope:        sc,
 		Materialized: mat,
 		Manifest:     m,
-	}, true
+	}, nil
+}
+
+func hierarchyUserScope(scopes []hierarchy.Scope) (hierarchy.Scope, bool) {
+	for _, sc := range scopes {
+		if sc.Level == hierarchy.LevelUser {
+			return sc, true
+		}
+	}
+	return hierarchy.Scope{}, false
+}
+
+func requiredAncestorLayerError(sc hierarchy.Scope, scopes []hierarchy.Scope, layerErrors map[string]error) (hierarchy.Scope, error, bool) {
+	for _, ancestor := range scopes {
+		if ancestor.ManifestPath == sc.ManifestPath {
+			return hierarchy.Scope{}, nil, false
+		}
+		if ancestor.Level == hierarchy.LevelUser {
+			continue
+		}
+		if err, ok := layerErrors[ancestor.ManifestPath]; ok {
+			return ancestor, err, true
+		}
+	}
+	return hierarchy.Scope{}, nil, false
 }
 
 func layersForScope(sc hierarchy.Scope, scopes []hierarchy.Scope, preparedLayers []preparedLayer, current harness.Layer) []harness.Layer {
@@ -371,7 +360,7 @@ func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hiera
 //   - user source unreadable: defer cursor (drop it from req.Targets) so a
 //     transient failure can't wipe previously-composed rules; warn; false.
 //   - rules composed: append to req.Nodes; true.
-func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine.Request, m *manifest.Manifest, scope, home string, now time.Time) bool {
+func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine.Request, m *manifest.Manifest, scope string, user hierarchy.Scope, hasUser bool, now time.Time) bool {
 	if !m.Compose.CursorRulesFromUser {
 		return false
 	}
@@ -384,8 +373,7 @@ func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine
 	if !slices.Contains(req.Targets, cursorTarget) {
 		return false
 	}
-	user, ok := hierarchy.UserScope(home)
-	if !ok {
+	if !hasUser {
 		return false // no user manifest to compose from
 	}
 	composed, failed := composeUserRules(ctx, rc, user, cursorRuleIDsOf(req.Nodes), now)

@@ -89,7 +89,8 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 		// does when no user manifest exists).
 		actualScope := requestScope(prep.Manifest, "project")
 		if home, herr := resolveHome(); herr == nil {
-			applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, actualScope, home, now)
+			user, ok := hierarchy.UserScope(home)
+			applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, actualScope, user, ok, now)
 		}
 		return prep, nil
 	}
@@ -111,9 +112,14 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	scopes = selectWriteScopes(scopes, false)
 
 	preparedLayers := make([]preparedLayer, 0, len(scopes))
+	layerErrors := make(map[string]error)
 	for _, sc := range scopes {
-		pl, ok := materializeLayerReadOnly(ctx, rc, sc, now)
-		if !ok {
+		pl, lerr := materializeLayerReadOnly(ctx, rc, sc, now)
+		if lerr != nil {
+			layerErrors[sc.ManifestPath] = lerr
+			if rc != nil && rc.Logger != nil {
+				rc.Logger.Warn("harness: cannot materialize scope", "path", sc.ManifestPath, "err", lerr)
+			}
 			continue
 		}
 		preparedLayers = append(preparedLayers, pl)
@@ -129,6 +135,9 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	if targetScope.ManifestPath == "" && targetScope.Root == "" {
 		return prepared{}, fmt.Errorf("prepare engine: no scope to sync from hierarchy discovery")
 	}
+	if failed, ferr, ok := requiredAncestorLayerError(targetScope, scopes, layerErrors); ok {
+		return prepared{}, fmt.Errorf("materialize inherited layer %s: %w", failed.ManifestPath, ferr)
+	}
 
 	// Single write scope still needs a full prepare for adapter discovery and
 	// request construction, then gets resolved ancestors merged in here.
@@ -138,9 +147,8 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	}
 	applyResolvedLayers(&prep.Request, targetScope, scopes, preparedLayers)
 
-	if home, herr := resolveHome(); herr == nil {
-		applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, prep.Request.Scope, home, now)
-	}
+	userScope, hasUserScope := hierarchyUserScope(scopes)
+	applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, prep.Request.Scope, userScope, hasUserScope, now)
 	return prep, nil
 }
 

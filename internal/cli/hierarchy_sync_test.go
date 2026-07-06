@@ -337,6 +337,61 @@ func TestApplyResolvedLayersKeepsCurrentScopeWhenReadOnlyLayerMissing(t *testing
 	}
 }
 
+func TestRunHierarchySync_BlocksWhenInheritedWorkspaceLayerFails(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "ActualReality")
+	repo := filepath.Join(workspaceRoot, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workspaceManifest := "version: 1\n" +
+		"scope: " + manifest.ScopeWorkspace + "\n" +
+		"activation_root: true\n" +
+		"canonical:\n" +
+		"  local_dir: .agents\n" +
+		"targets:\n" +
+		"  - claude\n"
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".agent-sync.yaml"), []byte(workspaceManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, workspaceRoot, ".agents/skills/ws-skill/SKILL.md", "workspace skill\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/AGENTS.md", "project instructions\n")
+
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	if _, _, err := runHierarchySync(
+		context.Background(), rc, repo, home,
+		hierarchySyncOptions{EngineOpts: hierarchyEngineOpts(rc, now)},
+		now,
+	); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	inherited := filepath.Join(repo, ".claude", "skills", "agent-sync-ws-skill", "SKILL.md")
+	mustExist(t, inherited)
+
+	if err := os.RemoveAll(filepath.Join(workspaceRoot, ".agents")); err != nil {
+		t.Fatal(err)
+	}
+	outcomes, _, err := runHierarchySync(
+		context.Background(), rc, repo, home,
+		hierarchySyncOptions{EngineOpts: hierarchyEngineOpts(rc, now)},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("second sync returned top-level error: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("outcomes = %d, want 1", len(outcomes))
+	}
+	if outcomes[0].Err == nil {
+		t.Fatal("expected selected scope to fail when inherited workspace layer cannot materialize")
+	}
+	mustExist(t, inherited)
+}
+
 // TestHierarchySyncEmitsCoverageWarning checks that a directory-level scope
 // emitting a skill for target claude carries a coverage warning (claude does
 // not read nested skills natively).

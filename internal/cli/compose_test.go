@@ -36,10 +36,10 @@ func composeEngineOpts(rc *runtimeContext, now time.Time) engine.Options {
 	return engine.Options{Mode: report.ModeAtomic, Now: func() time.Time { return now }, Logger: rc.Logger}
 }
 
-// TestCompose_SuppressesUserRuleWarningWhenActive is U5/D5: with composition
-// active, the user-scope Cursor `rule` warning is dropped (the rule now takes
-// effect via the project), while the agents-md warning — not composed — stays.
-func TestCompose_SuppressesUserRuleWarningWhenActive(t *testing.T) {
+// TestCompose_UserSyncKeepsRuleWarningEvenWhenProjectWouldCompose pins the
+// one-write-target rule: `sync --user` emits only the user scope and must not
+// prepare a project scope just to decide whether to suppress warnings.
+func TestCompose_UserSyncKeepsRuleWarningEvenWhenProjectWouldCompose(t *testing.T) {
 	home, repo := composeTree(t)
 	// User manifest (cursor) carrying BOTH a rule and an agents-md.
 	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
@@ -62,12 +62,48 @@ func TestCompose_SuppressesUserRuleWarningWhenActive(t *testing.T) {
 	}
 
 	got := userWarnKinds(outcomes, cursorTarget)
-	if got[ir.KindRule] {
-		t.Error("user-scope Cursor rule warning should be suppressed when composition is active")
+	if !got[ir.KindRule] {
+		t.Error("user-scope Cursor rule warning should remain during a user-only sync")
 	}
 	if !got[ir.KindAgentsMD] {
-		t.Error("user-scope Cursor agents-md warning should remain (agents-md is not composed)")
+		t.Error("user-scope Cursor agents-md warning should remain")
 	}
+}
+
+func TestCompose_ActivationRootStopsUserComposition(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "ActualReality")
+	repo := filepath.Join(workspaceRoot, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/from-user.md", "activation root must stop this user rule\n")
+	workspaceManifest := "version: 1\n" +
+		"scope: " + manifest.ScopeWorkspace + "\n" +
+		"activation_root: true\n" +
+		"canonical:\n" +
+		"  local_dir: .agents\n" +
+		"targets:\n" +
+		"  - cursor\n"
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".agent-sync.yaml"), []byte(workspaceManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, ".agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/project-only.md", "project rule\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "project-only"))
+	mustNotExist(t, rulePath(repo, "from-user"))
 }
 
 func TestCompose_WorkspaceManifestDoesNotComposeUserRules(t *testing.T) {
@@ -643,7 +679,8 @@ func TestCompose_ComposedNodesCarryUserSourceOverride(t *testing.T) {
 	}
 	rc := newTestRuntime()
 	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
-	if !applyCursorComposition(context.Background(), rc, &req, m, "project", home, now) {
+	user, ok := hierarchy.UserScope(home)
+	if !applyCursorComposition(context.Background(), rc, &req, m, "project", user, ok, now) {
 		t.Fatal("composition did not fire")
 	}
 
