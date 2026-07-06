@@ -1,0 +1,1 @@
+Update: current HEAD has changed after a manifest-spec doc fix. Please discard any work against the previous HEAD and review the current diff range 3c94549..HEAD instead. The same Task 3 spec and contract-drift instructions apply. Do not edit files. Return APPROVED or CHANGES_REQUIRED only as requested.
