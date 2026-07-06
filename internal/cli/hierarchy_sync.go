@@ -51,10 +51,10 @@ type preparedLayer struct {
 	Manifest     *manifest.Manifest
 }
 
-// runHierarchySync discovers the emit scopes from cwd and runs engine.Sync
-// against each, in order. A scope whose prepare or sync fails is recorded in
-// its scopeOutcome.Err and the run continues (continue-and-report). Discovery
-// failure aborts the whole run (the scope set is indeterminate).
+// runHierarchySync discovers the hierarchy from cwd and runs engine.Sync against
+// the single selected write scope. A selected scope whose prepare or sync fails
+// is recorded in its scopeOutcome.Err. Discovery failure aborts the whole run
+// (the scope set is indeterminate).
 //
 // Only emit scopes are synced: the user scope is emitted only when
 // opts.IncludeUser is set (the --user flag), so a plain repo sync never writes
@@ -62,10 +62,8 @@ type preparedLayer struct {
 // unmodified engine.Sync; each scope runs against its own fsroot root and so
 // writes its own staging and ledger.
 //
-// The returned notice is non-empty only when the run produced zero emit scopes:
-// it explains why nothing was synced (user manifest needs --user, or no manifest
-// exists) so an empty run is never a silent no-op. It is advisory — exit code
-// stays 0.
+// The returned notice is advisory. It explains empty runs and reminds callers
+// when a user scope was discovered but not written.
 func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string, opts hierarchySyncOptions, now time.Time) ([]scopeOutcome, string, error) {
 	scopes, err := hierarchy.Discover(cwd, hierarchy.Options{Home: home, IncludeUser: opts.IncludeUser})
 	if err != nil {
@@ -88,10 +86,6 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 	}
 
 	userScope, hasUserScope := hierarchyUserScope(scopes)
-
-	// composeActive records whether Cursor-rule composition fired for the selected
-	// project scope in this run.
-	composeActive := false
 
 	var outcomes []scopeOutcome
 	for _, sc := range scopes {
@@ -125,11 +119,8 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			applyResolvedLayers(&req, sc, scopes, preparedLayers)
 			// Fold the user-scope Cursor rule layer into this project scope's node
 			// set (plan U4/D1/D2), via the shared entry point also used by the
-			// single-scope path. composeActive gates the U5 coverage-warning
-			// suppression below — set only when rules were actually composed.
-			if applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, userScope, hasUserScope, now) {
-				composeActive = true
-			}
+			// single-scope path.
+			applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, userScope, hasUserScope, now)
 			// Coverage warnings are computed from the decoded IR (the distinct
 			// kinds this scope emits), the manifest's targets, and the scope's
 			// level. Computed after a successful prepare (nodes exist);
@@ -146,20 +137,6 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		outcomes = append(outcomes, out)
 	}
 
-	// U5/D5: once user rules compose into the project's .cursor/rules/, the
-	// user-scope "Cursor rule is inert at user scope" coverage warning is
-	// misleading — the rule DOES take effect, via the project. Under `sync
-	// --user` the user scope is emitted (and carries that warning), so drop just
-	// that one warning from its outcome when composition fired this run. The
-	// agents-md user warning is not composed and stays. Composition-off runs are
-	// untouched. Caller-side filter keeps coverage.Analyze pure.
-	if composeActive {
-		for i := range outcomes {
-			if outcomes[i].Scope.Level == hierarchy.LevelUser {
-				outcomes[i].Warnings = dropWarning(outcomes[i].Warnings, cursorTarget, ir.KindRule, hierarchy.LevelUser)
-			}
-		}
-	}
 	var notice string
 	switch {
 	case len(outcomes) == 0:
@@ -326,20 +303,6 @@ func emptyRunNotice(scopes []hierarchy.Scope, cwd string) string {
 		}
 	}
 	return fmt.Sprintf("no .agent-sync.yaml found from %s up to the project root; run 'agent-sync init' to create one", cwd)
-}
-
-// dropWarning returns ws without any warning matching (target, kind, level).
-// Used to suppress the user-scope Cursor rule warning when composition makes it
-// misleading (U5). The input slice is not mutated.
-func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hierarchy.Level) []coverage.Warning {
-	out := make([]coverage.Warning, 0, len(ws))
-	for _, w := range ws {
-		if w.Target == target && w.Kind == kind && w.Level == level {
-			continue
-		}
-		out = append(out, w)
-	}
-	return out
 }
 
 // applyCursorComposition folds the user-scope Cursor rule layer into a

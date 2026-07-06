@@ -60,11 +60,10 @@ type prepared struct {
 // engine.Options (mode, adopt, expect-deletions) are layered on by the
 // caller via the returned Request.Options.
 //
-// prepareEngine is the single-scope wrapper: it resolves the nearest
-// workspace from cwd (or the explicit --workspace override) and delegates to
-// prepareScope. It is used by validate, and by sync when an explicit
-// --workspace override is in effect. The hierarchy sync orchestrator skips
-// it and calls prepareScope directly, once per discovered scope.
+// prepareEngine builds the request used by validate and by explicit
+// --workspace sync/watch paths. Without --workspace it uses hierarchy discovery
+// to match plain sync's selected write scope and inherited layers. With an
+// explicit --workspace override it preserves the single-scope behavior.
 func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prepared, error) {
 	if rc == nil {
 		return prepared{}, errors.New("cli: prepareEngine called with nil runtime context")

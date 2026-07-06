@@ -194,12 +194,9 @@ func TestCompose_ExplicitNonCursorUserRuleNotComposed(t *testing.T) {
 	mustNotExist(t, rulePath(repo, "codexonly")) // codex-only user rule not composed to cursor
 }
 
-// TestCompose_ColliyingUserRulesDoNotSuppressWarning is the regression guard for
-// the composeActive-set-too-early bug: when every user rule is shadowed by a
-// same-id project rule, composition injects nothing, so the user-scope Cursor
-// rule coverage warning must NOT be suppressed (nothing took effect via the
-// project). Contrast with TestCompose_SuppressesUserRuleWarningWhenActive, where
-// a non-colliding rule IS composed and the warning is correctly dropped.
+// TestCompose_ColliyingUserRulesDoNotSuppressWarning pins user-only sync
+// warning behavior: a `sync --user` run emits the user scope only, so a
+// project-side composition setup must not hide the user-scope Cursor rule gap.
 func TestCompose_CollidingUserRulesDoNotSuppressWarning(t *testing.T) {
 	home, repo := composeTree(t)
 	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
