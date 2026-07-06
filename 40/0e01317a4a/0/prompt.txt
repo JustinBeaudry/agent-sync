@@ -1,0 +1,281 @@
+How do we use agent-sync for a repo? How is it mapping things for a repo?
+
+---
+
+I dont want to have to specify targets, and I dont want to have to specify .agents, the .agents should be the default for local-dir, and targets should be discovered by the CLI, which should be easy enough to find
+
+---
+
+confirm
+
+---
+
+<task-notification>
+<task-id>af3f4c5b61d70252a</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/9cdf9786-bbd1-4133-bb7e-25f962bf9cb2/tasks/af3f4c5b61d70252a.output</output-file>
+<status>completed</status>
+<summary>Agent "Search institutional learnings" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Institutional Learnings Search Results
+
+### Search Context
+- **Feature/Task**: `agent-sync init` ergonomics — default `--local-dir` to `.agents`, auto-discover targets from workspace footprints (`.claude/`, `.cursor/`, `.codex/`, `.agent/`), snapshot discovered targets into `.agent-sync.yaml`, discovery-informed wizard defaults, flags as overrides.
+- **Keywords Used**: init, wizard, interactive/TTY/non-interactive, discover/probe, target, local-dir, manifest, fsroot, capability, footprint
+- **Files Scanned**: 3 solutions docs (full corpus of `docs/solutions/`), 5 project memory files, plus targeted greps of `docs/plans/`, `docs/handoffs/`, `docs/spec/`, `docs/threat-model.md`
+- **Relevant Matches**: 5 (3 solutions + 1 memory + 1 cluster of plan-level precedents)
+
+### Critical Patterns
+No `docs/solutions/patterns/critical-patterns.md` exists in this repo.
+
+### Relevant Learnings
+
+#### 1. Go cross-platform CI pitfalls — filepath, build tags, separator comparisons
+- **File**: `/Users/justinbeaudry/Projects/agent-sync/docs/solutions/best-practices/go-windows-cross-platform-pitfalls-2026-04-24.md`
+- **Module**: `internal/fsroot`, `internal/cache`, `internal/workspace`
+- **Problem Type**: `best_practice`
+- **Severity**: high
+- **Relevance**: Footprint discovery is exactly the kind of code this learning covers — filesystem probing and path-string handling that will hit the Windows CI matrix. The repo already got burned three ways in the original `internal/workspace` discovery code.
+- **Key Insight**: (1) Never compare OS-joined paths against forward-slash constants — normalize with `filepath.ToSlash` first. (2) `filepath.IsAbs` alone is insufficient; reject leading `/` or `\` explicitly. (3) Platform-specific test helpers (symlinks, FIFOs) go in `//go:build !windows` files, never behind runtime `t.Skip`. Run `GOOS=windows go vet ./...` locally before pushing — the first PR to touch a new probe surface tends to surface every prior unit's latent Windows drift.
+
+#### 2. Reconciling spec-vs-impl drift caught at PR review
+- **File**: `/Users/justinbeaudry/Projects/agent-sync/docs/solutions/workflow-issues/spec-impl-drift-at-pr-review-2026-04-25.md`
+- **Module**: `internal/ir` (pattern is repo-wide)
+- **Problem Type**: `workflow_issue`
+- **Severity**: medium
+- **Relevance**: Snapshotting discovered targets into the manifest is manifest schema evolution. `docs/spec/manifest-v1.md` exists and is prose, not generated — any new field (e.g., a discovered-targets snapshot, a `local_dir` default) will drift from the impl unless updated in the same PR.
+- **Key Insight**: Update `docs/spec/manifest-v1.md` in the same commit/PR as the schema change (the `AGENTS.md` invariant "silent drift from the plan is a bug" operationalized). When auto-reviewers (gemini/copilot/codex run on every push here) flag spec-vs-impl mismatches with conflicting fixes, identify which side carries mechanical invariants before touching either — don't vote-count. Also: don't `t.Skip()` invariant tests; prefer spec-locked fixture tests.
+
+#### 3. Safely renaming/introducing load-bearing on-disk identifiers — the substring-prefix trap
+- **File**: `/Users/justinbeaudry/Projects/agent-sync/docs/solutions/best-practices/large-mechanical-rename-of-load-bearing-identifiers.md`
+- **Module**: repo-wide
+- **Problem Type**: `best_practice`
+- **Severity**: high
+- **Relevance**: Adjacent but concretely applicable — this feature introduces new load-bearing on-disk identifiers (the `.agents` local-dir default, the footprint dir list, manifest snapshot field names). The doc's headline trap is a **direct hit for this plan**: `.aienv` vs `.aienvs` was the original bite, and your footprint list contains `.agent/` while the local-dir default is `.agents` — the exact same one-character substring-prefix pair. Any grep, glob, or matcher that probes for `.agent` will also match `.agents` (and `.agent-sync.yaml`) unless anchored.
+- **Key Insight**: When one token is a prefix of another that must not match, write the discrimination rule explicitly (match `.agent` only when not followed by `s` or `-`), decide identifier spellings by context up front, and grep both the old form *and* the broken new form when verifying. On-disk names in the manifest are contracts — pick them deliberately and document them in the spec.
+
+#### 4. Capability-lied gate is scope-aware — discovered targets can fail sync with zero-op shapes
+- **File**: `/Users/justinbeaudry/.claude/projects/-Users-justinbeaudry-Projects-agent-sync/memory/capability-lie-gate-scope.md` (project memory, 2026-07-01; verify against current `internal/adapter/runtime.go` before relying on line numbers)
+- **Module**: `internal/adapter` runtime + bundled adapters
+- **Problem Type**: `runtime_error` / adapter-contract learning (inferred — memory file, no `problem_type`)
+- **Relevance**: Auto-discovering targets means init will snapshot targets the user never explicitly chose. The runtime fails any session where a "supported" kind has an in-target IR node but the adapter emits zero non-warning ops (`ErrAdapterCapabilityLied`). A footprint-discovered target whose adapter skips kinds (by scope or otherwise) can turn a previously-clean `sync` into a hard failure — the Cursor adapter hit exactly this at user scope (PR #31).
+- **Key Insight**: Footprints are scope-dependent (`.claude/` exists at both `~/.claude` and project scope; Cursor has no user-global home for rules). Discovery should be explicit about which scope it probed, and the plan should include tests for the zero-op shape per discovered target — a manifest containing only a kind the discovered adapter skips — not just the happy mixed case. The v0.5.0 zero-emit hint (#37) is the existing UX for "target emitted nothing"; discovery snapshotting should compose with it, not fight it.
+
+#### 5. Existing init/discovery architectural precedents (plan-level KTDs, not solutions docs)
+- **Files**: `/Users/justinbeaudry/Projects/agent-sync/docs/plans/2026-06-08-007-feat-cli-tui-sync-engine-plan.md` (KTD-4, KTD-5), `/Users/justinbeaudry/Projects/agent-sync/docs/plans/2026-06-17-001-feat-hierarchy-discovery-plan.md`, `/Users/justinbeaudry/Projects/agent-sync/docs/threat-model.md`
+- **Module**: `internal/cli`, `internal/hierarchy`
+- **Problem Type**: `architecture_pattern` (inferred — these are accepted plan decisions, functionally institutional conventions)
+- **Relevance**: The init command's shape was decided with explicit key technical decisions that the new feature must slot into rather than bypass.
+- **Key Insight**:
+  - **KTD-4**: wizard screens populate an `InitConfig` struct that the non-interactive flag path *also* populates — discovery should be a third populator of `InitConfig` defaults (flags &gt; discovery &gt; wizard/fail-fast), keeping wizard/flag parity and letting manifest-write logic stay TTY-free and testable.
+  - **KTD-5**: TTY/non-interactive gating is centralized in `internal/cli/access`; non-interactive + missing required value = fail fast naming the exact flag. Decide explicitly what happens non-interactively when discovery finds **zero** footprints: today that's "fail naming `--target`" — discovery changes the required-value calculus and the plan should state the new rule.
+  - **Hierarchy discovery precedent**: `internal/hierarchy` is a pure leaf package — read-only probes, no fsroot, no engine/adapter deps, table-driven temp-dir tests. Footprint discovery should mirror this shape. The `fsroot` invariant (CLAUDE.md) governs *writes* via `fsroot.OpenWorkspaceRoot`; read-only stats of `.claude/` etc. have precedent outside fsroot, but keep probes strictly read-only.
+  - **Threat model**: `init` pins refs to SHA (invariant #4); trust acceptance is interactive-only, CI never auto-accepts. Discovery-informed defaults must not soften any non-interactive trust or fail-fast behavior.
+
+### Recommendations
+- Update `docs/spec/manifest-v1.md` in the same PR as the manifest snapshot field; expect the three auto-reviewers to flag any drift, and resolve toward the side with mechanical invariants (learning #2).
+- Anchor every `.agent` footprint match so it cannot match `.agents` or `.agent-sync.yaml` — this is the repo's documented substring-prefix trap replayed verbatim (learning #3).
+- Route discovery through a read-only, dependency-free package modeled on `internal/hierarchy/discover.go`, feeding `InitConfig` with precedence flags &gt; discovery &gt; wizard prompt / non-interactive fail-fast; state the zero-footprints non-interactive behavior explicitly in the plan (learning #5).
+- Add per-discovered-target zero-op tests and consider scope when snapshotting targets — a footprint's existence doesn't mean the adapter supports every kind at every scope, and the capability-lied gate turns that mismatch into a sync failure (learning #4).
+- Normalize path comparisons with `filepath.ToSlash`, avoid runtime skips for platform-specific test fixtures, and run `GOOS=windows go vet ./...` before pushing the discovery code (learning #1). Note the darwin/amd64 CI job routinely stalls on runner scarcity — don't fix-loop on it (memory: `ci-darwin-amd64-runner-stall.md`).
+
+No learnings exist specifically about the wizard's interaction design or manifest migration/versioning mechanics — if this feature surfaces reusable lessons there (e.g., how discovery-informed defaults interact with wizard preselection), they're worth capturing with `/ce-compound` after landing.</result>
+<usage><subagent_tokens>49326</subagent_tokens><tool_uses>14</tool_uses><duration_ms>154549</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a00dd93172b98033a</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/9cdf9786-bbd1-4133-bb7e-25f962bf9cb2/tasks/a00dd93172b98033a.output</output-file>
+<status>completed</status>
+<summary>Agent "Repo research for init ergonomics" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Repository Research Summary
+
+### Technology &amp; Infrastructure
+
+- **Language:** Go 1.25 (`go.mod`: `go 1.25`; AGENTS.md style section says "Go 1.25+. Use `os.Root` whenever touching user paths").
+- **CLI framework:** `spf13/cobra` v1.9.1, wrapped by `charmbracelet/fang` v0.4.3 (root command construction in `internal/cli/root.go`, entrypoint `cmd/agent-sync/`).
+- **TUI:** `charmbracelet/bubbletea` v1.3.10 + `bubbles` (textinput) + `lipgloss`. TTY detection via `mattn/go-isatty`.
+- **YAML:** `goccy/go-yaml` (strict decode, AST-preserving rewrites); TOML via `pelletier/go-toml/v2`; git via `go-git/v5` plus shelling out (`internal/git`).
+- **Deployment model:** single static binary CLI, goreleaser (`.goreleaser.yaml`), no server/API/DB. Bundled adapters run in-process; external adapters run as subprocesses over a JSON wire protocol (`internal/adapter/contract`).
+- **Test frameworks:** stdlib `testing` only — no testify, no testscript, no golden-file harness in the CLI layer (the only `golden` dep is an indirect charmbracelet module). Table-driven tests + `t.TempDir()` + real filesystem. `go test -race ./...` and `golangci-lint run` are the gate (`AGENTS.md` PR checklist, `.golangci.yml`).
+- **Module organization:** `internal/{cli, tui/wizard, manifest, workspace, hierarchy, adapter, adapter/bundled/{claude,cursor,codex,pi,antigravity}, engine, fsroot, ir, sync, trust, cache, git, worktree, ledger, locks, report, capmatrix, coverage, hooks, watch}`, plus public `pkg/adapterkit` (adapter SDK) and `conformance/echo`.
+
+### Architecture &amp; Structure
+
+**1. `init` command implementation**
+
+- File: `internal/cli/cmd_init.go`, `newInitCommand(deps RootDeps)`.
+- Flags (all local to init, lines 128–135): `--source`, `--local-path`, `--local-dir`, `--ref`, `--commit`, `--floating`, `--target` (a `StringArrayVar`, repeatable, default `nil`), `--dir`. Global persistent flags in `internal/cli/root.go` lines 132–137: `--workspace`, `--output`, `--log-level`, `--offline`, `--non-interactive` (plus a `--yes` alias handled around root.go:169).
+- Mode decision (cmd_init.go:65–87): `interactive := tui.Interactive(rc.Access.IsTTY, rc.Access.NonInteractive, rc.Access.Accessible)` — defined in `internal/tui/program.go:23` as `isTTY &amp;&amp; !nonInteractive &amp;&amp; !accessible`. The wizard runs **only if** `interactive &amp;&amp; source == "" &amp;&amp; localPath == "" &amp;&amp; localDir == ""`. Note the current gate ignores `--target`: passing only `--target` on a TTY still launches the wizard; passing any source flag skips it. Otherwise it calls `requireFlag(rc.Access.NonInteractive, source!=""||localPath!=""||localDir!="", "--source/--local-path/--local-dir", ...)`.
+- `requireFlag` / `MissingFlagError` live in `internal/cli/nonint.go` — error text `"required flag %s is missing in non-interactive mode (%s)"`, exit code `exitUsage`, explicitly tied to AGENTS invariant #3 (non-interactive never prompts, never hangs). This is the sanctioned pattern for any new required-value fail-fast.
+- TTY/access resolution is centralized in `internal/cli/access.go` (`Access`, `resolveAccess`, `ResolveAccess`) — comment says "TTY/NO_COLOR/output-format detection lives here and nowhere else (KTD-5)". `NonInteractive` = flag OR stdin-not-a-TTY; `IsTTY` = stdin AND stdout are terminals (real `isatty(3)`, so `/dev/null` is not a TTY). Discovery-informed wizard defaults must not add a second detection path.
+- Post-mode flow: `resolvePin` (cmd_init.go:146) pins ref→SHA (invariant #4; `--offline` + URL → error `"cannot resolve a remote ref under --offline; pass --commit to pin or --floating to skip pinning"`); `cfg.Validate()`; refuse-to-overwrite check via plain `os.Stat` on `manifestPathFor(cfg.Dir)`; `cfg.ManifestYAML()`; `manifest.WriteFile`; then a **reload check** — the written manifest is re-loaded with `manifest.LoadFile` and removed if it doesn't parse ("wrote an invalid manifest (removed)").
+- **No validation of `--target` names at init.** Targets are written verbatim into the manifest; unknown names surface only at sync time as `engine.ErrAdapterNotFound` (`internal/engine/engine.go:19–21`). A discovery feature that snapshots targets would be the first place init cares about the adapter name set beyond wizard display.
+
+**2. Interactive wizard**
+
+- Package `internal/tui/wizard`: `init.go` (Bubble Tea model) + `initconfig.go` (`InitConfig` + validation + YAML rendering).
+- `wizard.Run(ctx, in, out, noColor, availableTargets)` (init.go:31) returns `(InitConfig, committed bool, err)`. It renders to stderr (`deps.err()`), deliberately does **no git/network I/O** — pin resolution happens in the caller after the wizard returns. Discovery probing would fit the same pattern: compute before `wizard.Run` and pass results in.
+- Linear phase machine: `phaseSource → phaseRef → phaseTargets → phaseConfirm → phaseDone`. Target defaults today: `newInitModel` (init.go:71) sorts `availableTargets` and marks **every target `selected: true`** — so "discovery-informed defaults" means changing which `targetChoice.selected` start true. The caller supplies the list via `bundledTargetNames()` (cmd_init.go:198), which reads `b.Manifest.Name` from `bundledAdapters()`.
+- Source prompt has no default (placeholder text only); `looksLikeLocalPath` (init.go:250) heuristically classifies input as URL vs local path — there is currently **no wizard path that produces `LocalDir`**; only the flag path can set it. A `--local-dir` default of `.agents` would also be the first LocalDir entry point for the wizard.
+- `InitConfig` (initconfig.go:16) is the documented single convergence point ("KTD-4: both the interactive wizard and the CLI's non-interactive flag path populate the same struct... flag parity is structural"). Any new discovery output (auto-selected targets, defaulted local-dir) should land in `InitConfig`, not in parallel plumbing.
+- `InitConfig.Validate()` (initconfig.go:46): exactly one of SourceURL/LocalPath/LocalDir; LocalDir forbids ref/commit/floating; non-floating requires a commit; floating+local_path rejected. `ManifestYAML()` (initconfig.go:88) hand-renders YAML: `version: 1`, `canonical:` block, `trusted_sha` mirroring the pin, and a `targets:` list only when non-empty.
+
+**3. Manifest schema and writing**
+
+- Schema: `internal/manifest/schema.go` — `Manifest{Version, Canonical CanonicalSource, Targets []string, Scope string, Cache, Adapters []AdapterDecl, TrustedSHA, Trust, Compose}`. Strict decode: unknown keys rejected except `x-` prefixed (load.go). `Targets` is a plain `[]string`; **no name-grammar or registry validation at load** (nothing in `load.go` touches Targets). Spec: `docs/spec/manifest-v1.md` §`targets` — "Default (empty) means 'no adapters active' — a valid state for a workspace that is not yet configured." A discovery feature that snapshots targets at init changes that empty-is-valid ergonomic story but not the schema.
+- `Scope` field already exists in the schema (`user | project | global`, "informs the adapters where the emitted files live"), separate from the runtime scope passed to `prepareScope`.
+- Writing: `internal/manifest/write.go` — `WriteFile(path, content)` opens the **parent dir** via `fsroot.OpenWorkspaceRoot` and uses `root.StagedWrite` (atomic, crash-safe, 0o644). `WriteResolvedSHA`/`WriteTrustedSHA` do AST-preserving in-place key updates and require the key to pre-exist (`ErrKeyMissing`) — relevant if discovery ever wants to *update* `targets:` in an existing manifest rather than write a fresh one.
+- Manifest filename constant: `workspace.ManifestName` (`.agent-sync.yaml`) in `internal/workspace/workspace.go`.
+
+**4. Adapter/target registry and native-directory metadata**
+
+- Canonical bundled list: `internal/cli/setup.go:23` `bundledAdapters()` → `[]*adapter.BundledAdapter{claude, cursor, codex, pi, antigravity}` ("Centralized so every command discovers the same adapters"). Wizard names come from `bundledTargetNames()`.
+- **Tool-footprint metadata already exists in two forms:**
+  - `AdapterManifest.ReservedPrefix` (`internal/adapter/manifest.go:67`) — the workspace-relative directory each adapter owns. Constants per adapter: claude `".claude"` (`internal/adapter/bundled/claude/bundled.go:36`), cursor `".cursor"`, codex `".codex"`, pi `".pi"`, antigravity `".agent"` (each in its `bundled.go`). This is exactly the workspace-dir signal set the planning context lists, and it is already reachable from `bundledAdapters()[i].Manifest.ReservedPrefix` — discovery can map "`.cursor/` exists → enable `cursor`" without any new metadata table. Validated by `manifest.ValidateReservedPrefix` (wrapped in `adapter.ValidateReservedPrefix`).
+  - Scope-aware `pathSet`/`resolvePathSet(scope)` per adapter (e.g. `internal/adapter/bundled/claude/emit_tool_owned.go:41` — user scope: `.claude/CLAUDE.md`, `.claude.json`; `internal/adapter/bundled/cursor/emit_tool_owned.go:44`). These are **package-private and emit-oriented**, not exported metadata — a user-scope discovery signal (e.g. `~/.claude` exists) would need either new exported metadata on `BundledAdapter` or a discovery table in the CLI layer. There is no exported "footprint" API today.
+- Runtime registry: `adapter.DiscoverAdapters(ctx, adapter.DiscoverOptions{Workspace: m, Bundled: bundledAdapters()})` (`internal/adapter/discover.go`) also finds PATH adapters named `agent-sync-adapter-&lt;name&gt;` — note that out-of-tree adapters exist, so "bundled names" is not necessarily the full valid-target universe.
+
+**5. Scope handling (project vs user)**
+
+- `sync` has `--user` (`internal/cli/cmd_sync.go:127`, `"also sync the user-level (~) manifest"`). Plain sync uses hierarchy discovery (`internal/cli/hierarchy_sync.go`, `hierarchySyncOptions{IncludeUser: userScope}`); explicit `--workspace` pins single project scope and makes `--user` an error (cmd_sync.go:74–80).
+- Scope discovery: `internal/hierarchy/discover.go` — `Discover(cwd, Options{Home, IncludeUser, ...})` returns ordered `Scope{Root, ManifestPath, Level (user/project/directory), Emit}`. Project root = nearest `.git` ancestor (`findProjectRoot`); user scope = manifest at `$HOME` (`userScope`/`UserScope`), Emit only under `--user`. `Options.Home` is injectable for tests.
+- `prepareScope(ctx, rc, scopeRoot, manifestPath, scope, now)` (`internal/cli/setup.go:90`) threads the scope string down to adapters via `engine.Request.Scope` → `initialize` params → `resolvePathSet(scope)`.
+- **`init` itself has no scope concept today** — no `--user` on init; it writes wherever `--dir`/`--workspace` points (including `~` if you point it there). If discovery differs per scope, init currently has no existing flag to hang that on.
+
+**6. fsroot constraints for filesystem probing**
+
+- `internal/fsroot` (`root.go`, `containment.go`, `safewrite.go`) is the **write** enforcement point. AGENTS.md invariant #1: "All writes into a workspace go through `internal/fsroot`"; the project CLAUDE.md restates it as "Do not reach outside `internal/fsroot` to touch user paths" with the note that every scope-root write goes through `fsroot.OpenWorkspaceRoot`.
+- **Read-only probes are established precedent outside fsroot:** `cmd_init.go` uses bare `os.Stat` for the already-exists check; `internal/hierarchy/discover.go` uses `os.Stat`/`os.Lstat` for `manifestAt`/`hasGit`; `internal/workspace/discover.go` walks parents with `os.Lstat`/`os.Stat` (with careful symlink handling — see `validateManifestFile`). So probing for `.claude/`, `.cursor/`, etc. during init with `os.Stat` on the destination dir is consistent with existing patterns; only the manifest **write** must stay on `manifest.WriteFile` → `fsroot.StagedWrite`. If discovery probes user-home dirs, follow the hierarchy package's injectable-`Home` pattern for testability.
+- Style note (AGENTS.md): "Use `os.Root` whenever touching user paths" — if probing grows beyond a couple of stats (e.g. reading inside `~`), prefer opening a root.
+
+### Implementation Patterns
+
+**7. Test conventions**
+
+- Init CLI tests: `internal/cli/cmd_init_test.go` — helper `runInit(t, args...)` constructs a full root command in-process (`NewRootCommand(RootDeps{Out, Err, Version:"test"})`, `root.SetArgs(append([]string{"init","--non-interactive"}, args...))`, `root.Execute()`) and asserts by re-loading the written manifest with `manifest.LoadFile`. Behavior-named tests (`TestInit_NonInteractiveLocalDirWritesUnpinnedManifest`, `TestInit_RefusesToOverwrite`, `TestInit_ThenSync` — a real init→sync integration in one process). Git-needing tests gate on `requireGit(t)` / `makeCanonicalRepo(t)` from `internal/cli/cmd_sync_test.go:16,28`. Pin resolution has its own file `cmd_init_resolvepin_test.go`.
+- Wizard tests: `internal/tui/wizard/wizard_test.go` — table-driven `TestInitConfig_Validate` / `TestInitConfig_ManifestYAML`, plus **model-level flow tests** that drive the Bubble Tea model directly with `tea.KeyMsg`s (`TestInitModel_FullFlowProducesConfig`, `TestInitModel_EscAborts`) — no PTY, no snapshot/golden files.
+- No testscript or golden-file harness anywhere in cli/tui. Adapter conformance corpus lives in `internal/adapter/conformance` (JSON corpus, sorted case loading) and `conformance/echo` — not relevant to init. Standard `testing` + plain `t.Fatalf`; `t.TempDir()` everywhere; access/TTY logic tested via the pure `resolveAccess(accessInput)` seam (`internal/cli/access_test.go`).
+
+**8. AGENTS.md / docs constraints that bind this feature**
+
+- `AGENTS.md` invariant #3: non-interactive mode never prompts, never hangs — exits with a documented code and **the exact flag needed to proceed** (that's `MissingFlagError`). If `--target` stops being required, the non-interactive path must still be deterministic; if discovery finds zero targets, silently writing `targets: []` is schema-valid (spec explicitly blesses empty), so the open "zero-match fallback" decision has a spec-sanctioned floor.
+- Invariant #4: pinning is default; `local_dir` is the documented unpinned exception (and the `.agents` example is named right in the invariant — supporting `--local-dir` defaulting to `.agents`). Note the reserved `agent-sync-` skill-id prefix in `.agents/skills`.
+- Invariant #1: writes through fsroot only (see §6); the home root is opened only on explicit `--user` — a discovery pass that *reads* user-home tool dirs during project init would be new territory; the closest precedent is hierarchy composition's "read-only user-root open" carve-out documented in invariant #1.
+- Plan-first rule: "If code disagrees with the plan, update the plan first in the same PR." Project `CLAUDE.md` repeats this and requires `go test -race ./...` + `golangci-lint run` before done.
+- Master plan Unit 17 (`docs/plans/2026-04-21-001-feat-aienvs-workspace-cli-plan.md` lines ~1178–1210) specifies the full wizard branching-state spec (fresh/existing manifest, ancestor detected, remote unreachable, zero targets, pre-existing target outputs) and an authoritative `docs/wizard/init-states.md` — **which does not exist yet** (no `docs/wizard/` dir), and the shipped wizard is the simpler linear model (init.go comment: "the nav stack is reserved for the deeper branching the master plan enumerates"). This feature lands squarely in Unit 17's unfinished territory; expect to touch the plan.
+
+**9. STRATEGY.md** — does **not** exist at the repo root (nor anywhere in the repo; a case-insensitive search found nothing). The strategic docs are `docs/brainstorms/2026-04-21-aienvs-agent-workspace-requirements.md`, the master plan above, and `docs/spec/*` (notably `manifest-v1.md`).
+
+**10. Recent related work (docs/plans + CHANGELOG)**
+
+- Plan naming: `docs/plans/YYYY-MM-DD-NNN-&lt;type&gt;-&lt;slug&gt;-plan.md`, conventional-commit-typed (`feat`/`fix`/`refactor`/`test`); the master plan is organized into checkbox **Units** (Unit 16 = cobra command tree + non-interactive fail-fast; Unit 17 = init/target wizards — both still `[ ]` unchecked).
+- Most relevant plans: `2026-06-16-001-feat-in-repo-local-skill-source-plan.md` (introduced `--local-dir`/`canonical.local_dir`), `2026-06-17-001-feat-hierarchy-discovery-plan.md` + `2026-06-17-002-feat-multi-scope-sync-plan.md` (scope discovery, `--user`), `2026-07-01-002-feat-hierarchy-composition-plan.md` (the read-only user-root precedent, D8).
+- CHANGELOG (v0.7.0 area): the **zero-emit hint** — plain `sync` with no project manifest now emits an advisory pointing at `agent-sync sync --user` or `agent-sync init` (additive `notice` field in JSON, `nothing to sync: …` in text). That hint is the funnel into init that this ergonomics feature improves. Also: `--local-dir .agents` configuration is documented in the 0.4.x entry ("Configure with `agent-sync init --local-dir .agents`"), and adapters were made scope-aware across 0.5–0.7 (claude/cursor/codex user-scope paths, pi, antigravity with reserved prefix `.agent`). Nothing in the CHANGELOG yet touches target auto-discovery or init defaults.
+
+**Key symbols for the implementers, in one place:** `newInitCommand`, `resolvePin`, `manifestPathFor`, `bundledTargetNames` (internal/cli/cmd_init.go); `requireFlag`/`MissingFlagError` (internal/cli/nonint.go); `resolveAccess`/`Access` (internal/cli/access.go); `tui.Interactive` (internal/tui/program.go); `wizard.Run`, `InitConfig`, `newInitModel`, `targetChoice` (internal/tui/wizard); `manifest.Manifest`, `manifest.WriteFile` (internal/manifest); `bundledAdapters` (internal/cli/setup.go); `AdapterManifest.ReservedPrefix` + per-adapter `reservedPrefix` constants (internal/adapter/bundled/*/bundled.go); `hierarchy.Discover`, `UserScope`, `Options.Home` (internal/hierarchy); `workspace.Find`, `workspace.ManifestName` (internal/workspace); `engine.ErrAdapterNotFound` (internal/engine/engine.go).</result>
+<usage><subagent_tokens>86611</subagent_tokens><tool_uses>34</tool_uses><duration_ms>272114</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a40be40b205c08e17</task-id>
+<tool-use-id>toolu_01HwF9Qwpzv9916yr8K3crdu</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/9cdf9786-bbd1-4133-bb7e-25f962bf9cb2/tasks/a40be40b205c08e17.output</output-file>
+<status>completed</status>
+<summary>Agent "Flow and edge-case analysis" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Grounding complete. Key files read: `/Users/justinbeaudry/Projects/agent-sync/internal/cli/cmd_init.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/cli/nonint.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/cli/access.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/tui/wizard/init.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/tui/wizard/initconfig.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/worktree/reader.go`, plus bundled `capabilities.yaml` reserved prefixes and `internal/adapter/discover.go`. Findings below are grounded in those.
+
+---
+
+## (a) User flows after the change
+
+Decision axes: source flags (none / `--source` / `--local-path` / `--local-dir`) × targets (none / `--target…`) × mode (interactive TTY / non-interactive / accessible-TTY) × discovery outcome (some / zero / stat-error). The mode gate is `tui.Interactive(IsTTY, NonInteractive, Accessible)` — note **accessible is a third state**: not interactive, but `requireFlag` no-ops because `Access.NonInteractive` stays false (`access.go:64`, `nonint.go:34`).
+
+**Non-interactive (or piped stdin):**
+
+1. Bare `init --non-interactive`, footprints found → LocalDir defaults to `.agents`, discovery snapshots targets, manifest written. New happy path.
+2. Bare `init --non-interactive`, **zero** footprints → per spec item 4: `MissingFlagError` naming `--target`. **Directly contradicts item 1's promise** (see Gap 1).
+3. `init --non-interactive --target claude` (no source) → `.agents` default + explicit targets, discovery skipped entirely. Succeeds.
+4. `init --non-interactive --source URL` (no target) → discovery runs. Some found → snapshot; zero found → fail per item 4. **Today this succeeds with an empty (spec-valid) `targets:` list — breaking change** (see Gap 1).
+5. `init --non-interactive --local-dir custom/` → explicit source, discovery still governs targets (same as 4).
+6. `init --non-interactive --ref main` (no source) → default kicks in → `InitConfig.Validate` rejects ref+LocalDir with *"a local directory … cannot set a ref, commit, or --floating"* — confusing, since the user never asked for local_dir (Gap 2). Same for `--commit`, `--floating`.
+7. `--offline` + bare init → fine (LocalDir short-circuits `resolvePin` at `cmd_init.go:148`). `--offline --source URL` → still fails pin resolution, unchanged.
+8. Any flow where `.agent-sync.yaml` exists → refused (unchanged; check happens after wizard/discovery — pre-existing wart).
+
+**Interactive TTY:**
+
+9. Bare `init` → wizard, with discovered targets pre-selected and a `.agents` source default. Requires wizard rework (Gap 3).
+10. Bare `init`, zero footprints → wizard target screen: nothing or all preselected? Spec leaves it open (Gap 8 recommendation below).
+11. `init --target claude` on TTY (no source) → **today launches the wizard** (`cmd_init.go:66` gates only on source flags). With a source default, does it now go fully non-interactive with source=`.agents`? Unspecified (Gap 5).
+12. `init --source URL` on TTY (no target) → wizard skipped today; discovery runs. Zero match → `requireFlag(nonInteractive=false, …)` returns nil → empty-targets manifest. So TTY and non-TTY diverge for identical flags — consistent with the existing source `requireFlag` precedent, but should be pinned in tests.
+
+**Accessible (TERM=dumb / AGENT_SYNC_ACCESSIBLE on a TTY):**
+
+13. Bare `init` accessible → no wizard, `NonInteractive=false` so no `MissingFlagError`. Today: falls through to `cfg.Validate()` and dies with the poor "wizard: set exactly one of…" error. After the change: silently writes the `.agents` + discovered-targets manifest. Zero-match → silent empty-targets manifest (requireFlag no-ops). Spec item 4 only branches interactive vs non-interactive; this third state needs a decided behavior.
+
+**`--dir` / `--workspace`:**
+
+14. `init --dir sub/ --non-interactive` → discovery must probe `destDir` (dir → workspace → cwd, `cmd_init.go:49-52`), not cwd. `--dir` pointing at a nonexistent directory → all probes fail → zero-match error *"pass --target"*, masking the real problem (bad `--dir`); the manifest write would also fail, but the user sees the wrong error first (Gap 6).
+15. `init --dir ~` (home) → probes `~/.claude`, `~/.cursor`, `~/.codex`, `~/.pi`, `~/.agent`. Antigravity's **user-scope** footprint is `.gemini`, not `.agent` (`bundled/antigravity/capabilities.yaml`), so antigravity users are never discovered at home. Conversely `~/.cursor`/`~/.codex` exist for anyone who merely installed those tools — at home that's arguably the right signal, but the asymmetry is real (Gap 7).
+
+---
+
+## (b) Edge cases / state transitions
+
+- **`.claude` is a file, not a dir** → plan says "os.Stat on dir names"; must add an `IsDir()` check or a file named `.pi` fires discovery.
+- **Symlinked footprint dir** → `os.Stat` follows symlinks; a dangling symlink is not discovered. Fine, but state it.
+- **Stat error other than NotExist** (permission-denied dir) → skip-silently vs fatal? Existing init precedent treats non-NotExist stat as fatal (`cmd_init.go:104-107`); for a 5-dir probe, fatal on one unreadable dir is harsh. Decide and document.
+- **Case-insensitive APFS/NTFS**: `.CLAUDE` will satisfy `os.Stat(".claude")` on the default macOS filesystem. Accept as minor; don't try to fight it.
+- **`.agents` vs `.agent`**: the source default and antigravity's footprint differ by one character. Users will typo `--local-dir .agent`; error copy and docs should keep these visually distinct.
+- **Ordering**: discovered targets must be written sorted (wizard already sorts, `wizard/init.go:79`); a map-driven probe would otherwise produce nondeterministic `targets:` order — noisy diffs, flaky tests.
+- **Duplicate `--target claude --target claude`** → duplicate manifest entries. Pre-existing; spec says explicit overrides discovery with no merge, so no new dedup path needed, but worth a normalizing pass while touching this.
+- **Wizard with zero targets selected** → today Enter proceeds to confirm with empty `Targets` → valid empty-targets manifest. Fine; keep, but a confirm-screen "targets: (none)" render is needed (currently renders an empty join).
+- **Existing-manifest check ordering**: today the user completes the whole wizard before hitting "already exists" (`cmd_init.go:101`). Adding discovery makes the pre-write work heavier; move the stat before wizard/discovery while in here.
+
+---
+
+## (c) Ambiguities the plan must resolve (prioritized)
+
+**Must-resolve**
+
+1. **Item 1 vs item 4 contradiction + breaking change.** In a fresh empty repo, bare `agent-sync init --non-interactive` has no source flags *and* zero footprints — item 1 says it succeeds, item 4 says it fails. Also, `init --non-interactive --source URL` with no `--target` succeeds *today* (empty `targets:` is explicitly spec-valid — `manifest/schema.go:13` "a valid state for a workspace that is not yet configured"), and item 4 would make it fail. **Recommended default:** write the empty-targets manifest with a stderr hint ("no targets discovered; add with `--target` or edit targets: in .agent-sync.yaml") rather than `MissingFlagError`. That preserves item 1, avoids the regression, and the existing zero-emit hint (#37) plus `engine.ErrAdapterNotFound` already backstop sync. If fail-fast is truly wanted, scope it to *bare* init only and say so.
+2. **Pin flags × defaulted source.** `--ref`/`--commit`/`--floating` with no source flag must produce a purpose-built error ("--ref requires --source or --local-path; the default .agents source is unpinned"), not the generic LocalDir validation error from `initconfig.go:63-67`. Decide: error (recommended) vs suppress-the-default.
+3. **Wizard LocalDir mechanics.** The wizard has *no* LocalDir path: `looksLikeLocalPath` would classify a typed `.agents` as **LocalPath**, sending it into `git.ResolveLocalRef` → failure. "Source screen gains a `.agents` default" needs concrete design: (a) empty-Enter accepts LocalDir=`.agents` (today empty Enter is rejected, `wizard/init.go:118-120`); (b) LocalDir selection must **skip phaseRef** (ref+local_dir is invalid); (c) `sourceDisplay()` and confirm screen must render local_dir; (d) how does a user type a *custom* local-dir vs a local git path — probably a source-type choice, not string heuristics. Also: discovery is fs I/O — do it in `cmd_init.go` and pass results into `wizard.Run` (new parameter), keeping the wizard I/O-free per KTD-4.
+4. **`.agents` missing at sync.** Manifest is valid, but first `sync` hard-fails with `worktree.ErrSourceMissing` (`worktree/reader.go:43`). Bare init succeeding into a guaranteed sync failure is a bad handoff. **Recommend:** create `.agents/` at init when defaulted (via `fsroot.OpenWorkspaceRoot` — the CLAUDE.md invariant; reads may os.Stat, writes may not) — an *empty* existing dir degrades to the soft zero-emit hint instead of a hard error. Alternative: print "create .agents/ before running sync". Pick one.
+5. **Does `--target` alone on a TTY still launch the wizard?** (Flow 11.) Today yes. If the source default applies, the invocation becomes fully specified and should skip the wizard — but that's a silent behavior change for TTY users. Decide and test explicitly; the wizard-gate condition at `cmd_init.go:66` is the exact line in question.
+
+**Important**
+
+6. **Probe base + bad `--dir` error ordering.** Probe `destDir`; stat `destDir` itself first so a nonexistent `--dir` fails with "no such directory", not "pass --target".
+7. **Home-dir semantics.** Either (a) declare discovery project-scope-only and document that `init --dir ~` may under-discover (antigravity's user footprint is `.gemini`), or (b) add per-scope footprints. Given init has no `--user` flag, (a) is the lean answer — but write it down.
+8. **Zero-match wizard preselection.** Recommend: discovered set pre-selected when non-empty; **all** pre-selected when zero discovered (preserves today's greenfield UX and makes zero-match non-punishing). "None preselected" + Enter yields an empty-targets manifest one keystroke away — hostile default.
+9. **Probe list source of truth.** Derive from `bundledAdapters()[i].Manifest.ReservedPrefix` (already validated, present on all five), not a hardcoded map — new bundled adapters then get discovery for free. Decide explicitly that PATH adapters (`internal/adapter/discover.go`, which carry `reserved_prefix` but require subprocess execution to read) do **not** participate in v1, and say why (no subprocess exec at init).
+10. **Accessible mode.** Pin flow 13's behavior in tests: default + discovery apply, silent success is acceptable, zero-match follows whatever Gap 1 decides.
+11. **Announce the magic.** Success output must name what was defaulted/discovered: `wrote .agent-sync.yaml (source: .agents [default]; targets: claude, cursor [discovered])`. A defaulting feature that prints only `wrote .agent-sync.yaml` hides misdiscovery until sync.
+
+**Nice-to-have**
+
+12. Warn (don't fail) at init when an explicit `--target` name is neither bundled nor `agent-sync-adapter-&lt;name&gt;` on PATH — must stay non-fatal (adapters may be installed later / on other machines; `ErrAdapterNotFound` at sync remains the enforcement).
+13. When explicit `--target` overrides discovery, note skipped discoveries: "also detected .cursor (not enabled)".
+14. Staleness: targets are snapshotted; a later-added `.cursor` never joins. A future sync-side hint ("footprint .cursor present but cursor not in targets") or `agent-sync update` rediscovery is out of scope — log it as such.
+15. Move the existing-manifest stat before wizard/discovery.
+
+---
+
+## (d) Sync handoff gaps
+
+- **`.agents` absent** → `ErrSourceMissing` hard failure (Gap 4, must-resolve). Empty-but-present dir → soft zero-emit hint. The delta between those two outcomes is the strongest argument for init creating the dir.
+- **Discovered target inert at some scope** → already covered: the capability-lie gate demotes scope-skipped kinds for scope-aware adapters (per the resolved scope-aware work, PR #30 lineage), and #37's zero-emit hint covers empty output. No new init work needed, but a test pinning "discovered antigravity at project scope + `sync --user`" would lock it in.
+- **PATH adapter targets** → explicit `--target foo` writes fine (no init validation), sync resolves via PATH discovery. Only gap: the zero-match failure/hint message should mention that PATH adapters exist and are never auto-discovered, so `--target` is the route for them.
+- **Empty `targets:` manifests** (if Gap 1 resolves toward writing them) → sync already treats this as a valid not-yet-configured state; no engine change needed.
+
+**Suggested next steps:** resolve Gaps 1–5 in the plan doc before implementation (1 and 4 change user-visible contracts; 3 is the largest code delta — the wizard needs a LocalDir concept, a conditional ref phase, and a changed `wizard.Run` signature). Gaps 6–11 are decisions that fit in the same plan revision as one-liners each.</result>
+<usage><subagent_tokens>48910</subagent_tokens><tool_uses>19</tool_uses><duration_ms>268326</duration_ms></usage>
+</task-notification>
