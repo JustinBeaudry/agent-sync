@@ -19,8 +19,8 @@ type manifestMarker struct {
 }
 
 var (
-	activationRootScopePattern    = regexp.MustCompile(`(?m)^\s*scope\s*:\s*workspace\s*(#.*)?$`)
-	activationRootEnabledPattern  = regexp.MustCompile(`(?m)^\s*activation_root\s*:\s*true\s*(#.*)?$`)
+	activationRootScopePattern    = regexp.MustCompile(`(?m)^\s*scope\s*:\s*(?:workspace|"workspace"|'workspace')\s*(#.*)?$`)
+	activationRootEnabledPattern  = regexp.MustCompile(`(?m)^\s*activation_root\s*:\s*[Tt][Rr][Uu][Ee]\s*(#.*)?$`)
 	activationRootMarkerMalformed = "hierarchy: malformed activation-root marker"
 )
 
@@ -155,9 +155,9 @@ func collectEmitScopes(cwd, projectRoot string) ([]Scope, error) {
 	return found, nil
 }
 
-// activationRootsBetween scans from cwd to home for workspace activation roots and
-// returns them as scopes. The returned order is shallow→deep (outermost to
-// innermost), even though the search is downward from cwd.
+// activationRootsBetween scans from cwd upward toward home or the filesystem root
+// for workspace activation roots and returns them as scopes. It collects from
+// deep→shallow then reverses, so the caller gets shallow→deep (outermost→innermost).
 func activationRootsBetween(cwd, home string, maxHops int) ([]Scope, error) {
 	var roots []Scope
 	dir := cwd

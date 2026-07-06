@@ -415,6 +415,53 @@ func TestDiscover_MalformedWorkspaceActivationManifestFailsClosed(t *testing.T) 
 	}
 }
 
+func TestDiscover_QuotedMalformedActivationRootManifestFailsClosed(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "workspace")
+	repo := filepath.Join(workspaceRoot, "repo")
+	cwd := filepath.Join(repo, "packages", "api")
+	mkGit(t, repo)
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+	writeManifest(t, home) // user scope
+	writeManifest(t, repo) // project scope
+
+	tests := []struct {
+		name     string
+		manifest string
+	}{
+		{
+			name:     "double-quoted scope + capitalized bool",
+			manifest: "version: 1\nscope: \"workspace\"\nactivation_root: True\n:\n  not: [valid",
+		},
+		{
+			name:     "single-quoted scope + TRUE bool",
+			manifest: "version: 1\nscope: 'workspace'\nactivation_root: TRUE\n:\n  not: [valid",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := writeManifestContent(t, workspaceRoot, tc.manifest)
+			scopes, err := Discover(cwd, Options{Home: home})
+			if err == nil {
+				t.Fatalf("expected malformed activation-root manifest to fail discovery, got scopes=%+v", scopes)
+			}
+			if len(scopes) != 0 {
+				t.Fatalf("expected no scopes on fail-closed activation-root parse error, got %+v", scopes)
+			}
+			if !strings.Contains(err.Error(), manifest) {
+				t.Fatalf("error = %q, want include manifest path %q", err, manifest)
+			}
+			lower := strings.ToLower(err.Error())
+			if !strings.Contains(lower, "activation-root") || !strings.Contains(lower, "malformed") {
+				t.Fatalf("error = %q, want activation-root malformed wording", err)
+			}
+		})
+	}
+}
+
 func TestDiscover_CwdAtWorkspaceActivationRoot(t *testing.T) {
 	home := t.TempDir()
 	workspaceRoot := filepath.Join(home, "workspace")
