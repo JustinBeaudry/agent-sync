@@ -80,6 +80,51 @@ payload: ../payload.toml
 	}
 }
 
+func TestDecodeFragments_RejectsCleanedPayloadTraversal(t *testing.T) {
+	src := fakeSource{files: map[string][]byte{
+		"configs/codex/features/hooks/fragment.yaml": []byte(`id: hooks
+target: codex
+path: .codex/config.toml
+merge: toml-key
+locator: features.hooks
+payload: nested/../payload.toml
+`),
+		"configs/codex/features/hooks/payload.toml": []byte(`[features]
+hooks = false
+`),
+	}}
+
+	_, _, err := Decode(src, "", DecodeOptions{Scope: "workspace"})
+	if err == nil {
+		t.Fatal("Decode returned nil error for cleaned payload traversal")
+	}
+}
+
+func TestDecodeFragments_DoesNotCoerceMachineLocalInheritance(t *testing.T) {
+	src := fakeSource{files: map[string][]byte{
+		"configs/codex/features/hooks/fragment.yaml": []byte(`id: hooks
+target: codex
+path: .codex/config.toml
+merge: toml-key
+locator: features.hooks
+visibility: machine-local
+inheritance: descendants
+payload: payload.toml
+`),
+		"configs/codex/features/hooks/payload.toml": []byte(`[features]
+hooks = false
+`),
+	}}
+
+	frags, _, err := Decode(src, "", DecodeOptions{Scope: "workspace"})
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if frags[0].Visibility != VisibilityMachineLocal || frags[0].Inheritance != InheritanceDescendants {
+		t.Fatalf("machine-local fields were coerced: %+v", frags[0])
+	}
+}
+
 func TestDecodeFragments_UserDefaultsArePersonalRootOnly(t *testing.T) {
 	src := fakeSource{files: map[string][]byte{
 		"configs/codex/features/hooks/fragment.yaml": []byte(`id: hooks

@@ -116,10 +116,6 @@ func buildFragment(src ir.SourceTree, ref, scope, manifestPath string, fy fragme
 	if !isValidSafety(safety) {
 		return Fragment{}, fmt.Errorf("harness: %s has invalid safety %q", manifestPath, safety)
 	}
-	if visibility == VisibilityMachineLocal {
-		inheritance = InheritanceRootOnly
-	}
-
 	return Fragment{
 		ID:          fy.ID,
 		Target:      fy.Target,
@@ -191,14 +187,14 @@ func cleanPayloadPath(base, rel string) (string, error) {
 	if rel == "" || path.IsAbs(rel) || strings.ContainsRune(rel, '\\') {
 		return "", fmt.Errorf("must be a relative forward-slash path")
 	}
-	joined := path.Clean(path.Join(base, rel))
-	if joined == "." || joined == ".." || strings.HasPrefix(joined, "../") {
-		return "", fmt.Errorf("must not contain traversal")
-	}
-	for _, seg := range strings.Split(path.Clean(rel), "/") {
+	for _, seg := range strings.Split(rel, "/") {
 		if seg == ".." {
 			return "", fmt.Errorf("must not contain ..")
 		}
+	}
+	joined := path.Clean(path.Join(base, rel))
+	if joined == "." || joined == ".." || strings.HasPrefix(joined, "../") {
+		return "", fmt.Errorf("must not contain traversal")
 	}
 	return joined, nil
 }
