@@ -1,0 +1,40 @@
+Re-review Task 1 spec compliance in /Users/justinbeaudry/Projects/agent-sync after follow-up commit b8302bd on top of 02f8b47. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Focus: confirm Task 1 still meets requirements after the quality fix. Requirements include:
+- Scope constants user/project/workspace/global.
+- Manifest ActivationRoot field and validation.
+- InitConfig Scope/ActivationRoot validation and ManifestYAML renders immediately after version.
+- init --user writes home manifest with scope user and creates ~/.agents.
+- inherited/global --workspace writes workspace manifest with scope workspace.
+- --activation-root requires workspace.
+- normal/default project init now should explicitly write scope: project (follow-up quality fix).
+- Tests for manifest, wizard, user/workspace init, and project init exist and pass.
+
+Please inspect current diff from base `4e26a75` or commits 02f8b47..HEAD and report result.
+
+---
+
+Re-review Task 1 code quality in /Users/justinbeaudry/Projects/agent-sync after follow-up commit b8302bd on top of 02f8b47. Do not edit files. Return APPROVED or CHANGES_REQUIRED with findings.
+
+Previous finding was: default project init omitted `scope: project`. Implementer says this is fixed by defaulting scope to `manifest.ScopeProject` and adding `TestInit_DefaultProjectScope` and `TestInit_DirProjectScope`.
+
+Please inspect current Task 1 diff from base commit 4e26a75 through HEAD and verify the prior finding is resolved and no new quality/correctness issues were introduced. Focus on changed files only.
+
+---
+
+Task 1 quality re-review still has CHANGES_REQUIRED. Please fix and commit.
+
+Finding:
+- `init --activation-root` without workspace scope can enter discovery/wizard before eventually failing validation. Since activation_root is only valid with scope workspace, the CLI should fail fast immediately after resolving scope.
+
+Required fix:
+1. In internal/cli/cmd_init.go, after resolving `scope`, return an init-level error when `activationRoot && scope != manifest.ScopeWorkspace` before footprint discovery or wizard.Run.
+2. Add negative CLI tests for invalid combinations:
+   - `init --activation-root --non-interactive --target codex` from cwd (project scope) fails.
+   - `init --dir <dir> --activation-root --non-interactive --target codex` fails, because --dir remains project scope.
+   - `init --user --activation-root --non-interactive --target codex` fails.
+   Assert useful error contains `--activation-root` and `--workspace` (or equivalent clear wording).
+3. Run `go test ./internal/manifest ./internal/tui/wizard ./internal/cli -count=1`.
+4. Commit with message like `fix: reject invalid activation-root init flags`.
+
+Return DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED with changed files, tests run, and commit SHA.
