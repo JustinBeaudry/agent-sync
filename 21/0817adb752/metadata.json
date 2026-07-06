@@ -1,0 +1,19 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "210817adb752",
+  "strategy": "manual-commit",
+  "branch": "feat/agent-harness-hierarchy",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "internal/hierarchy/discover.go",
+    "internal/hierarchy/discover_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/21/0817adb752/0/metadata.json",
+      "transcript": "/21/0817adb752/0/full.jsonl",
+      "content_hash": "/21/0817adb752/0/content_hash.txt",
+      "prompt": "/21/0817adb752/0/prompt.txt"
+    }
+  ]
+}

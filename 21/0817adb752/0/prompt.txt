@@ -1,0 +1,65 @@
+Final spec compliance review for Task 2 in /Users/justinbeaudry/Projects/agent-sync after commits ad94a67, 62e74e9, 767f817. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Task 2 requirements:
+- Changed scope limited to internal/hierarchy and internal/coverage files.
+- Add LevelWorkspace between LevelUser and LevelProject. String returns "workspace"; MarshalText still works; tests updated.
+- Discovery uses lightweight marker parsing of `.agent-sync.yaml` fields `scope` and `activation_root`, without requiring full manifest validity/canonical source.
+- Malformed ordinary manifests should not fail discovery; malformed files that visibly claim activation root (`scope: workspace` and `activation_root: true`) must fail closed.
+- If cwd is inside nearest activation root:
+  - user scope is not included at all.
+  - activation root appears as LevelWorkspace.
+  - project/directory scopes below it still appear as before, bounded by activation root.
+  - cwd == activation root returns exactly the workspace scope.
+- Nested activation roots fail closed; error includes "nested activation roots" and both manifest paths.
+- Outside activation roots, existing user -> project -> directory behavior unchanged.
+- Coverage Analyze treats LevelWorkspace like project/root level and produces no warnings.
+- Tests cover activation root stop, outside activation root includes user, nested activation roots fail, malformed non-activation manifests do not fail discovery, malformed activation-root markers fail closed, cwd==activation root, workspace coverage no warnings.
+- Focused tests passed locally.
+
+Inspect current Task 2 diff from commit 0b3d76b through HEAD.
+
+---
+
+Final code quality review for Task 2 in /Users/justinbeaudry/Projects/agent-sync after commits ad94a67, 62e74e9, 767f817. Spec review is separate. Do not edit files. Return APPROVED or CHANGES_REQUIRED.
+
+Focus changed files only: internal/hierarchy and internal/coverage. Prior quality finding about malformed activation-root markers should be fixed.
+
+Review for correctness/maintainability around:
+- `markerAt` and `looksLikeActivationRootMarker` behavior.
+- hop budget and cwd==activation root.
+- nested activation roots.
+- malformed ordinary manifests versus malformed activation markers.
+- duplicate scope handling.
+- stale comments.
+- test quality/brittleness.
+
+Focused tests passed locally:
+- go test ./internal/hierarchy ./internal/coverage -count=1
+- go test ./internal/cli -run 'TestCompose_MalformedUserManifestDefersCursor|TestRunHierarchySyncContinuesPastMalformedScope' -count=1
+
+---
+
+Task 2 needs another quality-review fix in /Users/justinbeaudry/Projects/agent-sync. Do not revert unrelated changes. Fix and commit.
+
+Current Task 2 includes commits ad94a67, 62e74e9, 767f817. Quality reviewer found:
+1. `looksLikeActivationRootMarker` only detects unquoted `scope: workspace` and lowercase `activation_root: true`, but YAML accepts quoted workspace and capitalized booleans. If such a manifest has a later YAML syntax error, markerAt can fail open and let user scope into an activation-root subtree.
+2. `activationRootsBetween` comment says search is downward from cwd, but implementation walks upward then reverses.
+
+Required fix:
+- Make fallback marker detector recognize accepted scalar forms for these two fields:
+  - scope values: `workspace`, `"workspace"`, `'workspace'` with normal optional whitespace around `:`.
+  - activation_root booleans: `true`, `True`, `TRUE` with normal optional whitespace around `:`.
+  - Keep it simple and conservative. This is only for fail-closed boundary detection after YAML parsing has failed.
+- Add malformed-manifest regression tests covering at least:
+  - quoted scope + capitalized boolean + invalid trailing YAML causes Discover to error instead of ignoring activation root.
+  - if practical, single-quoted scope + TRUE boolean too.
+- Update the stale comment on activationRootsBetween to say it walks upward from cwd toward home/root and returns shallow->deep after reversal.
+- Preserve existing behavior: malformed ordinary/non-activation manifests do not fail discovery.
+
+Run:
+- `go test ./internal/hierarchy ./internal/coverage -count=1`
+- `go test ./internal/cli -run 'TestCompose_MalformedUserManifestDefersCursor|TestRunHierarchySyncContinuesPastMalformedScope' -count=1`
+
+Commit message: `fix: detect quoted malformed activation markers`
+
+Return DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED with changed files, tests run, commit SHA.
