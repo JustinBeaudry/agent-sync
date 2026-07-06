@@ -1,0 +1,55 @@
+You are doing the Task 4 spec-compliance review for agent-sync at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only commit 93d1f1e9e7001f4acb867149bfc7a7291c4f2729 (or diff HEAD~1..HEAD if HEAD is that commit).
+
+Task 4: Decode Native Fragments
+
+Required files:
+- create internal/harness/types.go
+- create internal/harness/decode.go
+- create internal/harness/decode_test.go
+- modify internal/cli/materialize.go
+
+Spec requirements:
+1. Tests equivalent to these exist and pass:
+- Decode a configs/codex/features/hooks/fragment.yaml with id hooks, target codex, path .codex/config.toml, merge toml-key, locator features.hooks, payload payload.toml. payload is [features]\nhooks = true\n. Decode(scope workspace) returns one fragment, no warnings, identity "codex\x00.codex/config.toml\x00toml-key\x00features.hooks", defaults team/descendants/passive.
+- Reject payload traversal with payload ../payload.toml.
+- Decode(scope user) defaults personal/root-only.
+
+2. types.go exposes:
+- Visibility, Inheritance, Safety, MergeKind string types.
+- constants: personal/team/machine-local, root-only/descendants, passive/tool-access/executable, toml-key/codex-hooks.
+- Fragment fields: ID, Target, Path string; Merge MergeKind; Locator string; Visibility Visibility; Inheritance Inheritance; Safety Safety; PayloadPath string; Payload []byte; Scope string; Provenance ir.Provenance.
+- Fragment.Identity() returns Target + NUL + Path + NUL + merge + NUL + Locator.
+- Warning { Code, Message, Path string }.
+- DecodeOptions { Scope string }.
+
+3. decode.go:
+- Decode(src ir.SourceTree, ref string, opts DecodeOptions) ([]Fragment, []Warning, error).
+- Uses ReadTree(ref), finds path.Base == fragment.yaml and prefix configs/, sorts deterministically.
+- Strict YAML parse with goccy/go-yaml and DisallowUnknownField. Fields id,target,path,merge,locator,visibility,inheritance,safety,payload.
+- validates required id,target,path,merge,payload; locator required for toml-key and codex-hooks; accepted merge kinds toml-key and codex-hooks only.
+- payload resolved relative to fragment.yaml directory. Reject empty, absolute/rooted, any traversal, or outside fragment directory. Use slash paths.
+- Reads payload with BlobContent(ref,payloadPath), stores PayloadPath/Payload.
+- Defaults exactly: scope user => personal/root-only; scope workspace => team/descendants; all other scopes including project/global/directory/empty => team/root-only; safety defaults passive.
+- Validates visibility/inheritance/safety values.
+- Provenance is ir.Provenance{Path: manifestPath}; Scope is opts.Scope.
+- Warnings nil for now; invalid manifests are errors with useful context including manifest path.
+
+4. materialize.go:
+- imports internal/harness.
+- materialized has Fragments []harness.Fragment.
+- decodeAt calls harness.Decode and appends any harness warnings to materialized Warnings as ir.Warning.
+- materialize callers pass loaded manifest scope if present, else manifest.ScopeProject.
+- Does not wire fragments into engine.Request yet.
+- Existing SourceURL/Commit/Warn behavior intact.
+
+Local tests already passed:
+- go test ./internal/harness -run TestDecodeFragments -count=1
+- go test ./internal/cli ./internal/harness -count=1
+
+Please answer exactly:
+- APPROVED if the commit satisfies Task 4.
+- CHANGES_REQUIRED with concise bullets containing file/line evidence and concrete fix if not.
+
+Be adversarial about hidden spec drift, especially payload path containment, defaulting, strict YAML, deterministic ordering, and materialize scope propagation.
