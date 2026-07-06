@@ -71,7 +71,8 @@ targets:
   - codex
 
 # Scope hint informing per-target emission paths. One of:
-#   user | project | global
+#   user | workspace | project | global
+# `global` is a legacy alias for project-level emission.
 # Empty (default) means no explicit hint.
 scope: project
 
@@ -114,7 +115,7 @@ The loader enforces these at parse time. Any violation returns
 | `canonical.commit` not 40-hex | `canonical.commit must be 40 lowercase hex` |
 | `trusted_sha` not 40-hex | `trusted_sha must be 40 lowercase hex` |
 | `canonical.commit` ≠ `trusted_sha` | `trusted_sha must mirror canonical.commit` |
-| `scope` not in `{"", user, project, global}` | `scope must be one of user|project|global` |
+| `scope` not in `{"", user, workspace, project, global}` | `scope must be one of user|workspace|project|global` |
 | Non-interactive + `canonical.commit` set but `trusted_sha` empty | `non-interactive mode requires trusted_sha when canonical.commit is set` |
 | `version != 1` (and not 0) | `unsupported manifest version N (want 1)` |
 | `cache.override` is non-empty and not absolute | `cache.override must be absolute` |
@@ -180,9 +181,10 @@ listed here emit nothing.
 
 ### `scope` (string, optional)
 
-One of `user | project | global`. Informs the adapters where the
+One of `user | workspace | project | global`. Informs the adapters where the
 emitted files live relative to the tool's own scope discovery. Empty
-means "no explicit hint."
+means "no explicit hint." `global` is accepted as a legacy alias for
+project-level emission.
 
 ### `cache` (mapping, optional)
 
