@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/agent-sync/agent-sync/internal/cache"
+	"github.com/agent-sync/agent-sync/internal/fsroot"
 	"github.com/agent-sync/agent-sync/internal/git"
 	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/tui"
@@ -50,6 +51,30 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 			if destDir == "" {
 				destDir = rc.Flags.Workspace
 			}
+			// A bad destination must fail as a directory error before any
+			// discovery or targets messaging can mask it (plan R8). An empty
+			// destDir means the cwd, which exists.
+			if destDir != "" {
+				info, statErr := os.Stat(destDir)
+				switch {
+				case errors.Is(statErr, os.ErrNotExist):
+					return fmt.Errorf("init: directory %s does not exist", destDir)
+				case statErr != nil:
+					return fmt.Errorf("init: cannot check %s: %w", destDir, statErr)
+				case !info.IsDir():
+					return fmt.Errorf("init: %s is not a directory", destDir)
+				}
+			}
+			// Refuse an existing manifest before the wizard or discovery run,
+			// so the user never completes the whole flow to hit the refusal.
+			target := manifestPathFor(destDir)
+			if _, statErr := os.Stat(target); statErr == nil {
+				return fmt.Errorf("init: %s already exists (refusing to overwrite)", target)
+			} else if !errors.Is(statErr, os.ErrNotExist) {
+				// A non-"not found" stat error (permission, bad path) is fatal —
+				// proceeding would surface a less clear error later.
+				return fmt.Errorf("init: cannot check %s: %w", target, statErr)
+			}
 
 			cfg := wizard.InitConfig{
 				Dir:       destDir,
@@ -61,9 +86,13 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				Floating:  floating,
 				Targets:   targets,
 			}
+			// sourceDefaulted records that no source flag was given and the
+			// canonical source fell back to the in-repo .agents dir, so the
+			// success line can announce the inference (plan R14).
+			sourceDefaulted := false
 
 			interactive := tui.Interactive(rc.Access.IsTTY, rc.Access.NonInteractive, rc.Access.Accessible)
-			if interactive && source == "" && localPath == "" && localDir == "" {
+			if shouldRunInitWizard(interactive, source, localPath, localDir, targets) {
 				// Drive the wizard to collect the source/ref/targets.
 				wcfg, committed, werr := wizard.Run(
 					cmd.Context(), deps.in(), deps.err(), rc.Access.NoColor, bundledTargetNames(),
@@ -77,13 +106,17 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				cfg = wcfg
 				cfg.Dir = destDir
 				cfg.Floating = floating
-			} else {
-				// Non-interactive (or flags supplied): require a source. Name
-				// all three flags — init accepts --source, --local-path, or
-				// --local-dir.
-				if err := requireFlag(rc.Access.NonInteractive, source != "" || localPath != "" || localDir != "", "--source/--local-path/--local-dir", "canonical repo URL, local git path, or in-repo directory"); err != nil {
-					return err
+			} else if source == "" && localPath == "" && localDir == "" {
+				// No source flag: default to the in-repo .agents working-tree
+				// source (plan R1). Pin flags contradict that default — the
+				// .agents source is unpinned — so name the conflict instead of
+				// letting the generic local-dir validation confuse the user
+				// (plan R3).
+				if pinFlag := firstPinFlag(ref, commit, floating); pinFlag != "" {
+					return fmt.Errorf("init: %s requires --source or --local-path; without a source flag init defaults to the unpinned .agents in-repo source", pinFlag)
 				}
+				cfg.LocalDir = defaultLocalDir
+				sourceDefaulted = true
 			}
 
 			// Pin-at-init (invariant #4): resolve the ref to a SHA unless
@@ -98,14 +131,6 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				return fmt.Errorf("init: %w", err)
 			}
 
-			target := manifestPathFor(cfg.Dir)
-			if _, statErr := os.Stat(target); statErr == nil {
-				return fmt.Errorf("init: %s already exists (refusing to overwrite)", target)
-			} else if !errors.Is(statErr, os.ErrNotExist) {
-				// A non-"not found" stat error (permission, bad path) is fatal —
-				// proceeding would surface a less clear error later.
-				return fmt.Errorf("init: cannot check %s: %w", target, statErr)
-			}
 			data, err := cfg.ManifestYAML()
 			if err != nil {
 				return fmt.Errorf("init: render manifest: %w", err)
@@ -120,7 +145,22 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				_ = os.Remove(target)
 				return fmt.Errorf("init: wrote an invalid manifest (removed): %w", err)
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "wrote %s\n", target)
+			// A local_dir manifest whose directory is missing would hard-fail
+			// the first sync with a missing-source error; create it (empty) so
+			// that degrades to the zero-emit hint instead (plan R2). Creation
+			// failure is a warning, not an init failure — the manifest is
+			// already valid.
+			if cfg.LocalDir != "" {
+				if err := ensureLocalDir(cfg.Dir, cfg.LocalDir); err != nil {
+					rc.Logger.Warn("init: could not create the local source directory; create it before running sync",
+						"dir", cfg.LocalDir, "err", err)
+				}
+			}
+			srcNote := ""
+			if sourceDefaulted {
+				srcNote = fmt.Sprintf(" (source: %s [default])", defaultLocalDir)
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "wrote %s%s\n", target, srcNote)
 			return nil
 		},
 	}
@@ -185,6 +225,58 @@ func resolvePin(ctx context.Context, cfg *wizard.InitConfig, offline bool) error
 	}
 	cfg.Commit = sha
 	return nil
+}
+
+// defaultLocalDir is the canonical-source fallback when init is given no
+// source flag: the in-repo working-tree directory named by AGENTS.md
+// invariant #4 as the documented unpinned source.
+const defaultLocalDir = ".agents"
+
+// shouldRunInitWizard reports whether init drives the interactive wizard: a
+// fully-unspecified interactive invocation. Any source flag — or an explicit
+// --target, which combined with the .agents source default makes the
+// invocation fully specified — skips the wizard (plan R12).
+func shouldRunInitWizard(interactive bool, source, localPath, localDir string, targets []string) bool {
+	return interactive && source == "" && localPath == "" && localDir == "" && len(targets) == 0
+}
+
+// firstPinFlag names the first pin-related flag in use, or "" when none is.
+// Used to reject pin flags when no source flag was given (the defaulted
+// .agents source is unpinned, so a pin flag signals a misunderstanding).
+func firstPinFlag(ref, commit string, floating bool) string {
+	switch {
+	case ref != "":
+		return "--ref"
+	case commit != "":
+		return "--commit"
+	case floating:
+		return "--floating"
+	}
+	return ""
+}
+
+// ensureLocalDir creates the manifest's local_dir under the workspace when
+// missing. The write goes through fsroot (AGENTS.md invariant #1); the
+// probing stat is read-only per existing precedent.
+func ensureLocalDir(wsDir, localDir string) error {
+	base := wsDir
+	if base == "" {
+		base = "."
+	}
+	if info, err := os.Stat(filepath.Join(base, localDir)); err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		return fmt.Errorf("%s exists and is not a directory", localDir)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	root, err := fsroot.OpenWorkspaceRoot(base)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return root.Inner().MkdirAll(localDir, 0o755)
 }
 
 func manifestPathFor(dir string) string {
