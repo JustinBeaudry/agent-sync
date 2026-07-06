@@ -1,0 +1,117 @@
+You are implementing Task 1 from the saved agent-sync harness hierarchy plan in /Users/justinbeaudry/Projects/agent-sync. Do not read the plan file; use the task text below. You are not alone in the codebase: do not revert edits made by others, and adapt to existing changes. Work on the current feature branch. Use apply_patch or normal repo tooling as appropriate. Commit your completed task with the requested conventional commit. Return status DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED, list changed files, tests run, commit SHA.
+
+Project context:
+- Go repo. Follow existing patterns.
+- Production writes inside workspaces must go through existing safe paths; Task 1 mostly touches manifest/init code.
+- TDD requested: add failing tests first, then implementation.
+- Use Go tests shown below. If helper names differ, follow existing test helper patterns.
+
+Task 1: Manifest Scopes And Init Surface
+
+Files:
+- Modify: internal/manifest/schema.go
+- Modify: internal/manifest/load.go
+- Modify: internal/manifest/load_test.go
+- Modify: internal/tui/wizard/initconfig.go
+- Modify: internal/tui/wizard/wizard_test.go
+- Modify: internal/cli/cmd_init.go
+- Modify: internal/cli/cmd_init_test.go
+
+Step 1: Add manifest validation tests to internal/manifest/load_test.go:
+
+func TestLoadBytes_AcceptsWorkspaceActivationRoot(t *testing.T) {
+	src := []byte("version: 1\nscope: workspace\nactivation_root: true\ncanonical:\n  local_dir: .agents\n")
+	m, err := LoadBytes(src, LoadOptions{})
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if m.Scope != ScopeWorkspace {
+		t.Fatalf("Scope = %q, want %q", m.Scope, ScopeWorkspace)
+	}
+	if !m.ActivationRoot {
+		t.Fatal("ActivationRoot = false, want true")
+	}
+}
+
+func TestLoadBytes_RejectsActivationRootOutsideWorkspace(t *testing.T) {
+	for _, scope := range []string{"", "user", "project", "global"} {
+		src := []byte("version: 1\nscope: " + scope + "\nactivation_root: true\ncanonical:\n  local_dir: .agents\n")
+		if scope == "" {
+			src = []byte("version: 1\nactivation_root: true\ncanonical:\n  local_dir: .agents\n")
+		}
+		_, err := LoadBytes(src, LoadOptions{})
+		if err == nil || !errors.Is(err, ErrInvalidManifest) {
+			t.Fatalf("scope %q: err = %v, want ErrInvalidManifest", scope, err)
+		}
+	}
+}
+
+func TestLoadBytes_AcceptsWorkspaceScopeWithoutActivationRoot(t *testing.T) {
+	src := []byte("version: 1\nscope: workspace\ncanonical:\n  local_dir: .agents\n")
+	m, err := LoadBytes(src, LoadOptions{})
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if m.ActivationRoot {
+		t.Fatal("ActivationRoot = true, want false")
+	}
+}
+
+Expected initial command failure before implementation:
+go test ./internal/manifest -run 'TestLoadBytes_(AcceptsWorkspaceActivationRoot|RejectsActivationRootOutsideWorkspace|AcceptsWorkspaceScopeWithoutActivationRoot)' -count=1
+
+Step 2: Implement manifest fields/constants.
+- Add constants in internal/manifest/schema.go:
+  ScopeUser = "user", ScopeProject = "project", ScopeWorkspace = "workspace", ScopeGlobal = "global".
+- Add ActivationRoot bool `yaml:"activation_root,omitempty"` to Manifest.
+- Update comment to include workspace.
+- In internal/manifest/load.go, accept ScopeWorkspace and reject activation_root unless scope == ScopeWorkspace. Error must wrap ErrInvalidManifest.
+
+Step 3: Verify:
+go test ./internal/manifest -count=1
+
+Step 4: Add init config rendering test to internal/tui/wizard/wizard_test.go:
+
+func TestInitConfig_ManifestYAML_RendersScopeAndActivationRoot(t *testing.T) {
+	out, err := InitConfig{
+		LocalDir:       ".agents",
+		Scope:          "workspace",
+		ActivationRoot: true,
+		Targets:        []string{"codex"},
+	}.ManifestYAML()
+	if err != nil {
+		t.Fatalf("ManifestYAML: %v", err)
+	}
+	text := string(out)
+	for _, want := range []string{"scope: workspace\n", "activation_root: true\n"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("manifest missing %q:\n%s", want, text)
+		}
+	}
+}
+
+Step 5: Add Scope and ActivationRoot fields to InitConfig in internal/tui/wizard/initconfig.go. Validate scope values using manifest constants. activation_root requires workspace. ManifestYAML renders scope and activation_root immediately after version.
+
+Step 6: Add init command tests in internal/cli/cmd_init_test.go. Follow existing helper conventions; if runInitInDir does not exist, use/extend the existing init test helper without changing unrelated tests.
+
+Test behavior:
+- `agent-sync init --user --non-interactive --target codex` from a repo writes ~/.agent-sync.yaml, with `scope: user`, and creates ~/.agents.
+- `agent-sync init --workspace <ws> --activation-root --non-interactive --target codex` writes <ws>/.agent-sync.yaml with `scope: workspace` and `activation_root: true`.
+
+Step 7: Implement init flags in internal/cli/cmd_init.go.
+- Add --user and --activation-root.
+- --user cannot combine with --dir or global --workspace; it writes at resolved home and sets scope user.
+- inherited/global --workspace sets destination and scope workspace.
+- --activation-root requires workspace scope.
+- Preserve scope/activation_root through wizard and non-wizard paths.
+
+Step 8: Verify:
+go test ./internal/manifest ./internal/tui/wizard ./internal/cli -run 'Test(LoadBytes_|InitConfig_|Init(User|Workspace))' -count=1
+Also run the full affected packages if focused regex misses existing tests you touched:
+go test ./internal/manifest ./internal/tui/wizard ./internal/cli -count=1
+
+Step 9: Commit:
+git add internal/manifest internal/tui/wizard internal/cli
+git commit -m "feat: add user and workspace manifest scopes"
+
+Important: If tests reveal the plan snippets need minor adaptation to existing helpers/imports, adapt conservatively and document that in your final response.

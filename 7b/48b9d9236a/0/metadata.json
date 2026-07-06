@@ -1,0 +1,47 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "7b48b9d9236a",
+  "session_id": "019f3863-aa77-7f42-9591-fc2a5d7de153",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-06T19:18:39.205966Z",
+  "branch": "feat/agent-harness-hierarchy",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "internal/cli/cmd_init.go",
+    "internal/cli/cmd_init_test.go",
+    "internal/manifest/load.go",
+    "internal/manifest/load_test.go",
+    "internal/manifest/schema.go",
+    "internal/tui/wizard/initconfig.go",
+    "internal/tui/wizard/wizard_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.3-codex-spark",
+  "turn_id": "04197144f090",
+  "checkpoint_transcript_start": 882,
+  "transcript_lines_at_start": 882,
+  "session_metrics": {
+    "turn_count": 21
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-06T19:18:39.179318Z",
+    "agent_lines": 214,
+    "agent_removed": 24,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 214,
+    "total_lines_changed": 238,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
