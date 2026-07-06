@@ -72,7 +72,8 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	if err != nil {
 		return prepared{}, fmt.Errorf("locate workspace: %w", err)
 	}
-	// Single-scope path (explicit --workspace / validate / watch): always project scope.
+	// Single-scope path (explicit --workspace / validate / watch): project
+	// fallback unless the loaded manifest declares a scope.
 	prep, err := prepareScope(ctx, rc, ws.Root, ws.ManifestPath, "project", now)
 	if err != nil {
 		return prepared{}, err

@@ -225,8 +225,9 @@ func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hiera
 //
 // It mutates req in place and returns whether rules were composed. All paths are
 // gated on m.Compose.CursorRulesFromUser:
-//   - scope != project: composition is project-only (D1) — warn that the opt-in
-//     has no effect at this scope, return false.
+//   - scope is not project-like: composition is project-only (D1) — warn that
+//     the opt-in has no effect at this scope, return false. `global` is a
+//     legacy project-scope alias, so it is project-like for this gate.
 //   - cursor not a target, or no user manifest at home: silent no-op, false.
 //   - user source unreadable: defer cursor (drop it from req.Targets) so a
 //     transient failure can't wipe previously-composed rules; warn; false.
@@ -235,7 +236,7 @@ func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine
 	if !m.Compose.CursorRulesFromUser {
 		return false
 	}
-	if scope != hierarchy.LevelProject.String() {
+	if !isProjectCompositionScope(scope) {
 		// Directory/user manifest set the opt-in; composition only applies at
 		// project scope. Warn so it isn't a silent no-op.
 		rc.Logger.Warn("compose: cursor-rules-from-user has no effect at this scope; set it on the project manifest", "scope", scope)
@@ -268,6 +269,10 @@ func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine
 		return true
 	}
 	return false
+}
+
+func isProjectCompositionScope(scope string) bool {
+	return scope == hierarchy.LevelProject.String() || scope == manifest.ScopeGlobal
 }
 
 // composeUserRules materializes the user-scope manifest read-only and returns

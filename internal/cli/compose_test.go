@@ -88,6 +88,24 @@ func TestCompose_WorkspaceManifestDoesNotComposeUserRules(t *testing.T) {
 	mustNotExist(t, rulePath(repo, "from-user"))
 }
 
+func TestCompose_GlobalManifestComposesAsProjectAlias(t *testing.T) {
+	home, repo := composeTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/from-user.md", "global alias should inherit user rules\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(composeProjectGlobalManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/rules/project-only.md", "project rule\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, rulePath(repo, "project-only"))
+	mustExist(t, rulePath(repo, "from-user"))
+}
+
 // TestCompose_ComposedRuleDoesNotLeakToOtherAdapters is the regression guard for
 // the empty-Targets over-delivery bug: a user rule authored with no frontmatter
 // targets means "all adapters", but composition is Cursor-only (D1). In a
@@ -214,6 +232,15 @@ const composeProjectManifest = "version: 1\n" +
 
 const composeProjectWorkspaceManifest = "version: 1\n" +
 	"scope: " + manifest.ScopeWorkspace + "\n" +
+	"canonical:\n" +
+	"  local_dir: .agents\n" +
+	"targets:\n" +
+	"  - cursor\n" +
+	"compose:\n" +
+	"  cursor-rules-from-user: true\n"
+
+const composeProjectGlobalManifest = "version: 1\n" +
+	"scope: " + manifest.ScopeGlobal + "\n" +
 	"canonical:\n" +
 	"  local_dir: .agents\n" +
 	"targets:\n" +
