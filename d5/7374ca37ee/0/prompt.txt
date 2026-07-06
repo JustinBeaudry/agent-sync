@@ -1,0 +1,48 @@
+Spec compliance review for Task 1 in /Users/justinbeaudry/Projects/agent-sync. Review commit 02f8b47 against the task requirements below. Do not edit files. Return APPROVED or CHANGES_REQUIRED. Focus only on whether the implementation matches the requested spec, no broader code-quality critique unless it directly violates the spec.
+
+Task 1 requirements:
+- Files expected: internal/manifest/schema.go, internal/manifest/load.go, internal/manifest/load_test.go, internal/tui/wizard/initconfig.go, internal/tui/wizard/wizard_test.go, internal/cli/cmd_init.go, internal/cli/cmd_init_test.go.
+- Manifest schema constants: ScopeUser="user", ScopeProject="project", ScopeWorkspace="workspace", ScopeGlobal="global".
+- Manifest has ActivationRoot bool yaml:"activation_root,omitempty".
+- Scope validation accepts empty/user/project/workspace/global and rejects any other scope. Error wraps ErrInvalidManifest.
+- activation_root is valid only with scope workspace. Error wraps ErrInvalidManifest.
+- Tests cover accepting workspace activation root, rejecting activation root outside workspace, and workspace without activation root.
+- InitConfig has Scope and ActivationRoot; Validate accepts the same scopes and activation_root requires workspace.
+- ManifestYAML renders scope and activation_root immediately after version.
+- Init command has --user and --activation-root.
+- init --user cannot combine with --dir or global --workspace; writes manifest at home with scope user and creates ~/.agents.
+- global/inherited --workspace writes at that directory and sets scope workspace.
+- --activation-root requires workspace scope.
+- Scope and activation_root are preserved through wizard and non-wizard paths.
+- Tests cover init --user and init --workspace --activation-root.
+- Required tests were run and passed per implementer report.
+
+Please inspect the actual commit/diff and report any missing or overbuilt behavior with file/line references where possible.
+
+---
+
+Code quality review for Task 1 commit 02f8b47 in /Users/justinbeaudry/Projects/agent-sync. Spec compliance is already approved. Do not edit files. Review for maintainability, correctness risks, test quality, and project conventions in the Task 1 diff only. Return APPROVED or CHANGES_REQUIRED with concise findings and file/line refs if possible.
+
+Context:
+- Task added user/workspace manifest scopes, activation_root validation, InitConfig scope rendering, and init --user / --activation-root behavior.
+- Expected files: internal/manifest/schema.go, internal/manifest/load.go, internal/manifest/load_test.go, internal/tui/wizard/initconfig.go, internal/tui/wizard/wizard_test.go, internal/cli/cmd_init.go, internal/cli/cmd_init_test.go.
+- Required tests passed per implementer and spec reviewer.
+- Look for subtle CLI semantics, missing validation, brittle tests, unclear helper additions, or code that diverges from repo patterns.
+
+Please inspect actual diff and report whether it is approved.
+
+---
+
+Task 1 quality review returned CHANGES_REQUIRED. Please fix this in the current workspace and commit an amend or follow-up commit (prefer follow-up commit if easier). Do not revert unrelated changes.
+
+Finding:
+- internal/cli/cmd_init.go currently defaults `scope := ""`, so normal project init omits `scope: project`. This diverges from the explicit user/workspace/project scope model and makes future code that checks `m.Scope == manifest.ScopeProject` easy to get wrong.
+
+Required fix:
+1. Default init scope to `manifest.ScopeProject`.
+2. Override to `manifest.ScopeUser` for `--user` and `manifest.ScopeWorkspace` for inherited/global `--workspace`.
+3. Add/adjust a CLI test asserting normal/default project init writes `scope: project`. Also cover `--dir` if straightforward because --dir should remain project scope.
+4. Run affected tests: `go test ./internal/manifest ./internal/tui/wizard ./internal/cli -count=1`.
+5. Commit with message like `fix: write project scope during init`.
+
+Return DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED with changed files, tests run, and commit SHA.
