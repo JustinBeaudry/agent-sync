@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,5 +180,33 @@ func TestPromptYes(t *testing.T) {
 				t.Fatalf("prompt not written: %q", errBuf.String())
 			}
 		})
+	}
+}
+
+// TestSync_NoAdapterStartedBannerOnStderr pins plan R18: bundled in-process
+// adapters must not spray per-session "<name>: started" banners onto the
+// CLI's stderr (the adapterkit banner is subprocess proof-of-life for the
+// stderr ring; in-process it is duplicate noise printed once per session).
+// The banner bypasses the cobra writers, so capture the real os.Stderr.
+func TestSync_NoAdapterStartedBannerOnStderr(t *testing.T) {
+	ws := writeLocalDirWorkspace(t)
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	os.Stderr = w
+	_, _, syncErr := runSync(t, ws, "--offline")
+	os.Stderr = oldStderr
+	_ = w.Close()
+	captured, _ := io.ReadAll(r)
+	_ = r.Close()
+
+	if syncErr != nil {
+		t.Fatalf("sync failed: %v", syncErr)
+	}
+	if strings.Contains(string(captured), "started") {
+		t.Fatalf("bundled adapter session banner leaked to stderr:\n%s", captured)
 	}
 }

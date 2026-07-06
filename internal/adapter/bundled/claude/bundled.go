@@ -67,9 +67,13 @@ func run(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 		Version: adapterVersion,
 		Stdin:   stdin,
 		Stdout:  stdout,
-		// stderr defaults to os.Stderr; bundled in-process adapters
-		// share the parent process so this routes diagnostics to the
-		// CLI's own stderr, which is the documented place for them.
+		// Discard adapter stderr in-process: the adapterkit
+		// "<name>: started" banner is subprocess proof-of-life for the
+		// runtime's stderr ring; a bundled adapter printing it to the
+		// CLI's own stderr is per-session noise (twice per target per
+		// sync). Bundled diagnostics flow through the runtime's
+		// structured logging instead.
+		Stderr: io.Discard,
 		// Getenv defaults to os.Getenv; bundled adapters skip the
 		// magic-cookie check (the runtime sets cookie="" for bundled,
 		// see internal/adapter/runtime.go Initialize), so the env-var

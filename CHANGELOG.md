@@ -40,6 +40,15 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
   suppresses the note for that run; `--post-merge` (git-hook) syncs never
   prompt.
 
+### Fixed
+
+- **No more duplicated `<name>: started` lines during sync.** Bundled
+  in-process adapters were printing the adapterkit session banner (subprocess
+  proof-of-life for the runtime's stderr ring) straight to the CLI's stderr,
+  once per adapter session — so every target printed it twice per sync.
+  Bundled adapters now discard that banner; subprocess adapters are
+  unchanged.
+
 ### Changed
 
 - **`init --target <name>` on a TTY no longer launches the wizard** — with
