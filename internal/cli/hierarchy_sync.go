@@ -42,6 +42,14 @@ type scopeOutcome struct {
 type hierarchySyncOptions struct {
 	IncludeUser bool
 	EngineOpts  engine.Options // mode, adopt, target filter, expect-deletions, logger, now
+	// OfferUser, when non-nil and IncludeUser is false, is invoked once when
+	// discovery finds a user-level manifest that would otherwise be skipped
+	// (plan R16). Returning true includes the user scope in this run exactly
+	// as --user would; returning false skips it AND suppresses the
+	// skipped-user notice (the user answered — no nagging). nil means "never
+	// ask" — the non-interactive/scripted path. The callback is the TTY seam:
+	// the orchestrator itself never touches stdin.
+	OfferUser func(manifestPath string) bool
 }
 
 // runHierarchySync discovers the emit scopes from cwd and runs engine.Sync
@@ -63,6 +71,24 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 	scopes, err := hierarchy.Discover(cwd, hierarchy.Options{Home: home, IncludeUser: opts.IncludeUser})
 	if err != nil {
 		return nil, "", fmt.Errorf("discover hierarchy: %w", err)
+	}
+
+	// User-scope offer (plan R16): a user manifest discovered read-only gets
+	// one chance to join the run. An accepted offer re-discovers with the
+	// user scope emitted — identical to --user. A declined offer is recorded
+	// so the skipped-user notice below stays quiet for this run.
+	userDeclined := false
+	if !opts.IncludeUser && opts.OfferUser != nil {
+		if us, ok := skippedUserScope(scopes); ok {
+			if opts.OfferUser(us.ManifestPath) {
+				scopes, err = hierarchy.Discover(cwd, hierarchy.Options{Home: home, IncludeUser: true})
+				if err != nil {
+					return nil, "", fmt.Errorf("discover hierarchy: %w", err)
+				}
+			} else {
+				userDeclined = true
+			}
+		}
 	}
 
 	// composeActive records whether Cursor-rule composition fired for any
@@ -134,10 +160,29 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		}
 	}
 	var notice string
-	if len(outcomes) == 0 {
+	switch {
+	case len(outcomes) == 0:
 		notice = emptyRunNotice(scopes, cwd)
+	case !userDeclined:
+		// Plan R17: a user manifest that exists but was not synced is worth a
+		// persistent pointer even when project scopes emitted fine — today's
+		// silence is how user-scope config quietly drifts stale.
+		if us, ok := skippedUserScope(scopes); ok {
+			notice = fmt.Sprintf("user-level manifest at %s was not synced; pass --user to include it", us.ManifestPath)
+		}
 	}
 	return outcomes, notice, nil
+}
+
+// skippedUserScope returns the discovered user-level scope that is not being
+// emitted this run (a plain sync never writes home), when one exists.
+func skippedUserScope(scopes []hierarchy.Scope) (hierarchy.Scope, bool) {
+	for _, sc := range scopes {
+		if sc.Level == hierarchy.LevelUser && !sc.Emit {
+			return sc, true
+		}
+	}
+	return hierarchy.Scope{}, false
 }
 
 // emptyRunNotice explains a hierarchy sync that discovered zero emit scopes.
@@ -409,9 +454,10 @@ func scopeExitCode(o scopeOutcome) int {
 // level and root, then either the scope's report text (success) or its error
 // line (prepare/sync failure). Mirrors the spacing of renderSummary in
 // cmd_sync.go (report.RenderText already carries the body's formatting).
-// A non-empty notice (zero-emit run) renders as a single explanatory line.
+// A non-empty notice renders as the nothing-to-sync line on a zero-emit run,
+// or as a trailing note: line after the scope blocks (plan R17).
 func renderHierarchyText(w io.Writer, outcomes []scopeOutcome, notice string) error {
-	if notice != "" {
+	if notice != "" && len(outcomes) == 0 {
 		if _, err := fmt.Fprintf(w, "nothing to sync: %s\n", notice); err != nil {
 			return err
 		}
@@ -440,6 +486,11 @@ func renderHierarchyText(w io.Writer, outcomes []scopeOutcome, notice string) er
 			if _, err := fmt.Fprintf(w, "  warning: %s\n", warn.Detail); err != nil {
 				return err
 			}
+		}
+	}
+	if notice != "" && len(outcomes) > 0 {
+		if _, err := fmt.Fprintf(w, "\nnote: %s\n", notice); err != nil {
+			return err
 		}
 	}
 	return nil

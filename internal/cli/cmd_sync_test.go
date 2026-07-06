@@ -152,3 +152,32 @@ func TestSync_FloatingLocalPathUnsupported(t *testing.T) {
 		t.Fatal("expected error for floating local_path")
 	}
 }
+
+// TestPromptYes pins the [Y/n] semantics: Enter and y are consent, n and an
+// unanswerable (closed) stdin are not — never write home on a read error.
+func TestPromptYes(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"enter defaults yes", "\n", true},
+		{"y", "y\n", true},
+		{"yes", "yes\n", true},
+		{"n", "n\n", false},
+		{"no", "No\n", false},
+		{"eof without input", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var errBuf bytes.Buffer
+			got := promptYes(strings.NewReader(tc.in), &errBuf, "sync user? [Y/n] ")
+			if got != tc.want {
+				t.Fatalf("promptYes(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+			if !strings.Contains(errBuf.String(), "[Y/n]") {
+				t.Fatalf("prompt not written: %q", errBuf.String())
+			}
+		})
+	}
+}
