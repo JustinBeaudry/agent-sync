@@ -1,0 +1,244 @@
+You are doing the Task 4 spec-compliance re-review for agent-sync at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only diff range 250dae2..HEAD on branch feat/agent-harness-hierarchy. That range contains Task 4 and its review fixes.
+
+Task 4: Decode Native Fragments
+
+Spec requirements:
+1. Tests equivalent to these exist and pass:
+- Decode configs/codex/features/hooks/fragment.yaml with id hooks, target codex, path .codex/config.toml, merge toml-key, locator features.hooks, payload payload.toml. payload is [features]\nhooks = true\n. Decode(scope workspace) returns one fragment, no warnings, identity "codex\x00.codex/config.toml\x00toml-key\x00features.hooks", defaults team/descendants/passive.
+- Reject payload traversal with payload ../payload.toml and raw hidden traversal like nested/../payload.toml.
+- Decode(scope user) defaults personal/root-only.
+
+2. types.go exposes Visibility/Inheritance/Safety/MergeKind constants, Fragment fields including Payload/Scope/Provenance, Identity, Warning, DecodeOptions as specified.
+
+3. decode.go:
+- Decode(src ir.SourceTree, ref string, opts DecodeOptions) ([]Fragment, []Warning, error).
+- Uses ReadTree(ref), finds path.Base == fragment.yaml and prefix configs/, sorts deterministically.
+- Requires fragment manifests and payloads to be regular file entries from ReadTree before BlobContent, so local_dir skipped symlinks cannot be opened by path.
+- Strict YAML parse with goccy/go-yaml and DisallowUnknownField. Fields id,target,path,merge,locator,visibility,inheritance,safety,payload.
+- validates required id,target,path,merge,payload; locator required for toml-key and codex-hooks; accepted merge kinds toml-key and codex-hooks only.
+- payload resolved relative to fragment.yaml directory. Reject empty, absolute/rooted, any traversal, or outside fragment directory. Use slash paths.
+- Reads payload with BlobContent(ref,payloadPath), stores PayloadPath/Payload.
+- Defaults exactly: scope user => personal/root-only; scope workspace => team/descendants; all other scopes including project/global/directory/empty => team/root-only; safety defaults passive.
+- Validates visibility/inheritance/safety values.
+- Does not silently coerce explicit machine-local inheritance.
+- Provenance is ir.Provenance{Path: manifestPath}; Scope is opts.Scope.
+- Warnings nil for now; invalid manifests are errors with useful context including manifest path.
+
+4. materialize.go:
+- imports internal/harness.
+- materialized has Fragments []harness.Fragment.
+- decodeAt calls harness.Decode and appends any harness warnings to materialized Warnings as ir.Warning.
+- materialize callers pass loaded manifest scope if present, else manifest.ScopeProject.
+- Does not wire fragments into engine.Request yet.
+- Existing SourceURL/Commit/Warn behavior intact.
+
+Local tests passed:
+- go test ./internal/harness -run TestDecodeFragments -count=1
+- go test ./internal/cli ./internal/harness -count=1
+
+Please answer exactly:
+- APPROVED if the range satisfies Task 4.
+- CHANGES_REQUIRED with concise bullets containing file/line evidence and concrete fix if not.
+
+Be adversarial about hidden spec drift, especially payload path containment, regular-entry gating, defaulting, strict YAML, deterministic ordering, and materialize scope propagation.
+
+---
+
+You are doing a code-quality/correctness re-review for Task 4 in agent-sync at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only diff range 250dae2..HEAD on branch feat/agent-harness-hierarchy.
+
+Task intent: add internal/harness fragment decoder for configs/**/fragment.yaml, validate strict fragment metadata and payload containment, require manifests/payloads to be regular ReadTree entries before BlobContent, decode payload bytes, expose Fragment types, and include decoded fragments in CLI materialization without wiring them into engine.Request yet.
+
+Spec review has approved. Focus only on blocking correctness/quality/security risks: hidden bugs, remaining path/symlink containment holes, nil/empty scope issues, brittle tests, confusing APIs, unnecessary behavior, or materialize regressions. Do not request cosmetic churn.
+
+Local tests passed:
+- go test ./internal/harness -run TestDecodeFragments -count=1
+- go test ./internal/cli ./internal/harness -count=1
+
+Please answer exactly:
+- APPROVED if there are no blocking quality/correctness issues.
+- CHANGES_REQUIRED with concise bullets including file/line evidence, severity, and concrete fix recommendation.
+
+---
+
+You are implementing Task 5 in the agent-sync repo at /Users/justinbeaudry/Projects/agent-sync on branch feat/agent-harness-hierarchy.
+
+You are not alone in the codebase: do not revert edits made by others. Own this task's files/modules:
+- create internal/harness/resolve.go
+- create internal/harness/resolve_test.go
+- modify internal/engine/request.go
+- modify internal/cli/hierarchy_sync.go
+- modify internal/cli/cmd_sync.go
+- modify internal/cli/setup.go
+You may add focused tests in existing internal/cli test files. Do not implement native merge application; Task 6/7 own that.
+
+Follow TDD: add resolver/selector tests first, confirm relevant failures, implement, run focused tests, commit.
+
+Task 5: Resolve Inherited Portable Assets And Native Fragments
+
+Core invariants:
+- Hierarchy discovery may read user/workspace/project layers, but a sync writes exactly one selected scope.
+- Plain sync writes the closest non-user scope. `sync --user` writes only the user scope. Explicit `--workspace` stays single-scope and predictable.
+- Activation roots already stop discovery before user, so do not reintroduce user root reads under activation roots.
+- User portable nodes/fragments do not inherit into projects by default. Existing compose.cursor-rules-from-user remains the explicit user-to-project exception.
+- This task only resolves/inserts fragments into requests; engine does not apply them yet.
+
+Required resolver tests in internal/harness/resolve_test.go:
+1. TestResolveNodes_WorkspaceSkillInheritedIntoProject:
+   workspace skill node and skill asset inherit into project; inherited node SourceURL becomes layer SourceURL; skill asset present.
+2. REDACTED:
+   project node shadows workspace node with same kind/id; output contains project body.
+3. TestResolveNodes_UserLayerDoesNotInheritIntoProjectByDefault:
+   user skill alone resolves to no project nodes.
+4. TestResolveFragments_ClosestScopeWinsByIdentity:
+   workspace fragment and project fragment same Identity; project payload wins.
+5. TestResolveFragments_SkipsPersonalAncestorForProject:
+   user personal descendant fragment does not inherit into project.
+6. TestResolveFragments_IncludesTeamDescendantAncestor:
+   workspace team descendant fragment inherits into project.
+
+Resolver implementation in internal/harness/resolve.go:
+- type Layer struct { Scope string; Nodes []ir.Node; Skills map[string]ir.Skill; Fragments []Fragment; SourceURL string; Commit string }
+- ResolveNodes(layers []Layer, targetScope string) ([]ir.Node, map[string]ir.Skill)
+  - process layers in order from ancestor to current.
+  - current layer is len(layers)-1 and always included.
+  - non-current layer included only if portableLayerInherits(layer.Scope,targetScope) is true.
+  - portableLayerInherits returns true for same scope and for scope == "workspace". Do not inherit user into project.
+  - shadow by kind + NUL + id; closer layer overwrites value, but keep first-seen order.
+  - for inherited non-current nodes, set SourceURL and SourceCommit from layer.
+  - for skill nodes, map matching layer.Skills[n.ID], deleting stale shadowed assets first.
+- ResolveFragments(layers []Layer, targetScope string) []Fragment
+  - process layers in order; current layer always included.
+  - non-current fragments included only if canInherit(f,targetScope): same scope, or f.Inheritance == descendants and f.Visibility == team.
+  - shadow by Fragment.Identity(); closer wins, first-seen order retained.
+
+Engine request:
+- import internal/harness in internal/engine/request.go.
+- Add Request.Fragments []harness.Fragment with comment that these are resolved target-native harness fragments applied by core allowlisted surfaces, not adapters.
+
+Single-scope setup:
+- internal/cli/setup.go should set Fragments: mat.Fragments in engine.Request.
+- For explicit --workspace, keep only that scope's own materialized fragments/nodes.
+
+Hierarchy sync changes:
+- Add selectWriteScopes(scopes []hierarchy.Scope, includeUser bool) []hierarchy.Scope exactly in spirit:
+  - copy scopes and set all Emit=false.
+  - if includeUser, mark first user scope Emit=true and return.
+  - otherwise mark closest non-user scope (iterate from end, skip user) Emit=true and return.
+- Call selectWriteScopes immediately after hierarchy.Discover in runHierarchySync.
+- Remove the interactive OfferUser path from hierarchySyncOptions/newSyncCommand/runHierarchySync. Plain project sync may read inherited layers but must not offer or perform a second write to $HOME. Notice about skipped user can remain if useful, but no prompt.
+- Before the emit loop, materialize all discovered scopes read-only into preparedLayer values:
+  type preparedLayer struct { Scope hierarchy.Scope; Materialized materialized; Manifest *manifest.Manifest }
+  helper materializeLayerReadOnly(ctx, rc, sc, now) (preparedLayer,bool): LoadFile noninteractive, OpenWorkspaceRoot, materialize with Offline rc.Flags.Offline || URL != "", close root, warn and return false on read/open/materialize failure.
+- Build layers in discovery order up to the selected emitted scope:
+  layersForScope(sc, preparedLayers) []harness.Layer with Scope p.Scope.Level.String(), Nodes/Skills/Fragments/SourceURL/Commit from materialized, break when ManifestPath matches sc.ManifestPath.
+- Add applyResolvedLayers(req *engine.Request, sc hierarchy.Scope, preparedLayers []preparedLayer) that sets req.Nodes, req.Skills = harness.ResolveNodes(...), req.Fragments = harness.ResolveFragments(...).
+- In runHierarchySync for emitted scopes, after req := prep.Request and options assignment, call applyResolvedLayers before applyCursorComposition/coverage/engine.Sync.
+- In prepareEngine: when rc.Flags.Workspace == "" (validate/default nearest path), use hierarchy discovery plus selectWriteScopes to find selected write scope, prepareScope for that scope, materialize read-only layers, applyResolvedLayers, then apply Cursor composition. When rc.Flags.Workspace != "", keep explicit single-scope behavior and do not read ancestors.
+
+Selector tests in internal/cli/hierarchy_sync_test.go:
+- TestSelectWriteScopes_DefaultSelectsClosestNonUser: user/workspace/project -> only project emits.
+- TestSelectWriteScopes_UserFlagSelectsOnlyUser: user/project + includeUser -> only user emits.
+
+Verification to run:
+- go test ./internal/harness ./internal/cli -run 'TestResolve(Nodes|Fragments)|TestSelectWriteScopes|TestRunHierarchySync|TestCompose' -count=1
+- go test ./internal/engine ./internal/cli ./internal/harness -count=1
+
+Commit message:
+- feat: resolve inherited harness layers
+
+Final status format:
+- DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED
+- files changed
+- tests run and results
+- commit SHA
+- concerns
+
+---
+
+You are doing Task 5 spec-compliance review for agent-sync at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only diff range 3c3eef6..HEAD on branch feat/agent-harness-hierarchy. That range is Task 5 plus local review fixes.
+
+Task 5: Resolve Inherited Portable Assets And Native Fragments
+
+Required files:
+- create internal/harness/resolve.go
+- create internal/harness/resolve_test.go
+- modify internal/cli/hierarchy_sync.go
+- modify internal/cli/cmd_sync.go
+- modify internal/cli/setup.go
+- modify internal/engine/request.go
+
+Spec requirements:
+1. Resolver tests and behavior:
+- ResolveNodes: workspace skill inherited into project, inherited node SourceURL/SourceCommit from layer, skill asset present.
+- ResolveNodes: project shadows workspace by kind+ID.
+- ResolveNodes: user layer does not inherit into project by default.
+- ResolveFragments: closest scope wins by Fragment.Identity.
+- ResolveFragments: personal ancestor skipped for project.
+- ResolveFragments: team+descendants ancestor included.
+- Layer type has Scope, Nodes, Skills, Fragments, SourceURL, Commit.
+- ResolveNodes processes layers broad-to-close; current layer is always included; non-current included only if portableLayerInherits returns true for same scope or workspace. Shadow by kind+NUL+id, first-seen order retained. Inherited non-current nodes get SourceURL/SourceCommit. Skill map follows shadowing.
+- ResolveFragments processes broad-to-close; current layer always included; non-current included only by canInherit (same scope OR descendants+team); shadow by identity, first-seen order retained.
+
+2. Engine request:
+- internal/engine/request.go imports internal/harness and adds Request.Fragments []harness.Fragment with comment that these are resolved native harness fragments applied by core allowlisted surfaces, not adapters.
+
+3. Single-scope setup:
+- prepareScope sets Fragments: mat.Fragments in engine.Request.
+- Explicit --workspace path remains single-scope and predictable: it should use only that root's own materialized nodes/fragments plus existing Cursor composition behavior, not read hierarchy ancestors.
+
+4. Hierarchy sync:
+- selectWriteScopes copies scopes, clears Emit, then selects exactly one write target: includeUser selects first user scope only; otherwise closest non-user scope only.
+- runHierarchySync calls selectWriteScopes immediately after discovery.
+- The interactive user-scope offer/prompt is removed from hierarchySyncOptions/newSyncCommand/runHierarchySync. Plain project sync may read inherited layers but must not become a second write to $HOME. `sync --user` selects user as the single write target.
+- Read-only materialization helper loads each discovered scope non-interactively, opens fsroot, materializes with Offline rc.Flags.Offline || URL != "", warns and skips on failures.
+- Layers for an emitted scope are built in discovered order up to that scope. The selected/current layer must come from the already-prepared request, not from a potentially skipped/offline read-only materialization. It must use req.Scope as targetScope, not just sc.Level.String(), so manifest scope overrides/legacy global alias are honored.
+- In emitted sync, after `req := prep.Request` and options assignment, apply resolved nodes/skills/fragments before Cursor composition, coverage analysis, and engine.Sync.
+- Activation roots already removed user from discovery, so do not re-add user root reads.
+- Existing compose.cursor-rules-from-user remains explicit user-to-project exception; this task should not replace or broaden it.
+
+5. prepareEngine / validate:
+- If rc.Flags.Workspace == "", prepareEngine uses hierarchy discovery + selectWriteScopes to pick the selected write scope, prepareScope for it, materialize read-only layers, apply resolved layers, then Cursor composition. This makes validate match plain sync.
+- If rc.Flags.Workspace != "", keep explicit single-scope behavior and use only that scope's own materialized nodes/fragments.
+
+6. Verification commands passed locally:
+- go test ./internal/harness ./internal/cli -run 'TestResolve(Nodes|Fragments)|TestSelectWriteScopes|TestApplyResolvedLayers|TestRunHierarchySync|TestCompose' -count=1
+- go test ./internal/engine ./internal/cli ./internal/harness -count=1
+
+Please answer exactly:
+- APPROVED if Task 5 satisfies the spec.
+- CHANGES_REQUIRED with concise bullets, file/line evidence, and concrete fix if not.
+
+Be adversarial about one-write-target semantics, user root reads under activation roots, explicit --workspace behavior, request-scope vs discovered-level confusion, and cases where current selected materialization could be dropped.
+
+---
+
+You are doing a code-quality/correctness review for Task 5 in agent-sync at /Users/justinbeaudry/Projects/agent-sync.
+
+Do not edit files. Review only diff range 3c3eef6..HEAD on branch feat/agent-harness-hierarchy.
+
+Task intent: resolve inherited portable nodes/skills and native fragments across hierarchy layers, enforce one write target per sync, remove interactive user write offer, pass resolved Fragments on engine.Request but do not apply them yet, and make validate match plain sync unless explicit --workspace is used.
+
+Spec review has approved. Focus on blocking correctness/quality risks only:
+- one-write-target semantics or accidental home writes
+- user root reads under activation roots
+- explicit --workspace behavior
+- request scope vs discovered level confusion
+- selected/current layer dropped or overwritten
+- read-only materialization failures causing unsafe partial sync
+- cursorCompositionWouldFire probe side effects or unnecessary adapter discovery
+- test brittleness or missing edge cases that would hide real breakage
+Do not request cosmetic churn.
+
+Local tests passed:
+- go test ./internal/harness ./internal/cli -run 'TestResolve(Nodes|Fragments)|TestSelectWriteScopes|TestApplyResolvedLayers|TestRunHierarchySync|TestCompose' -count=1
+- go test ./internal/engine ./internal/cli ./internal/harness -count=1
+
+Please answer exactly:
+- APPROVED if there are no blocking quality/correctness issues.
+- CHANGES_REQUIRED with concise bullets including file/line evidence, severity, and concrete fix recommendation.
