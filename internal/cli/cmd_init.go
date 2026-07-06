@@ -95,11 +95,24 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 			sourceDefaulted := false
 			var discovered, notEnabled []string
 
+			// Footprint probe (plan R4): read-only stats of the destination
+			// for each bundled adapter's reserved-prefix dir. Computed up
+			// front so the wizard path can preselect from it (plan R11 keeps
+			// the wizard itself free of fs I/O).
+			probeDir := destDir
+			if probeDir == "" {
+				probeDir = "."
+			}
+			found, warns := discoverTargets(probeDir, bundledAdapters())
+			for _, w := range warns {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+			}
+
 			interactive := tui.Interactive(rc.Access.IsTTY, rc.Access.NonInteractive, rc.Access.Accessible)
 			if shouldRunInitWizard(interactive, source, localPath, localDir, targets) {
 				// Drive the wizard to collect the source/ref/targets.
 				wcfg, committed, werr := wizard.Run(
-					cmd.Context(), deps.in(), deps.err(), rc.Access.NoColor, bundledTargetNames(),
+					cmd.Context(), deps.in(), deps.err(), rc.Access.NoColor, bundledTargetNames(), found,
 				)
 				if werr != nil {
 					return fmt.Errorf("init: wizard: %w", werr)
@@ -125,18 +138,10 @@ func newInitCommand(deps RootDeps) *cobra.Command {
 				}
 
 				// Targets: explicit --target flags win outright (plan R5); with
-				// none, snapshot the workspace's tool footprints (plan R4). Zero
+				// none, snapshot the discovered footprints (plan R4). Zero
 				// discovered is not an error — an empty targets list is the
 				// spec-valid "not yet configured" state — but it gets a hint so
 				// the user knows why nothing will sync (plan R6).
-				probeDir := destDir
-				if probeDir == "" {
-					probeDir = "."
-				}
-				found, warns := discoverTargets(probeDir, bundledAdapters())
-				for _, w := range warns {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-				}
 				if len(targets) == 0 {
 					cfg.Targets = found
 					discovered = found

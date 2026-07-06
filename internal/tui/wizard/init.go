@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -13,6 +14,10 @@ import (
 	"github.com/agent-sync/agent-sync/internal/tui"
 )
 
+// defaultLocalDir is the in-repo working-tree source the wizard offers on an
+// empty source entry, mirroring the CLI flag path's default.
+const defaultLocalDir = ".agents"
+
 // schemeRE matches a URL scheme prefix (https://, ssh://, git://, file://).
 // winDriveRE matches a Windows drive-letter path (C:\ or C:/).
 var (
@@ -21,15 +26,17 @@ var (
 )
 
 // Run drives the interactive init wizard and returns the collected
-// InitConfig. availableTargets is the discovered adapter name set the user
-// chooses from. The wizard renders to out (stderr/the TTY); committed is
-// false if the user aborted.
+// InitConfig. availableTargets is the adapter name set the user chooses
+// from; discoveredTargets (a subset, from the caller's footprint probe) is
+// preselected when non-empty — with zero discovered, every target starts
+// selected, the friendlier greenfield default. The wizard renders to out
+// (stderr/the TTY); committed is false if the user aborted.
 //
 // The wizard collects source, ref, and target selection; pin resolution
-// (turning a ref into a commit for URL sources) is performed by the caller
-// after the wizard returns, so this package stays free of git/network I/O.
-func Run(ctx context.Context, in io.Reader, out io.Writer, noColor bool, availableTargets []string) (cfg InitConfig, committed bool, err error) {
-	model := newInitModel(noColor, availableTargets)
+// (turning a ref into a commit for URL sources) and footprint discovery are
+// performed by the caller, so this package stays free of git/network/fs I/O.
+func Run(ctx context.Context, in io.Reader, out io.Writer, noColor bool, availableTargets, discoveredTargets []string) (cfg InitConfig, committed bool, err error) {
+	model := newInitModel(noColor, availableTargets, discoveredTargets)
 	final, runErr := tui.Run(ctx, model, in, out)
 	if runErr != nil {
 		return InitConfig{}, false, runErr
@@ -68,9 +75,9 @@ type targetChoice struct {
 	selected bool
 }
 
-func newInitModel(noColor bool, available []string) *initModel {
+func newInitModel(noColor bool, available, discovered []string) *initModel {
 	ti := textinput.New()
-	ti.Placeholder = "https://github.com/org/repo.git  (or an absolute local path)"
+	ti.Placeholder = "Enter for " + defaultLocalDir + " (in-repo skills), or a URL / local path"
 	ti.Focus()
 	ti.Width = 60
 
@@ -78,7 +85,10 @@ func newInitModel(noColor bool, available []string) *initModel {
 	sorted := append([]string(nil), available...)
 	sort.Strings(sorted)
 	for _, n := range sorted {
-		choices = append(choices, targetChoice{name: n, selected: true})
+		// Discovery-informed preselection: with footprints discovered, only
+		// those start selected; with none, everything does (greenfield).
+		selected := len(discovered) == 0 || slices.Contains(discovered, n)
+		choices = append(choices, targetChoice{name: n, selected: selected})
 	}
 
 	return &initModel{
@@ -116,10 +126,15 @@ func (m *initModel) updateSource(msg tea.Msg, key tea.KeyMsg, isKey bool) (tea.M
 	if isKey && key.Type == tea.KeyEnter {
 		val := strings.TrimSpace(m.input.Value())
 		if val == "" {
-			return m, nil // require a source
+			// Empty Enter accepts the in-repo .agents default. A local_dir
+			// source has no ref to track, so the ref phase is skipped.
+			m.cfg.LocalDir = defaultLocalDir
+			m.phase = phaseTargets
+			return m, nil
 		}
 		// Heuristic: an absolute path or one with a separator and no scheme
-		// is a local path; otherwise a URL.
+		// is a local path; otherwise a URL. (A custom local-dir source stays
+		// flag-only: typed paths are git sources here.)
 		if looksLikeLocalPath(val) {
 			m.cfg.LocalPath = val
 		} else {
@@ -227,7 +242,11 @@ func (m *initModel) View() string {
 		if m.cfg.Ref != "" {
 			b.WriteString("  ref:     " + m.cfg.Ref + "\n")
 		}
-		b.WriteString("  targets: " + strings.Join(m.cfg.Targets, ", ") + "\n\n")
+		targetsLine := strings.Join(m.cfg.Targets, ", ")
+		if targetsLine == "" {
+			targetsLine = "(none)"
+		}
+		b.WriteString("  targets: " + targetsLine + "\n\n")
 		b.WriteString(m.theme.Prompt.Render("Proceed? [Y/n]") + "\n")
 	}
 	b.WriteString("\n" + m.theme.Help.Render("ctrl+c/esc to abort") + "\n")
@@ -235,10 +254,13 @@ func (m *initModel) View() string {
 }
 
 func (m *initModel) sourceDisplay() string {
-	if m.cfg.SourceURL != "" {
+	switch {
+	case m.cfg.SourceURL != "":
 		return m.cfg.SourceURL
+	case m.cfg.LocalPath != "":
+		return m.cfg.LocalPath
 	}
-	return m.cfg.LocalPath
+	return m.cfg.LocalDir + " (in-repo, unpinned)"
 }
 
 // looksLikeLocalPath reports whether s is a filesystem path rather than a
