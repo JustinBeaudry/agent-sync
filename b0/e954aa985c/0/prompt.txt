@@ -1,0 +1,5 @@
+Update: current HEAD changed after a cleanup commit removing the dead user-sync composition probe. Please discard any work against the previous HEAD and review the current diff range 3c3eef6..HEAD with the same Task 5 spec. Key expected review-fix behavior: no cursorCompositionWouldFire/project prepare probe exists; user composition uses only discovered user scope in hierarchy/default validate paths; required non-user ancestor materialization failures block selected sync/validate before mutation; explicit --workspace keeps single-scope composition behavior. Do not edit files. Return APPROVED or CHANGES_REQUIRED only.
+
+---
+
+continue
