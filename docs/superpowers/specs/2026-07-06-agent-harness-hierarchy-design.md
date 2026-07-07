@@ -323,6 +323,29 @@ Codex sources used while shaping this design:
 - https://developers.openai.com/codex/plugins
 - https://developers.openai.com/codex/mcp
 
+## Implementation Notes
+
+The first implementation keeps the adapter protocol unchanged. Native fragments
+are core-owned operations applied by allowlisted harness surfaces after adapter
+ops are computed.
+
+Codex hooks use generated whole-file ownership for `.codex/hooks.json` rather
+than array splicing, because Codex's hook array entries do not carry an ignored
+stable id field that agent-sync can use for safe surgical replacement. This
+still honors the "no whole-file replacement of user-owned config" rule:
+unmanaged existing hook files fail closed and are not overwritten.
+
+Codex feature flags use a narrow TOML line splice for `features.<key>`. Existing
+`config.toml` content is parsed for validity and preserved byte-for-byte except
+for the requested feature key.
+
+Existing `compose.cursor-rules-from-user` remains as a transitional opt-in until
+portable asset resolution replaces it.
+
+Executable native fragments do not create agent-sync trust records in this
+slice. Codex remains responsible for project-local hook trust review and skips
+changed non-managed hooks until the user trusts them.
+
 ## Non-Goals
 
 - Do not create a broad agent-sync DSL for every target tool setting.
@@ -334,17 +357,13 @@ Codex sources used while shaping this design:
 - Do not sync or mutate ancestor scopes during descendant sync.
 - Do not support nested activation roots in the first implementation.
 
-## Open Design Decisions For Implementation Planning
+## Follow-Up Design Decisions
 
-These decisions should be resolved in the implementation plan, not by changing
-the product model above:
+These remain outside the first vertical slice:
 
-1. Whether native fragment metadata is parsed into the existing IR package or a
-   new harness package that feeds the engine alongside IR nodes.
-2. The exact CLI spelling for explaining hierarchy, likely
+1. The exact CLI spelling for explaining hierarchy, likely
    `agent-sync validate --explain` and `agent-sync status --hierarchy`.
-3. The first adapter surfaces to implement. Codex `config.toml` features and
-   `hooks.json` are the best first slice because the current docs clearly
-   define them and the existing TOML/JSON merge primitives are close.
-4. How trust records for inherited `tool-access` and `executable` fragments are
+2. Additional native allowlists for Claude, Cursor, Antigravity, Pi, and future
+   Codex surfaces once their file semantics are documented.
+3. How trust records for inherited `tool-access` and `executable` fragments are
    represented in the existing trust store.
