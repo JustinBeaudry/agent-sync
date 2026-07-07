@@ -176,6 +176,97 @@ func TestSyncCommandHierarchy(t *testing.T) {
 	mustNotExist(t, filepath.Join(home, ".claude"))
 }
 
+func TestSyncInsideActivationRootInheritsWorkspaceCodexFragmentsAndSkipsUser(t *testing.T) {
+	home := t.TempDir()
+	ws := filepath.Join(home, "ActualReality")
+	repo := filepath.Join(ws, "apps", "api")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".git"), []byte("gitdir: .git/worktrees/api\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeWS(t, home, ".agent-sync.yaml", "version: 1\nscope: user\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, home, ".agents/configs/codex/features/hooks/fragment.yaml", "id: hooks\ntarget: codex\npath: .codex/config.toml\nmerge: toml-key\nlocator: features.hooks\nvisibility: team\ninheritance: descendants\npayload: payload.toml\n")
+	writeWS(t, home, ".agents/configs/codex/features/hooks/payload.toml", "[features]\nhooks = false\n")
+
+	writeWS(t, ws, ".agent-sync.yaml", "version: 1\nscope: workspace\nactivation_root: true\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, ws, ".agents/configs/codex/features/hooks/fragment.yaml", "id: hooks\ntarget: codex\npath: .codex/config.toml\nmerge: toml-key\nlocator: features.hooks\npayload: payload.toml\n")
+	writeWS(t, ws, ".agents/configs/codex/features/hooks/payload.toml", "[features]\nhooks = true\n")
+
+	writeWS(t, repo, ".agent-sync.yaml", "version: 1\nscope: project\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, repo, ".agents/AGENTS.md", "project instructions\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
+	}
+	data, err := os.ReadFile(filepath.Join(repo, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatalf("read project codex config: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "hooks = true") {
+		t.Fatalf("project config did not inherit workspace fragment:\n%s", text)
+	}
+	if strings.Contains(text, "hooks = false") {
+		t.Fatalf("project config inherited user fragment despite activation root:\n%s", text)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("plain sync wrote user config, err=%v", err)
+	}
+}
+
+func TestSyncInsideActivationRootInheritsWorkspaceSkill(t *testing.T) {
+	home := t.TempDir()
+	ws := filepath.Join(home, "ActualReality")
+	repo := filepath.Join(ws, "apps", "api")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".git"), []byte("gitdir: .git/worktrees/api\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeWS(t, ws, ".agent-sync.yaml", "version: 1\nscope: workspace\nactivation_root: true\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, ws, ".agents/skills/code-review/SKILL.md", "workspace code review skill\n")
+
+	writeWS(t, repo, ".agent-sync.yaml", "version: 1\nscope: project\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, repo, ".agents/AGENTS.md", "project instructions\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
+	}
+	data, err := os.ReadFile(filepath.Join(repo, ".agents", "skills", "agent-sync-code-review", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read inherited skill: %v", err)
+	}
+	if !strings.Contains(string(data), "workspace code review skill") {
+		t.Fatalf("inherited skill content mismatch:\n%s", data)
+	}
+}
+
+func TestSyncCodexHooksFragmentGeneratesHooksJSON(t *testing.T) {
+	home, repo, _ := hierarchyTree(t)
+	writeWS(t, repo, ".agent-sync.yaml", "version: 1\nscope: project\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-policy/fragment.yaml", "id: pre-tool-policy\ntarget: codex\npath: .codex/hooks.json\nmerge: codex-hooks\nlocator: PreToolUse/pre-tool-policy\nsafety: executable\npayload: payload.json\n")
+	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-policy/payload.json", `{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .codex/hooks/check.py","statusMessage":"Checking Bash command"}]}`)
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
+	}
+	data, err := os.ReadFile(filepath.Join(repo, ".codex", "hooks.json"))
+	if err != nil {
+		t.Fatalf("read hooks.json: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{`"_agent_sync_generated":"codex-hooks/v1"`, `"PreToolUse"`, `"statusMessage":"Checking Bash command"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("hooks.json missing %q:\n%s", want, text)
+		}
+	}
+}
+
 // TestRunHierarchySyncContinuesPastMalformedScope drives the real
 // continue-and-report path end-to-end: a valid project-level manifest at the
 // git root and a nested directory-level scope whose manifest is malformed YAML.

@@ -186,6 +186,43 @@ func TestStatusShowsHierarchy(t *testing.T) {
 	}
 }
 
+func TestStatusHierarchyShowsWorkspaceActivationRoot(t *testing.T) {
+	home := t.TempDir()
+	ws := filepath.Join(home, "ActualReality")
+	if err := os.MkdirAll(ws, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, ws, ".agent-sync.yaml", "version: 1\nscope: workspace\nactivation_root: true\ncanonical:\n  local_dir: .agents\n")
+
+	out, _, err := runStatusHierarchy(t, ws, home, "--output", "text")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !strings.Contains(out, "workspace") || strings.Contains(out, "user (") {
+		t.Fatalf("status output = %q, want workspace and no user scope", out)
+	}
+}
+
+func TestStatusHierarchyMarksOnlySelectedWriteScopeWritable(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := runStatusHierarchy(t, nested, home, "--output", "text")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	projectLine := "project (" + repo + ") [read-only]"
+	if !strings.Contains(out, projectLine) {
+		t.Fatalf("status should mark inherited project scope read-only; missing %q in:\n%s", projectLine, out)
+	}
+	directoryLine := "directory (" + nested + ") [read-only]"
+	if strings.Contains(out, directoryLine) {
+		t.Fatalf("status should not mark selected directory scope read-only; got:\n%s", out)
+	}
+}
+
 func TestStatusHierarchyJSONListsScopes(t *testing.T) {
 	home, _, nested := hierarchyTree(t)
 	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
