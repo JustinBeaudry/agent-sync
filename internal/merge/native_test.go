@@ -74,16 +74,16 @@ func TestMergeNativeTOMLKey_RejectsNonScalarFeatureValue(t *testing.T) {
 func TestMergeNativeGeneratedJSON_RefusesUnmanagedExistingFile(t *testing.T) {
 	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[]}}`)}
 	_, _, err := mergeNative([]byte(`{"hooks":{"Stop":[]}}`), []NativeEntry{entry})
-	if err == nil || !strings.Contains(err.Error(), "unmanaged existing JSON") {
-		t.Fatalf("err = %v, want unmanaged existing JSON refusal", err)
+	if !errors.Is(err, ErrUnmanagedGeneratedFile) {
+		t.Fatalf("err = %v, want ErrUnmanagedGeneratedFile", err)
 	}
 }
 
 func TestMergeNativeGeneratedJSON_RefusesNestedMarkerOnly(t *testing.T) {
 	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[]}}`)}
 	_, _, err := mergeNative([]byte(`{"nested":{"_agent_sync_generated":"codex-hooks/v1"}}`), []NativeEntry{entry})
-	if err == nil || !strings.Contains(err.Error(), "unmanaged existing JSON") {
-		t.Fatalf("err = %v, want unmanaged existing JSON refusal", err)
+	if !errors.Is(err, ErrUnmanagedGeneratedFile) {
+		t.Fatalf("err = %v, want ErrUnmanagedGeneratedFile", err)
 	}
 }
 
