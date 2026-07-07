@@ -1,6 +1,7 @@
 package hierarchy
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -410,6 +411,9 @@ func TestDiscover_MalformedWorkspaceActivationManifestFailsClosed(t *testing.T) 
 	if !strings.Contains(err.Error(), manifest) {
 		t.Fatalf("error = %q, want include manifest path %q", err, manifest)
 	}
+	if !errors.Is(err, ErrMalformedActivationRootMarker) {
+		t.Fatalf("error = %v, want ErrMalformedActivationRootMarker", err)
+	}
 	if !strings.Contains(strings.ToLower(err.Error()), "activation-root") || !strings.Contains(strings.ToLower(err.Error()), "malformed") {
 		t.Fatalf("error = %q, want activation-root malformed wording", err)
 	}
@@ -503,6 +507,9 @@ func TestDiscover_NestedActivationRootsFailClosed(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "nested activation roots") {
 		t.Fatalf("error = %v, want nested activation roots", err)
+	}
+	if !errors.Is(err, ErrNestedActivationRoots) {
+		t.Fatalf("error = %v, want ErrNestedActivationRoots", err)
 	}
 	if !strings.Contains(err.Error(), outerManifest) || !strings.Contains(err.Error(), innerManifest) {
 		t.Fatalf("error = %q, want include %q and %q", err, outerManifest, innerManifest)

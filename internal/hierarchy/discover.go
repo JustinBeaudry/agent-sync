@@ -1,6 +1,7 @@
 package hierarchy
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,9 +21,16 @@ type manifestMarker struct {
 }
 
 var (
-	activationRootScopePattern    = regexp.MustCompile(`(?m)^\s*scope\s*:\s*(?:workspace|"workspace"|'workspace')\s*(#.*)?$`)
-	activationRootEnabledPattern  = regexp.MustCompile(`(?m)^\s*activation_root\s*:\s*[Tt][Rr][Uu][Ee]\s*(#.*)?$`)
-	activationRootMarkerMalformed = "hierarchy: malformed activation-root marker"
+	activationRootScopePattern   = regexp.MustCompile(`(?m)^\s*scope\s*:\s*(?:workspace|"workspace"|'workspace')\s*(#.*)?$`)
+	activationRootEnabledPattern = regexp.MustCompile(`(?m)^\s*activation_root\s*:\s*[Tt][Rr][Uu][Ee]\s*(#.*)?$`)
+
+	// ErrMalformedActivationRootMarker reports a manifest that looks like an
+	// activation-root marker but cannot be parsed safely.
+	ErrMalformedActivationRootMarker = errors.New("hierarchy: malformed activation-root marker")
+
+	// ErrNestedActivationRoots reports more than one activation root in the
+	// active ancestor chain.
+	ErrNestedActivationRoots = errors.New("hierarchy: nested activation roots are invalid")
 )
 
 // manifestAt reports the manifest path in dir, if a regular .agent-sync.yaml
@@ -65,7 +73,7 @@ func markerAt(dir string) (manifestMarker, string, bool, error) {
 	var marker manifestMarker
 	if err := yaml.Unmarshal(b, &marker); err != nil {
 		if looksLikeActivationRootMarker(b) {
-			return manifestMarker{}, path, true, fmt.Errorf("%s %s: %w", activationRootMarkerMalformed, path, err)
+			return manifestMarker{}, path, true, fmt.Errorf("%w %s: %w", ErrMalformedActivationRootMarker, path, err)
 		}
 		// Keep discovery behavior presence-based when the malformed manifest is
 		// not an activation-root marker.
@@ -188,7 +196,7 @@ func activationRootsBetween(cwd, home string, maxHops int) ([]Scope, error) {
 		roots[i], roots[j] = roots[j], roots[i]
 	}
 	if len(roots) > 1 {
-		return nil, fmt.Errorf("hierarchy: nested activation roots are invalid: %s and %s", roots[0].ManifestPath, roots[len(roots)-1].ManifestPath)
+		return nil, fmt.Errorf("%w: %s and %s", ErrNestedActivationRoots, roots[0].ManifestPath, roots[len(roots)-1].ManifestPath)
 	}
 	return roots, nil
 }

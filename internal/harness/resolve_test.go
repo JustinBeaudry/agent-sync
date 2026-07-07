@@ -52,6 +52,30 @@ func TestResolveNodes_ProjectShadowsWorkspaceByKindAndID(t *testing.T) {
 	}
 }
 
+func TestResolveNodes_ProjectSkillInheritedIntoDirectory(t *testing.T) {
+	projectNode := ir.Node{ID: "code-review", Kind: ir.KindSkill, Body: []byte("project skill\n")}
+	skills := map[string]ir.Skill{
+		"code-review": {
+			Node: projectNode,
+		},
+	}
+
+	outNodes, outSkills := ResolveNodes([]Layer{
+		{Scope: "project", Nodes: []ir.Node{projectNode}, Skills: skills, SourceURL: "project-source"},
+		{Scope: "directory", Nodes: nil},
+	}, "directory")
+
+	if len(outNodes) != 1 {
+		t.Fatalf("nodes = %d, want 1", len(outNodes))
+	}
+	if outNodes[0].SourceURL != "project-source" {
+		t.Fatalf("SourceURL = %q, want project-source", outNodes[0].SourceURL)
+	}
+	if _, ok := outSkills["code-review"]; !ok {
+		t.Fatalf("skill assets missing: %+v", outSkills)
+	}
+}
+
 func TestResolveNodes_UserLayerDoesNotInheritIntoProjectByDefault(t *testing.T) {
 	userNode := ir.Node{ID: "personal", Kind: ir.KindSkill, Body: []byte("personal skill\n")}
 

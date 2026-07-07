@@ -162,8 +162,46 @@ func TestSync_AppliesCodexNativeFeatureFragment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ledger.Load: %v", err)
 	}
-	if _, ok := entryForSuffix(led, ".codex/config.toml"); !ok {
+	entry, ok := entryForSuffix(led, ".codex/config.toml")
+	if !ok {
 		t.Fatalf("ledger missing config.toml entry: %+v", led.Entries)
+	}
+	if entry.Size != int64(len(data)) {
+		t.Fatalf("ledger size = %d, want %d", entry.Size, len(data))
+	}
+}
+
+func TestSync_RemovedCodexGeneratedHooksDeletesHooksJSON(t *testing.T) {
+	ws := t.TempDir()
+	req, done := codexReqOn(t, ws)
+	t.Cleanup(done)
+	req.Fragments = []harness.Fragment{{
+		ID: "pre-tool-policy", Target: "codex", Path: ".codex/hooks.json",
+		Merge: harness.MergeCodexHooks, Locator: "PreToolUse/pre-tool-policy",
+		Payload: []byte(`{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .codex/hooks/check.py"}]}`),
+	}}
+
+	if _, err := Sync(context.Background(), req); err != nil {
+		t.Fatalf("first Sync: %v", err)
+	}
+	hooksPath := filepath.Join(ws, ".codex", "hooks.json")
+	if _, err := os.Stat(hooksPath); err != nil {
+		t.Fatalf("hooks.json should exist after first sync: %v", err)
+	}
+
+	root2, err := fsroot.OpenWorkspaceRoot(ws)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	t.Cleanup(func() { _ = root2.Close() })
+	req.Root = root2
+	req.Fragments = nil
+
+	if _, err := Sync(context.Background(), req); err != nil {
+		t.Fatalf("second Sync: %v", err)
+	}
+	if _, err := os.Stat(hooksPath); !os.IsNotExist(err) {
+		t.Fatalf("hooks.json should be gone after removal, stat err = %v", err)
 	}
 }
 

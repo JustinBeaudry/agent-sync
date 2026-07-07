@@ -178,6 +178,44 @@ func fileLeafParents(outputs []contract.DeclaredOutput) []string {
 	return parents
 }
 
+func nativeOperationHasGeneratedJSON(op harness.NativeOperation) bool {
+	for _, entry := range op.Entries {
+		if entry.Kind == merge.NativeKindGeneratedJSON {
+			return true
+		}
+	}
+	return false
+}
+
+func generatedNativePath(target, p string) bool {
+	return target == "codex" && p == ".codex/hooks.json"
+}
+
+func nativeMergeOptions(op harness.NativeOperation, oldByPath map[string]ledger.Entry) merge.NativeMergeOptions {
+	_, previouslyOwned := oldByPath[op.Path]
+	return merge.NativeMergeOptions{
+		AllowExistingGeneratedJSON: nativeOperationHasGeneratedJSON(op) && previouslyOwned,
+	}
+}
+
+func generatedNativeOrphanPrefixes(target string, oldEntries []ledger.Entry, nativeOps []harness.NativeOperation) []string {
+	currentGenerated := map[string]bool{}
+	for _, op := range nativeOps {
+		if nativeOperationHasGeneratedJSON(op) {
+			currentGenerated[op.Path] = true
+		}
+	}
+
+	var prefixes []string
+	for _, entry := range oldEntries {
+		if generatedNativePath(target, entry.Path) && !currentGenerated[entry.Path] {
+			prefixes = append(prefixes, entry.Path)
+		}
+	}
+	sort.Strings(prefixes)
+	return prefixes
+}
+
 // fileLeafUnder returns p when p is a DIRECT-CHILD FILE of one of the file-leaf
 // parent dirs (i.e. "<parent>/<name>" with no further "/"), or "" otherwise.
 // Nested paths ("<parent>/sub/x.md") and the parent dir itself return "" — a
@@ -330,6 +368,7 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	// never in this set, so it is never drift-scanned, swapped, or orphaned —
 	// foreign sibling content under a shared tree is invisible to the engine.
 	effective := effectiveOwnedPrefixes(out.ownedPrefixes, out.sharedPrefixes, out.fileLeafParents, out.ops, oldLedger.Entries)
+	effective = append(effective, generatedNativeOrphanPrefixes(target, oldLedger.Entries, nativeOps)...)
 
 	// Cross-adapter co-ownership (ADV-1): a shared-subdir leaf (e.g.
 	// .agents/skills/agent-sync-<id>) may be legitimately owned by a sibling
@@ -717,12 +756,12 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 		}
 		holder := "engine:" + target
 		for _, op := range nativeOps {
-			hash, merr := merge.ApplyNativeToFile(ctx, root, reg, op.Path, op.Entries, holder)
+			hash, size, merr := merge.ApplyNativeToFile(ctx, root, reg, op.Path, op.Entries, holder, nativeMergeOptions(op, oldByPath))
 			if merr != nil {
 				return statusResult{}, fmt.Errorf("engine: native merge %s: %w", op.Path, merr)
 			}
 			bumpChanged(op.Path, hash)
-			newEntries[op.Path] = ledger.Entry{Path: op.Path, SHA256: hash, Size: int64(len(op.Entries)), EmittedAt: now}
+			newEntries[op.Path] = ledger.Entry{Path: op.Path, SHA256: hash, Size: size, EmittedAt: now}
 		}
 	}
 

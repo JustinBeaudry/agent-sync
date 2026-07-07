@@ -52,7 +52,12 @@ func portableLayerInherits(scope, targetScope string) bool {
 	if scope == targetScope {
 		return true
 	}
-	return scope == "workspace"
+	switch scope {
+	case "workspace", "project", "directory", "global":
+		return true
+	default:
+		return false
+	}
 }
 
 func ResolveFragments(layers []Layer, targetScope string) []Fragment {

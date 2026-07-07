@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -51,6 +52,25 @@ func TestMergeNativeTOMLKey_InsertsIntoFeaturesTableWithInlineComment(t *testing
 	}
 }
 
+func TestMergeNativeTOMLKey_RejectsNonScalarFeatureValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{name: "inline table", payload: "[features]\nhooks = { enabled = true }\n"},
+		{name: "array", payload: "[features]\nhooks = [true]\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := NativeEntry{Kind: NativeKindTOMLKey, Locator: "features.hooks", Content: []byte(tc.payload)}
+			_, _, err := mergeNative(nil, []NativeEntry{entry})
+			if !errors.Is(err, ErrMalformedToolOwnedFile) {
+				t.Fatalf("err = %v, want ErrMalformedToolOwnedFile", err)
+			}
+		})
+	}
+}
+
 func TestMergeNativeGeneratedJSON_RefusesUnmanagedExistingFile(t *testing.T) {
 	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[]}}`)}
 	_, _, err := mergeNative([]byte(`{"hooks":{"Stop":[]}}`), []NativeEntry{entry})
@@ -67,13 +87,24 @@ func TestMergeNativeGeneratedJSON_RefusesNestedMarkerOnly(t *testing.T) {
 	}
 }
 
+func TestMergeNativeGeneratedJSON_RendersCodexSchemaOnly(t *testing.T) {
+	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[]}}`)}
+	out, _, err := mergeNative(nil, []NativeEntry{entry})
+	if err != nil {
+		t.Fatalf("mergeNative create: %v", err)
+	}
+	if strings.Contains(string(out), "_agent_sync_generated") {
+		t.Fatalf("generated JSON should not include agent-sync marker:\n%s", out)
+	}
+}
+
 func TestMergeNativeGeneratedJSON_AllowsIdempotentManagedRewrite(t *testing.T) {
 	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[{"command":"printf '<done>' && echo ok"}]}}`)}
 	out, _, err := mergeNative(nil, []NativeEntry{entry})
 	if err != nil {
 		t.Fatalf("mergeNative create: %v", err)
 	}
-	out2, _, err := mergeNative(out, []NativeEntry{entry})
+	out2, _, err := mergeNativeWithOptions(out, []NativeEntry{entry}, NativeMergeOptions{AllowExistingGeneratedJSON: true})
 	if err != nil {
 		t.Fatalf("mergeNative rewrite: %v", err)
 	}

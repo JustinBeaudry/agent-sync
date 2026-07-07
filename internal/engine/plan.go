@@ -106,12 +106,13 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 	}
 
 	nativeOps, nativeWarnings := harness.NativeOperationsForTarget(req.Fragments, target)
+	effective = append(effective, generatedNativeOrphanPrefixes(target, old.Entries, nativeOps)...)
 	for _, w := range nativeWarnings {
 		change.Warnings = append(change.Warnings, w.Message)
 	}
 	nativeSeen := map[string]bool{}
 	for _, op := range nativeOps {
-		exists, changed, derr := merge.DryNativeMerge(req.Root, op.Path, op.Entries)
+		exists, changed, derr := merge.DryNativeMerge(req.Root, op.Path, op.Entries, nativeMergeOptions(op, oldByPath))
 		if derr != nil {
 			change.Error = derr.Error()
 			return change

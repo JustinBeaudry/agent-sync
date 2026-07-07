@@ -111,11 +111,9 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	scopes = selectWriteScopes(scopes, false)
 
 	preparedLayers := make([]preparedLayer, 0, len(scopes))
-	layerErrors := make(map[string]error)
 	for _, sc := range scopes {
 		pl, lerr := materializeLayerReadOnly(ctx, rc, sc, now)
 		if lerr != nil {
-			layerErrors[sc.ManifestPath] = lerr
 			if rc != nil && rc.Logger != nil {
 				rc.Logger.Warn("harness: cannot materialize scope", "path", sc.ManifestPath, "err", lerr)
 			}
@@ -133,9 +131,6 @@ func prepareEngine(ctx context.Context, rc *runtimeContext, now time.Time) (prep
 	}
 	if targetScope.ManifestPath == "" && targetScope.Root == "" {
 		return prepared{}, fmt.Errorf("prepare engine: no scope to sync from hierarchy discovery")
-	}
-	if failed, ferr, ok := requiredAncestorLayerError(targetScope, scopes, layerErrors); ok {
-		return prepared{}, fmt.Errorf("materialize inherited layer %s: %w", failed.ManifestPath, ferr)
 	}
 
 	// Single write scope still needs a full prepare for adapter discovery and

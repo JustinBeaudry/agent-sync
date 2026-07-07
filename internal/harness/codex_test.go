@@ -36,8 +36,8 @@ func TestCodexNativeOperations_HooksJSON(t *testing.T) {
 	if err := json.Unmarshal(ops[0].Entries[0].Content, &doc); err != nil {
 		t.Fatalf("unmarshal generated hooks: %v", err)
 	}
-	if doc["_agent_sync_generated"] != "codex-hooks/v1" {
-		t.Fatalf("generated marker = %#v", doc["_agent_sync_generated"])
+	if _, ok := doc["_agent_sync_generated"]; ok {
+		t.Fatalf("generated hooks should not include agent-sync marker: %#v", doc)
 	}
 	if _, ok := doc["hooks"].(map[string]any)["PreToolUse"]; !ok {
 		t.Fatalf("generated hooks missing PreToolUse: %#v", doc)

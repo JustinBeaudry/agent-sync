@@ -769,7 +769,8 @@ In `prepareEngine`, call:
 
 ```go
 actualScope := requestScope(prep.Manifest, "project")
-applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, actualScope, home, now)
+user, ok := hierarchy.UserScope(home)
+applyCursorComposition(ctx, rc, &prep.Request, prep.Manifest, actualScope, user, ok, now)
 ```
 
 In `runHierarchySync`, call `applyCursorComposition` with `req.Scope` instead of `sc.Level.String()`.
@@ -1799,17 +1800,15 @@ import (
 	"fmt"
 )
 
-var generatedJSONMarker = []byte("\"_agent_sync_generated\"")
-
-func mergeNativeGeneratedJSON(existing []byte, e NativeEntry) ([]byte, error) {
+func mergeNativeGeneratedJSON(existing []byte, e NativeEntry, allowExisting bool) ([]byte, error) {
 	if e.Locator != "codex-hooks" {
 		return nil, fmt.Errorf("merge: unsupported generated JSON locator %q", e.Locator)
 	}
 	if !json.Valid(e.Content) {
 		return nil, fmt.Errorf("%w: generated JSON payload is invalid", ErrMalformedToolOwnedFile)
 	}
-	if !isBlank(existing) && !bytes.Contains(existing, generatedJSONMarker) {
-		return nil, fmt.Errorf("merge: unmanaged existing JSON at generated native path")
+	if !isBlank(existing) && !allowExisting {
+		return nil, ErrUnmanagedGeneratedFile
 	}
 	return append([]byte(nil), e.Content...), nil
 }
@@ -1820,38 +1819,38 @@ func mergeNativeGeneratedJSON(existing []byte, e NativeEntry) ([]byte, error) {
 Extend `internal/merge/native.go`:
 
 ```go
-func ApplyNativeToFile(ctx context.Context, root *fsroot.Root, reg *locks.FileLockRegistry, relPath string, entries []NativeEntry, holder string) (string, error) {
+func ApplyNativeToFile(ctx context.Context, root *fsroot.Root, reg *locks.FileLockRegistry, relPath string, entries []NativeEntry, holder string, opts NativeMergeOptions) (string, int64, error) {
 	abs := filepath.Join(root.Path(), filepath.FromSlash(relPath))
 	release, err := reg.Acquire(ctx, abs, holder, locks.FileLockOpts{})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer func() { _ = release() }()
 	existing, err := readExisting(root, relPath)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	merged, hash, err := mergeNative(existing, entries)
+	merged, hash, err := mergeNativeWithOptions(existing, entries, opts)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	if dir := slashDir(relPath); dir != "" {
 		if mkErr := root.Inner().MkdirAll(dir, 0o755); mkErr != nil {
-			return "", fmt.Errorf("merge: mkdir %s: %w", dir, mkErr)
+			return "", 0, fmt.Errorf("merge: mkdir %s: %w", dir, mkErr)
 		}
 	}
 	if err := root.StagedWrite(relPath, merged, 0o644); err != nil {
-		return "", fmt.Errorf("merge: write native %s: %w", relPath, err)
+		return "", 0, fmt.Errorf("merge: write native %s: %w", relPath, err)
 	}
-	return hash, nil
+	return hash, int64(len(merged)), nil
 }
 
-func DryNativeMerge(root *fsroot.Root, relPath string, entries []NativeEntry) (exists, changed bool, err error) {
+func DryNativeMerge(root *fsroot.Root, relPath string, entries []NativeEntry, opts NativeMergeOptions) (exists, changed bool, err error) {
 	existing, exists, err := readExistingForDry(root, relPath)
 	if err != nil {
 		return false, false, err
 	}
-	merged, _, err := mergeNative(existing, entries)
+	merged, _, err := mergeNativeWithOptions(existing, entries, opts)
 	if err != nil {
 		return exists, false, err
 	}
@@ -1930,8 +1929,8 @@ func TestCodexNativeOperations_HooksJSON(t *testing.T) {
 	if err := json.Unmarshal(ops[0].Entries[0].Content, &doc); err != nil {
 		t.Fatalf("unmarshal generated hooks: %v", err)
 	}
-	if doc["_agent_sync_generated"] != "codex-hooks/v1" {
-		t.Fatalf("generated marker = %#v", doc["_agent_sync_generated"])
+	if _, ok := doc["_agent_sync_generated"]; ok {
+		t.Fatalf("generated hooks should not include agent-sync marker: %#v", doc)
 	}
 	if _, ok := doc["hooks"].(map[string]any)["PreToolUse"]; !ok {
 		t.Fatalf("generated hooks missing PreToolUse: %#v", doc)
@@ -2069,8 +2068,7 @@ func renderCodexHooks(byEvent map[string][]json.RawMessage) ([]byte, error) {
 		hooks[event] = arr
 	}
 	return json.MarshalIndent(map[string]any{
-		"_agent_sync_generated": "codex-hooks/v1",
-		"hooks":                 hooks,
+		"hooks": hooks,
 	}, "", "  ")
 }
 ```
@@ -2202,12 +2200,12 @@ if len(nativeOps) > 0 {
 	}
 	holder := "engine:" + target
 	for _, op := range nativeOps {
-		hash, merr := merge.ApplyNativeToFile(ctx, root, reg, op.Path, op.Entries, holder)
+		hash, size, merr := merge.ApplyNativeToFile(ctx, root, reg, op.Path, op.Entries, holder, nativeMergeOptions(op, oldByPath))
 		if merr != nil {
 			return statusResult{}, fmt.Errorf("engine: native merge %s: %w", op.Path, merr)
 		}
 		bumpChanged(op.Path, hash)
-		newEntries[op.Path] = ledger.Entry{Path: op.Path, SHA256: hash, Size: int64(len(op.Entries)), EmittedAt: now}
+		newEntries[op.Path] = ledger.Entry{Path: op.Path, SHA256: hash, Size: size, EmittedAt: now}
 	}
 }
 ```
@@ -2240,7 +2238,7 @@ for _, w := range nativeWarnings {
 }
 nativeSeen := map[string]bool{}
 for _, op := range nativeOps {
-	exists, changed, derr := merge.DryNativeMerge(req.Root, op.Path, op.Entries)
+	exists, changed, derr := merge.DryNativeMerge(req.Root, op.Path, op.Entries, nativeMergeOptions(op, oldByPath))
 	if derr != nil {
 		change.Error = derr.Error()
 		return change
@@ -2393,10 +2391,13 @@ func TestSyncCodexHooksFragmentGeneratesHooksJSON(t *testing.T) {
 		t.Fatalf("read hooks.json: %v", err)
 	}
 	text := string(data)
-	for _, want := range []string{`"_agent_sync_generated": "codex-hooks/v1"`, `"PreToolUse"`, `"statusMessage": "Checking Bash command"`} {
+	for _, want := range []string{`"hooks": {`, `"PreToolUse"`, `"statusMessage": "Checking Bash command"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("hooks.json missing %q:\n%s", want, text)
 		}
+	}
+	if strings.Contains(text, "_agent_sync_generated") {
+		t.Fatalf("hooks.json should not include agent-sync marker:\n%s", text)
 	}
 }
 ```
@@ -2523,7 +2524,7 @@ payload: payload.json
 }
 ```
 
-agent-sync generates `.codex/hooks.json` as an agent-sync-owned file. If an unmanaged `.codex/hooks.json` already exists, sync fails closed until the user moves or deletes that file. Codex remains responsible for trusting project-local hooks.
+agent-sync generates `.codex/hooks.json` as an agent-sync-owned file whose ownership is tracked by the ledger, not by private JSON keys. If an unmanaged `.codex/hooks.json` already exists, sync fails closed until the user moves or deletes that file. Codex remains responsible for trusting project-local hooks.
 ```
 ```
 
@@ -2536,7 +2537,7 @@ In `docs/superpowers/specs/2026-07-06-agent-harness-hierarchy-design.md`, add a 
 
 The first implementation keeps adapter protocol unchanged. Native fragments are core-owned operations applied by allowlisted harness surfaces after adapter ops are computed.
 
-Codex hooks use generated whole-file ownership for `.codex/hooks.json` rather than array splicing, because Codex's hook array entries do not carry an ignored stable id field that agent-sync can use for safe surgical replacement. This still honors the "no whole-file replacement of user-owned config" rule: unmanaged existing hook files fail closed and are not overwritten.
+Codex hooks use ledger-owned generated whole-file ownership for `.codex/hooks.json` rather than array splicing, because Codex's hook array entries do not carry an ignored stable id field that agent-sync can use for safe surgical replacement. This still honors the "no whole-file replacement of user-owned config" rule: unmanaged existing hook files fail closed and are not overwritten, and generated JSON keeps Codex's documented top-level schema.
 
 Existing `compose.cursor-rules-from-user` remains as a transitional opt-in until portable asset resolution replaces it.
 ```

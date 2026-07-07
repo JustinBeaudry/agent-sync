@@ -145,6 +145,41 @@ func TestRunHierarchySyncEmitsClosestScope(t *testing.T) {
 	}
 }
 
+func TestRunHierarchySyncContinuesWhenAncestorLayerCannotMaterialize(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte("version: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rc := newTestRuntime()
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+
+	outcomes, _, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{IncludeUser: false, EngineOpts: engine.Options{
+			Mode:   report.ModeAtomic,
+			Now:    func() time.Time { return now },
+			Logger: rc.Logger,
+		}},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("outcomes = %d, want 1: %+v", len(outcomes), outcomes)
+	}
+	if outcomes[0].Err != nil {
+		t.Fatalf("descendant sync should continue despite ancestor materialize error: %v", outcomes[0].Err)
+	}
+	data, err := os.ReadFile(filepath.Join(nested, ".claude", "skills", "agent-sync-api-skill", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read synced descendant skill: %v", err)
+	}
+	if !strings.Contains(string(data), "api skill body") {
+		t.Fatalf("descendant skill missing body:\n%s", data)
+	}
+}
+
 // runSyncHierarchy drives the real sync cobra command on the hierarchy path:
 // it sets cwd (so discovery walks from there), swaps the home seam to keep the
 // suite hermetic, and deliberately omits --workspace so discovery runs.
@@ -260,10 +295,13 @@ func TestSyncCodexHooksFragmentGeneratesHooksJSON(t *testing.T) {
 		t.Fatalf("read hooks.json: %v", err)
 	}
 	text := string(data)
-	for _, want := range []string{`"_agent_sync_generated": "codex-hooks/v1"`, `"PreToolUse"`, `"statusMessage": "Checking Bash command"`} {
+	for _, want := range []string{`"hooks": {`, `"PreToolUse"`, `"statusMessage": "Checking Bash command"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("hooks.json missing %q:\n%s", want, text)
 		}
+	}
+	if strings.Contains(text, "_agent_sync_generated") {
+		t.Fatalf("hooks.json should not include agent-sync marker:\n%s", text)
 	}
 }
 
@@ -428,7 +466,7 @@ func TestApplyResolvedLayersKeepsCurrentScopeWhenReadOnlyLayerMissing(t *testing
 	}
 }
 
-func TestRunHierarchySync_BlocksWhenInheritedWorkspaceLayerFails(t *testing.T) {
+func TestRunHierarchySync_ContinuesWhenInheritedWorkspaceLayerFails(t *testing.T) {
 	home := t.TempDir()
 	workspaceRoot := filepath.Join(home, "ActualReality")
 	repo := filepath.Join(workspaceRoot, "repo")
@@ -477,10 +515,10 @@ func TestRunHierarchySync_BlocksWhenInheritedWorkspaceLayerFails(t *testing.T) {
 	if len(outcomes) != 1 {
 		t.Fatalf("outcomes = %d, want 1", len(outcomes))
 	}
-	if outcomes[0].Err == nil {
-		t.Fatal("expected selected scope to fail when inherited workspace layer cannot materialize")
+	if outcomes[0].Err != nil {
+		t.Fatalf("selected scope should continue when inherited workspace layer cannot materialize: %v", outcomes[0].Err)
 	}
-	mustExist(t, inherited)
+	mustNotExist(t, inherited)
 }
 
 // TestHierarchySyncEmitsCoverageWarning checks that a directory-level scope

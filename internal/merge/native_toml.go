@@ -3,6 +3,7 @@ package merge
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -39,14 +40,24 @@ func mergeNativeTOMLKey(existing []byte, e NativeEntry) ([]byte, error) {
 }
 
 func renderNativeTOMLValue(v any) (string, error) {
+	if v == nil {
+		return "", fmt.Errorf("%w: native TOML payload must render as a scalar value", ErrMalformedToolOwnedFile)
+	}
+	switch reflect.ValueOf(v).Kind() {
+	case reflect.Map, reflect.Slice, reflect.Array:
+		return "", fmt.Errorf("%w: native TOML payload must render as a scalar value", ErrMalformedToolOwnedFile)
+	}
 	var b bytes.Buffer
 	if err := toml.NewEncoder(&b).Encode(map[string]any{"v": v}); err != nil {
 		return "", fmt.Errorf("merge: render native TOML value: %w", err)
 	}
 	line := strings.TrimSpace(b.String())
+	if strings.Contains(line, "\n") {
+		return "", fmt.Errorf("%w: native TOML payload must render as a scalar value", ErrMalformedToolOwnedFile)
+	}
 	_, value, ok := strings.Cut(line, "=")
 	if !ok {
-		return "", fmt.Errorf("merge: render native TOML value produced %q", line)
+		return "", fmt.Errorf("%w: native TOML payload must render as a scalar value", ErrMalformedToolOwnedFile)
 	}
 	return strings.TrimSpace(value), nil
 }

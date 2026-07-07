@@ -96,10 +96,11 @@ payload: payload.json
 }
 ```
 
-agent-sync generates `.codex/hooks.json` as an agent-sync-owned file. If an
-unmanaged `.codex/hooks.json` already exists, sync fails closed until the user
-moves or deletes that file. Codex remains responsible for project-local hook
-trust review; agent-sync writes configuration, it does not bypass Codex's
+agent-sync generates `.codex/hooks.json` as an agent-sync-owned file, with
+ownership tracked in the target ledger rather than private top-level JSON keys.
+If an unmanaged `.codex/hooks.json` already exists, sync fails closed until the
+user moves or deletes that file. Codex remains responsible for project-local
+hook trust review; agent-sync writes configuration, it does not bypass Codex's
 `/hooks` trust flow.
 
 ## User scope (`sync --user`)

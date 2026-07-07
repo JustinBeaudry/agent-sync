@@ -90,8 +90,7 @@ func renderCodexHooks(byEvent map[string][]json.RawMessage) ([]byte, error) {
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(map[string]any{
-		"_agent_sync_generated": "codex-hooks/v1",
-		"hooks":                 hooks,
+		"hooks": hooks,
 	}); err != nil {
 		return nil, err
 	}

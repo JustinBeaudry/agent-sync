@@ -72,11 +72,9 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 	scopes = selectWriteScopes(scopes, opts.IncludeUser)
 
 	preparedLayers := make([]preparedLayer, 0, len(scopes))
-	layerErrors := make(map[string]error)
 	for _, sc := range scopes {
 		pl, lerr := materializeLayerReadOnly(ctx, rc, sc, now)
 		if lerr != nil {
-			layerErrors[sc.ManifestPath] = lerr
 			if rc != nil && rc.Logger != nil {
 				rc.Logger.Warn("harness: cannot materialize scope", "path", sc.ManifestPath, "err", lerr)
 			}
@@ -104,10 +102,6 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		// coverage.Analyze / engine.Sync.
 		out := func() scopeOutcome {
 			out := scopeOutcome{Scope: sc}
-			if failed, ferr, ok := requiredAncestorLayerError(sc, scopes, layerErrors); ok {
-				out.Err = fmt.Errorf("materialize inherited layer %s: %w", failed.ManifestPath, ferr)
-				return out
-			}
 			prep, perr := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now)
 			if perr != nil {
 				out.Err = perr
@@ -216,21 +210,6 @@ func hierarchyUserScope(scopes []hierarchy.Scope) (hierarchy.Scope, bool) {
 		}
 	}
 	return hierarchy.Scope{}, false
-}
-
-func requiredAncestorLayerError(sc hierarchy.Scope, scopes []hierarchy.Scope, layerErrors map[string]error) (hierarchy.Scope, error, bool) {
-	for _, ancestor := range scopes {
-		if ancestor.ManifestPath == sc.ManifestPath {
-			return hierarchy.Scope{}, nil, false
-		}
-		if ancestor.Level == hierarchy.LevelUser {
-			continue
-		}
-		if err, ok := layerErrors[ancestor.ManifestPath]; ok {
-			return ancestor, err, true
-		}
-	}
-	return hierarchy.Scope{}, nil, false
 }
 
 func layersForScope(sc hierarchy.Scope, scopes []hierarchy.Scope, preparedLayers []preparedLayer, current harness.Layer) []harness.Layer {
