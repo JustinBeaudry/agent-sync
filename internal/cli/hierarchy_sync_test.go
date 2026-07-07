@@ -286,6 +286,8 @@ func TestSyncCodexHooksFragmentGeneratesHooksJSON(t *testing.T) {
 	writeWS(t, repo, ".agent-sync.yaml", "version: 1\nscope: project\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
 	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-policy/fragment.yaml", "id: pre-tool-policy\ntarget: codex\npath: .codex/hooks.json\nmerge: codex-hooks\nlocator: PreToolUse/pre-tool-policy\nsafety: executable\npayload: payload.json\n")
 	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-policy/payload.json", `{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .codex/hooks/check.py","statusMessage":"Checking Bash command"}]}`)
+	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-edit/fragment.yaml", "id: pre-tool-edit\ntarget: codex\npath: .codex/hooks.json\nmerge: codex-hooks\nlocator: PreToolUse/pre-tool-edit\nsafety: executable\npayload: payload.json\n")
+	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-edit/payload.json", `{"matcher":"Edit","hooks":[{"type":"command","command":"python3 .codex/hooks/check_edit.py","statusMessage":"Checking Edit command"}]}`)
 
 	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
 		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
@@ -295,10 +297,19 @@ func TestSyncCodexHooksFragmentGeneratesHooksJSON(t *testing.T) {
 		t.Fatalf("read hooks.json: %v", err)
 	}
 	text := string(data)
-	for _, want := range []string{`"hooks": {`, `"PreToolUse"`, `"statusMessage": "Checking Bash command"`} {
+	for _, want := range []string{`"hooks": {`, `"PreToolUse"`, `"statusMessage": "Checking Bash command"`, `"statusMessage": "Checking Edit command"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("hooks.json missing %q:\n%s", want, text)
 		}
+	}
+	var doc struct {
+		Hooks map[string][]json.RawMessage `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse hooks.json: %v\n%s", err, text)
+	}
+	if got := len(doc.Hooks["PreToolUse"]); got != 2 {
+		t.Fatalf("PreToolUse hooks = %d, want 2:\n%s", got, text)
 	}
 	if strings.Contains(text, "_agent_sync_generated") {
 		t.Fatalf("hooks.json should not include agent-sync marker:\n%s", text)
