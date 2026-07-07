@@ -3,21 +3,29 @@
   "checkpoint_id": "210ef6b4de5a",
   "strategy": "manual-commit",
   "branch": "feat/agent-harness-hierarchy",
-  "checkpoints_count": 2,
-  "files_touched": null,
+  "checkpoints_count": 3,
+  "files_touched": [
+    "internal/engine/plan.go"
+  ],
   "sessions": [
     {
       "metadata": "/21/0ef6b4de5a/0/metadata.json",
       "transcript": "/21/0ef6b4de5a/0/full.jsonl",
       "content_hash": "/21/0ef6b4de5a/0/content_hash.txt",
       "prompt": "/21/0ef6b4de5a/0/prompt.txt"
+    },
+    {
+      "metadata": "/21/0ef6b4de5a/1/metadata.json",
+      "transcript": "/21/0ef6b4de5a/1/full.jsonl",
+      "content_hash": "/21/0ef6b4de5a/1/content_hash.txt",
+      "prompt": "/21/0ef6b4de5a/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 3066403,
-    "cache_creation_tokens": 0,
-    "cache_read_tokens": 49768448,
-    "output_tokens": 180109,
-    "api_call_count": 387
+    "input_tokens": 3141224,
+    "cache_creation_tokens": 2538216,
+    "cache_read_tokens": 230996522,
+    "output_tokens": 525658,
+    "api_call_count": 752
   }
 }
