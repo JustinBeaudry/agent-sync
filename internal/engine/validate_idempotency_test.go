@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/ir"
 )
 
@@ -43,6 +44,31 @@ func TestPlan_ToolOwnedIdempotent_NoDriftAfterCleanSync(t *testing.T) {
 		if len(tc.WouldUpdate) != 0 || len(tc.WouldCreate) != 0 || len(tc.OutOfBand) != 0 {
 			t.Errorf("target %q: unexpected change set after clean sync: %+v", tc.Target, tc)
 		}
+	}
+}
+
+func TestPlan_NativeFragmentsIdempotentAfterSync(t *testing.T) {
+	ws := t.TempDir()
+	req1, done1 := codexReqOn(t, ws)
+	t.Cleanup(done1)
+	req1.Fragments = []harness.Fragment{{
+		ID: "hooks", Target: "codex", Path: ".codex/config.toml",
+		Merge: harness.MergeTOMLKey, Locator: "features.hooks",
+		Payload: []byte("[features]\nhooks = true\n"),
+	}}
+	if _, err := Sync(context.Background(), req1); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	req2, done2 := codexReqOn(t, ws)
+	t.Cleanup(done2)
+	req2.Fragments = req1.Fragments
+	plan, err := Plan(context.Background(), req2)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if plan.DriftDetected {
+		t.Fatalf("plan drift after clean sync: %+v", plan)
 	}
 }
 

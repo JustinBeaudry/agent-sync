@@ -14,6 +14,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/adapter"
 	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/ledger"
 	"github.com/agent-sync/agent-sync/internal/locks"
 	"github.com/agent-sync/agent-sync/internal/merge"
@@ -317,6 +318,10 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 	out, err := runAdapter(ctx, req, target)
 	if err != nil {
 		return statusResult{}, err
+	}
+	nativeOps, nativeWarnings := harness.NativeOperationsForTarget(req.Fragments, target)
+	for _, w := range nativeWarnings {
+		out.warnings = append(out.warnings, w.Message)
 	}
 
 	// effective is the owned set the rest of the pipeline operates on: every
@@ -674,11 +679,24 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 		}
 	}
 
-	// Tool-owned merges, in place.
-	if len(toolOwned) > 0 {
+	var fileLocks *locks.FileLockRegistry
+	getFileLocks := func() (*locks.FileLockRegistry, error) {
+		if fileLocks != nil {
+			return fileLocks, nil
+		}
 		reg, regErr := locks.NewFileLockRegistry(root)
 		if regErr != nil {
-			return statusResult{}, fmt.Errorf("engine: file lock registry: %w", regErr)
+			return nil, fmt.Errorf("engine: file lock registry: %w", regErr)
+		}
+		fileLocks = reg
+		return fileLocks, nil
+	}
+
+	// Tool-owned merges, in place.
+	if len(toolOwned) > 0 {
+		reg, regErr := getFileLocks()
+		if regErr != nil {
+			return statusResult{}, regErr
 		}
 		holder := "engine:" + target
 		for _, o := range toolOwned {
@@ -689,6 +707,22 @@ func applyTarget(ctx context.Context, req Request, target string, now time.Time)
 			}
 			bumpChanged(o.Path, sliceHash)
 			newEntries[o.Path] = ledger.Entry{Path: o.Path, SHA256: sliceHash, Size: int64(len(o.Content)), EmittedAt: now}
+		}
+	}
+
+	if len(nativeOps) > 0 {
+		reg, regErr := getFileLocks()
+		if regErr != nil {
+			return statusResult{}, regErr
+		}
+		holder := "engine:" + target
+		for _, op := range nativeOps {
+			hash, merr := merge.ApplyNativeToFile(ctx, root, reg, op.Path, op.Entries, holder)
+			if merr != nil {
+				return statusResult{}, fmt.Errorf("engine: native merge %s: %w", op.Path, merr)
+			}
+			bumpChanged(op.Path, hash)
+			newEntries[op.Path] = ledger.Entry{Path: op.Path, SHA256: hash, Size: int64(len(op.Entries)), EmittedAt: now}
 		}
 	}
 

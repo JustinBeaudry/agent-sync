@@ -4,12 +4,15 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/agent-sync/agent-sync/internal/adapter"
 	claudeadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/claude"
+	codexadapter "github.com/agent-sync/agent-sync/internal/adapter/bundled/codex"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/ledger"
 	"github.com/agent-sync/agent-sync/internal/report"
@@ -60,6 +63,29 @@ func newClaudeRequest(t *testing.T, nodes []ir.Node) (Request, string, func()) {
 	return req, ws, func() { _ = root.Close() }
 }
 
+func codexReqOn(t *testing.T, ws string) (Request, func()) {
+	t.Helper()
+	root, err := fsroot.OpenWorkspaceRoot(ws)
+	if err != nil {
+		t.Fatalf("OpenWorkspaceRoot: %v", err)
+	}
+	reg, err := adapter.DiscoverAdapters(context.Background(), adapter.DiscoverOptions{
+		Bundled: []*adapter.BundledAdapter{codexadapter.Bundled()},
+	})
+	if err != nil {
+		t.Fatalf("DiscoverAdapters: %v", err)
+	}
+	req := Request{
+		Root:          root,
+		WorkspacePath: ws,
+		Registry:      reg,
+		Targets:       []string{"codex"},
+		Commit:        testCommit,
+		Options:       Options{Now: fixedNow()},
+	}
+	return req, func() { _ = root.Close() }
+}
+
 func TestSync_FirstSyncWritesRuleFileAndLedger(t *testing.T) {
 	req, ws, done := newClaudeRequest(t, []ir.Node{
 		{ID: "no-fri", Kind: ir.KindRule, Version: 1, Body: []byte("No PRs on Friday.")},
@@ -108,6 +134,36 @@ func TestSync_FirstSyncWritesRuleFileAndLedger(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("ledger missing rule path; entries: %+v", led.Entries)
+	}
+}
+
+func TestSync_AppliesCodexNativeFeatureFragment(t *testing.T) {
+	ws := t.TempDir()
+	req, done := codexReqOn(t, ws)
+	defer done()
+	req.Fragments = []harness.Fragment{{
+		ID: "hooks", Target: "codex", Path: ".codex/config.toml",
+		Merge: harness.MergeTOMLKey, Locator: "features.hooks",
+		Payload: []byte("[features]\nhooks = true\n"),
+	}}
+
+	summary, err := Sync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if summary.Outcome.ExitCode != 0 {
+		t.Fatalf("exit = %d summary=%+v", summary.Outcome.ExitCode, summary)
+	}
+	data := readFileString(t, filepath.Join(ws, ".codex", "config.toml"))
+	if !strings.Contains(data, "[features]\nhooks = true\n") {
+		t.Fatalf("config.toml missing hooks feature:\n%s", data)
+	}
+	led, err := ledger.Load(req.Root, "codex")
+	if err != nil {
+		t.Fatalf("ledger.Load: %v", err)
+	}
+	if _, ok := entryForSuffix(led, ".codex/config.toml"); !ok {
+		t.Fatalf("ledger missing config.toml entry: %+v", led.Entries)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/agent-sync/agent-sync/internal/adapter/contract"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/ledger"
 	"github.com/agent-sync/agent-sync/internal/merge"
 	"github.com/agent-sync/agent-sync/pkg/adapterkit"
@@ -102,6 +103,29 @@ func planTarget(ctx context.Context, req Request, target string, _ time.Time) Ta
 				toolOwnedSeen[o.Path] = true
 			}
 		}
+	}
+
+	nativeOps, nativeWarnings := harness.NativeOperationsForTarget(req.Fragments, target)
+	for _, w := range nativeWarnings {
+		change.Warnings = append(change.Warnings, w.Message)
+	}
+	nativeSeen := map[string]bool{}
+	for _, op := range nativeOps {
+		exists, changed, derr := merge.DryNativeMerge(req.Root, op.Path, op.Entries)
+		if derr != nil {
+			change.Error = derr.Error()
+			return change
+		}
+		if nativeSeen[op.Path] {
+			continue
+		}
+		switch {
+		case !exists:
+			change.WouldCreate = append(change.WouldCreate, op.Path)
+		case changed:
+			change.WouldUpdate = append(change.WouldUpdate, op.Path)
+		}
+		nativeSeen[op.Path] = true
 	}
 
 	for p, want := range desired {
