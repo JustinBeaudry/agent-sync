@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "01053fbba5e6",
+  "session_id": "019f3863-aa77-7f42-9591-fc2a5d7de153",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-07T05:34:17.645975Z",
+  "branch": "feat/agent-harness-hierarchy",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "a409fc61fd89",
+  "token_usage": {
+    "input_tokens": 4175815,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 84326144,
+    "output_tokens": 256043,
+    "api_call_count": 592
+  },
+  "session_metrics": {
+    "turn_count": 25
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
