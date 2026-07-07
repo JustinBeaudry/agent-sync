@@ -210,7 +210,7 @@ func cleanPayloadPath(base, rel string) (string, error) {
 	}
 	for _, seg := range strings.Split(rel, "/") {
 		if seg == ".." {
-			return "", fmt.Errorf("must not contain ..")
+			return "", fmt.Errorf("must not contain parent traversal")
 		}
 	}
 	joined := path.Clean(path.Join(base, rel))

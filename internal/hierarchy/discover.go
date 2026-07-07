@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/goccy/go-yaml"
+
 	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/workspace"
-	"github.com/goccy/go-yaml"
 )
 
 // manifestMarker keeps discovery light enough to read activation-root hints from

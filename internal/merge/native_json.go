@@ -52,7 +52,7 @@ func isManagedGeneratedJSON(existing []byte) (bool, error) {
 	}
 	var marker string
 	if err := json.Unmarshal(raw, &marker); err != nil {
-		return false, nil
+		return false, fmt.Errorf("%w: existing generated JSON marker is invalid", ErrMalformedToolOwnedFile)
 	}
 	return marker == generatedJSONMarkerString, nil
 }
