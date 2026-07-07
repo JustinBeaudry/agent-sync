@@ -324,7 +324,8 @@ func syncAfterRepin(cmd *cobra.Command, rc *runtimeContext, scopeRoot, manifestP
 		RunLockHeld: true, // we already hold the workspace run lock
 	}
 	if home, herr := resolveHome(); herr == nil {
-		applyCursorComposition(cmd.Context(), rc, &req, prep.Manifest, scope, home, now)
+		user, ok := hierarchy.UserScope(home)
+		applyCursorComposition(cmd.Context(), rc, &req, prep.Manifest, req.Scope, user, ok, now)
 	}
 	summary, err := engine.Sync(cmd.Context(), req)
 	if err != nil {

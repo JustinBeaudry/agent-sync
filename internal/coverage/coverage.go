@@ -88,9 +88,9 @@ func known(target string) bool {
 
 // Analyze returns the coverage warnings for emitting the given kinds to the
 // given targets at the given level. Results are deterministically ordered by
-// target then kind. The project level never warns (every tool reads its
-// workspace-root config); the directory level warns for kinds not read from a
-// nested dir, and the user level warns for kinds with no file-addressable
+// target then kind. The workspace/project levels never warn (every tool reads
+// its workspace-root config); the directory level warns for kinds not read from
+// a nested dir, and the user level warns for kinds with no file-addressable
 // user-global home. Targets with no table never warn.
 func Analyze(level hierarchy.Level, kinds []ir.Kind, targets []string) []Warning {
 	var out []Warning
@@ -113,6 +113,8 @@ func Analyze(level hierarchy.Level, kinds []ir.Kind, targets []string) []Warning
 				})
 			}
 		}
+	case hierarchy.LevelProject, hierarchy.LevelWorkspace:
+		return nil
 	case hierarchy.LevelUser:
 		for _, target := range targets {
 			gap := nonNativeAtUser[target]

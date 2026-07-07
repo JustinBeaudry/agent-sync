@@ -1,7 +1,8 @@
 # Codex CLI adapter
 
 The `codex` adapter compiles the agent-sync IR into the files **Codex CLI**
-actually reads. Mapping validated against the official Codex docs in June 2026.
+actually reads. Mapping last checked against the official Codex docs in July
+2026.
 
 ## ⚠️ Path reality vs. the original assumption
 
@@ -33,6 +34,74 @@ this is expected.
 
 Unsupported kinds surface as honest degradation warnings in the capability
 report — agent-sync never emits dead files into directories Codex doesn't read.
+
+## Managed Native Fragments
+
+Codex supports the first native-fragment surfaces. Native fragments are authored
+under `.agents/configs/codex/...`, resolved through the same hierarchy as
+portable assets, and applied by core allowlists rather than by adapters writing
+arbitrary tool config.
+
+### Feature Flags
+
+Author feature flags under `.agents/configs/codex/features/<id>/`:
+
+```yaml
+id: hooks
+target: codex
+path: .codex/config.toml
+merge: toml-key
+locator: features.hooks
+visibility: team
+inheritance: descendants
+safety: passive
+payload: payload.toml
+```
+
+```toml
+[features]
+hooks = true
+```
+
+agent-sync preserves existing `config.toml` content and only inserts or replaces
+the requested `[features].<key>` entry. Codex currently documents feature flags
+under the `[features]` table; `hooks` is stable and defaults to `true`.
+
+### Lifecycle Hooks
+
+Author lifecycle hooks under `.agents/configs/codex/hooks/<id>/`:
+
+```yaml
+id: pre-tool-policy
+target: codex
+path: .codex/hooks.json
+merge: codex-hooks
+locator: PreToolUse/pre-tool-policy
+visibility: team
+inheritance: descendants
+safety: executable
+payload: payload.json
+```
+
+```json
+{
+  "matcher": "Bash",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 .codex/hooks/pre_tool_use_policy.py",
+      "statusMessage": "Checking Bash command"
+    }
+  ]
+}
+```
+
+agent-sync generates `.codex/hooks.json` as an agent-sync-owned file, with
+ownership tracked in the target ledger rather than private top-level JSON keys.
+If an unmanaged `.codex/hooks.json` already exists, sync fails closed until the
+user moves or deletes that file. Codex remains responsible for project-local
+hook trust review; agent-sync writes configuration, it does not bypass Codex's
+`/hooks` trust flow.
 
 ## User scope (`sync --user`)
 
@@ -82,5 +151,6 @@ touching user prose or each other — see
 
 - AGENTS.md discovery, size cap, override precedence: <https://developers.openai.com/codex/guides/agents-md>, <https://developers.openai.com/codex/config-advanced>
 - Project-local config + `mcp_servers`: <https://developers.openai.com/codex/config-reference>, <https://developers.openai.com/codex/mcp>
+- Feature flags and lifecycle hooks: <https://developers.openai.com/codex/config-basic#feature-flags>, <https://developers.openai.com/codex/hooks>
 - Skills under `.agents/skills`: <https://developers.openai.com/codex/skills>
 - Custom prompts deprecated / user-home-only: <https://developers.openai.com/codex/custom-prompts>

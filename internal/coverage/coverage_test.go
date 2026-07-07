@@ -129,6 +129,13 @@ func TestAnalyzeDirectoryLevelClaudeMixedKindsWarnsOnlyNonNative(t *testing.T) {
 	}
 }
 
+func TestAnalyze_WorkspaceLevelActsLikeProjectRoot(t *testing.T) {
+	got := Analyze(hierarchy.LevelWorkspace, []ir.Kind{ir.KindSkill, ir.KindCommand, ir.KindAgentsMD}, []string{"claude", "codex", "cursor"})
+	if len(got) != 0 {
+		t.Fatalf("workspace level should be fully native, got warnings: %+v", got)
+	}
+}
+
 func TestAnalyzeUnknownTargetNoWarnings(t *testing.T) {
 	// An adapter we have no table for must never produce false warnings.
 	if got := Analyze(hierarchy.LevelDirectory, []ir.Kind{ir.KindSkill}, []string{"some-third-party"}); len(got) != 0 {

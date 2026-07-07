@@ -357,7 +357,7 @@ CLI core performs the actual filesystem writes inside the adapter's `os.Root`. A
 - Test: `testdata/manifest/valid-*.yaml`, `testdata/manifest/invalid-*.yaml`
 
 **Approach:**
-- Schema includes: `version`, `canonical: {url, ref, commit, local_path}`, `floating: bool`, `targets: [name]`, `scope: user|project|global`, `cache: {override}`, `adapters: [{name, source, pin, trusted_sha}]`, `trusted_sha: <40-hex>` (at top level, mirrors `commit:` — project-level TOFU pin; see decision #9), `trust: {require_attestation (reserved, unimplemented in v1), allow_new_shas_until: <RFC3339> (optional cooldown window)}`, plus `x-*` forward-compat extension keys.
+- Schema includes: `version`, `canonical: {url, ref, commit, local_path}`, `floating: bool`, `targets: [name]`, `scope: user|workspace|project|global` (`global` is a legacy project alias), `cache: {override}`, `adapters: [{name, source, pin, trusted_sha}]`, `trusted_sha: <40-hex>` (at top level, mirrors `commit:` — project-level TOFU pin; see decision #9), `trust: {require_attestation (reserved, unimplemented in v1), allow_new_shas_until: <RFC3339> (optional cooldown window)}`, plus `x-*` forward-compat extension keys.
 - `Load` returns an error on any unknown top-level key (typo guard). Pretty error messages via `yaml.FormatError`.
 - Cross-field validation: `commit:` set implies `trusted_sha:` required when mode is non-interactive; `trusted_sha:` without `commit:` is a load error (no floating-with-pin hybrid).
 - `WriteResolvedSHA(commit, trustedSHA)` reads the original YAML, preserves comments + key order, updates `commit:` and `trusted_sha:` in a single write, and writes atomically via `internal/fsroot`. (Separate `WriteTrustedSHA` exposed for the `aienvs trust pin` subcommand in unit 6.)

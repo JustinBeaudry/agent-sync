@@ -11,8 +11,24 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-07
+
 ### Added
 
+- **User → workspace → project/repo hierarchy.** Manifests now declare
+  `scope: user | workspace | project`, `agent-sync init --user` writes the
+  user manifest under `~`, `--workspace` writes a workspace manifest, and
+  project/repo manifests remain the closest working-tree scope. Sync walks the
+  hierarchy and emits each discovered scope to its own safe root.
+- **Workspace activation roots.** A workspace manifest can set
+  `activation_root: true`; discovery stops there for project syncs, so working
+  inside a workspace such as `~/ActualReality` uses that workspace's agent
+  configuration as the root instead of falling back to the user-home manifest.
+- **Agent harness native fragments.** Canonical sources can now author
+  managed native configuration fragments for Codex feature flags and lifecycle
+  hooks. Native fragments merge deterministically across hierarchy layers,
+  preserve unmanaged TOML/JSON content, and fail closed rather than overwriting
+  unmanaged generated files.
 - **Zero-flag `init`.** `agent-sync init` no longer requires a source or
   targets: with no source flag the canonical source defaults to the in-repo
   `.agents` directory (created when missing, so the first sync soft-lands on

@@ -224,6 +224,7 @@ func TestSession_SendsScopeInInitialize(t *testing.T) {
 	}{
 		{name: "empty defaults to project", optScope: "", wantScope: "project"},
 		{name: "user passed through", optScope: "user", wantScope: "user"},
+		{name: "workspace passed through", optScope: "workspace", wantScope: "workspace"},
 		{name: "directory passed through", optScope: "directory", wantScope: "directory"},
 	}
 	for _, tc := range cases {

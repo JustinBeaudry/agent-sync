@@ -78,6 +78,29 @@ func writeUpdateWS(t *testing.T, canonicalPath, sha, ref string) string {
 	return ws
 }
 
+func writeUpdateWorkspaceComposeWS(t *testing.T, canonicalPath, sha, ref, scope string) string {
+	t.Helper()
+	ws := t.TempDir()
+	var b strings.Builder
+	b.WriteString("version: 1\n")
+	b.WriteString("scope: " + scope + "\n")
+	b.WriteString("canonical:\n")
+	b.WriteString("  local_path: " + canonicalPath + "\n")
+	if ref != "" {
+		b.WriteString("  ref: " + ref + "\n")
+	}
+	b.WriteString("  commit: " + sha + "\n")
+	b.WriteString("trusted_sha: " + sha + "\n")
+	b.WriteString("targets:\n")
+	b.WriteString("  - cursor\n")
+	b.WriteString("compose:\n")
+	b.WriteString("  cursor-rules-from-user: true\n")
+	if err := os.WriteFile(filepath.Join(ws, ".agent-sync.yaml"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return ws
+}
+
 func runUpdateCmd(t *testing.T, ws string, stdin string, extraArgs ...string) (string, string, error) {
 	t.Helper()
 	var out, errBuf bytes.Buffer
@@ -269,6 +292,34 @@ func TestUpdate_LocalDirNothingToPin(t *testing.T) {
 	if !strings.Contains(out, "no pin to update") {
 		t.Errorf("expected local_dir no-pin message, got %q", out)
 	}
+}
+
+func TestUpdate_WorkspaceManifest_DoesNotComposeAsProject(t *testing.T) {
+	requireGit(t)
+	canonical, _, head := makeUpdateRepo(t)
+	ws := writeUpdateWorkspaceComposeWS(t, canonical, head, "main", manifest.ScopeWorkspace)
+	home := t.TempDir()
+
+	prevResolveHome := resolveHome
+	resolveHome = func() (string, error) { return home, nil }
+	t.Cleanup(func() { resolveHome = prevResolveHome })
+
+	if err := os.WriteFile(filepath.Join(home, ".agent-sync.yaml"), []byte(composeUserManifestCursor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, home, ".agents/rules/from-user.md", "from user\n")
+
+	newSHA := commitFile(t, canonical, "rules/after-update.md", "from update\n", "added rule")
+	out, errOut, err := runUpdateCmd(t, ws, "", "--non-interactive", "--accept-update="+newSHA)
+	if err != nil {
+		t.Fatalf("update: %v\nstdout: %s\nstderr: %s", err, out, errOut)
+	}
+
+	if _, err := os.Stat(filepath.Join(ws, ".cursor", "rules", "agent-sync", "after-update.mdc")); err != nil {
+		t.Fatalf("expected project-composed rule output: %v", err)
+	}
+	composedPath := filepath.Join(ws, ".cursor", "rules", "agent-sync", "from-user.mdc")
+	mustNotExist(t, composedPath)
 }
 
 func TestUpdate_MissingRefFollowsHead(t *testing.T) {

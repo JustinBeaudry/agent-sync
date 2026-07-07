@@ -30,6 +30,21 @@ func TestSchemaParity_SamplesValidateAgainstContractSchemas(t *testing.T) {
 				WorkspaceRoot:    "/tmp/ws",
 				ReservedPrefix:   ".echo",
 				IRVersion:        "v1",
+				Scope:            "project",
+			},
+		},
+		{
+			name:       "InitializeParams_GlobalScope",
+			schemaName: "initialize",
+			schemaPath: []string{"$defs", "params"},
+			value: InitializeParams{
+				Client:           "test",
+				ProtocolVersions: []string{ContractVersionV1},
+				Cookie:           "cookie",
+				WorkspaceRoot:    "/tmp/ws",
+				ReservedPrefix:   ".echo",
+				IRVersion:        "v1",
+				Scope:            "global",
 			},
 		},
 		{

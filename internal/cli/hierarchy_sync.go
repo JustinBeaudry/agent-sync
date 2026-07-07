@@ -14,6 +14,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/coverage"
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/manifest"
@@ -42,20 +43,18 @@ type scopeOutcome struct {
 type hierarchySyncOptions struct {
 	IncludeUser bool
 	EngineOpts  engine.Options // mode, adopt, target filter, expect-deletions, logger, now
-	// OfferUser, when non-nil and IncludeUser is false, is invoked once when
-	// discovery finds a user-level manifest that would otherwise be skipped
-	// (plan R16). Returning true includes the user scope in this run exactly
-	// as --user would; returning false skips it AND suppresses the
-	// skipped-user notice (the user answered — no nagging). nil means "never
-	// ask" — the non-interactive/scripted path. The callback is the TTY seam:
-	// the orchestrator itself never touches stdin.
-	OfferUser func(manifestPath string) bool
 }
 
-// runHierarchySync discovers the emit scopes from cwd and runs engine.Sync
-// against each, in order. A scope whose prepare or sync fails is recorded in
-// its scopeOutcome.Err and the run continues (continue-and-report). Discovery
-// failure aborts the whole run (the scope set is indeterminate).
+type preparedLayer struct {
+	Scope        hierarchy.Scope
+	Materialized materialized
+	Manifest     *manifest.Manifest
+}
+
+// runHierarchySync discovers the hierarchy from cwd and runs engine.Sync against
+// the single selected write scope. A selected scope whose prepare or sync fails
+// is recorded in its scopeOutcome.Err. Discovery failure aborts the whole run
+// (the scope set is indeterminate).
 //
 // Only emit scopes are synced: the user scope is emitted only when
 // opts.IncludeUser is set (the --user flag), so a plain repo sync never writes
@@ -63,39 +62,28 @@ type hierarchySyncOptions struct {
 // unmodified engine.Sync; each scope runs against its own fsroot root and so
 // writes its own staging and ledger.
 //
-// The returned notice is non-empty only when the run produced zero emit scopes:
-// it explains why nothing was synced (user manifest needs --user, or no manifest
-// exists) so an empty run is never a silent no-op. It is advisory — exit code
-// stays 0.
+// The returned notice is advisory. It explains empty runs and reminds callers
+// when a user scope was discovered but not written.
 func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string, opts hierarchySyncOptions, now time.Time) ([]scopeOutcome, string, error) {
 	scopes, err := hierarchy.Discover(cwd, hierarchy.Options{Home: home, IncludeUser: opts.IncludeUser})
 	if err != nil {
 		return nil, "", fmt.Errorf("discover hierarchy: %w", err)
 	}
+	scopes = selectWriteScopes(scopes, opts.IncludeUser)
 
-	// User-scope offer (plan R16): a user manifest discovered read-only gets
-	// one chance to join the run. An accepted offer re-discovers with the
-	// user scope emitted — identical to --user. A declined offer is recorded
-	// so the skipped-user notice below stays quiet for this run.
-	userDeclined := false
-	if !opts.IncludeUser && opts.OfferUser != nil {
-		if us, ok := skippedUserScope(scopes); ok {
-			if opts.OfferUser(us.ManifestPath) {
-				scopes, err = hierarchy.Discover(cwd, hierarchy.Options{Home: home, IncludeUser: true})
-				if err != nil {
-					return nil, "", fmt.Errorf("discover hierarchy: %w", err)
-				}
-			} else {
-				userDeclined = true
+	preparedLayers := make([]preparedLayer, 0, len(scopes))
+	for _, sc := range scopes {
+		pl, lerr := materializeLayerReadOnly(ctx, rc, sc, now)
+		if lerr != nil {
+			if rc != nil && rc.Logger != nil {
+				rc.Logger.Warn("harness: cannot materialize scope", "path", sc.ManifestPath, "err", lerr)
 			}
+			continue
 		}
+		preparedLayers = append(preparedLayers, pl)
 	}
 
-	// composeActive records whether Cursor-rule composition fired for any
-	// project scope in this run. Under `sync --user` the user scope is emitted
-	// (and processed before the project scope), so its coverage warnings are
-	// post-filtered after the loop once composeActive is known. See U5/D5.
-	composeActive := false
+	userScope, hasUserScope := hierarchyUserScope(scopes)
 
 	var outcomes []scopeOutcome
 	for _, sc := range scopes {
@@ -122,13 +110,11 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			defer prep.Close()
 			req := prep.Request
 			req.Options = opts.EngineOpts
+			applyResolvedLayers(&req, sc, scopes, preparedLayers)
 			// Fold the user-scope Cursor rule layer into this project scope's node
 			// set (plan U4/D1/D2), via the shared entry point also used by the
-			// single-scope path. composeActive gates the U5 coverage-warning
-			// suppression below — set only when rules were actually composed.
-			if applyCursorComposition(ctx, rc, &req, prep.Manifest, sc.Level.String(), home, now) {
-				composeActive = true
-			}
+			// single-scope path.
+			applyCursorComposition(ctx, rc, &req, prep.Manifest, req.Scope, userScope, hasUserScope, now)
 			// Coverage warnings are computed from the decoded IR (the distinct
 			// kinds this scope emits), the manifest's targets, and the scope's
 			// level. Computed after a successful prepare (nodes exist);
@@ -145,33 +131,131 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		outcomes = append(outcomes, out)
 	}
 
-	// U5/D5: once user rules compose into the project's .cursor/rules/, the
-	// user-scope "Cursor rule is inert at user scope" coverage warning is
-	// misleading — the rule DOES take effect, via the project. Under `sync
-	// --user` the user scope is emitted (and carries that warning), so drop just
-	// that one warning from its outcome when composition fired this run. The
-	// agents-md user warning is not composed and stays. Composition-off runs are
-	// untouched. Caller-side filter keeps coverage.Analyze pure.
-	if composeActive {
-		for i := range outcomes {
-			if outcomes[i].Scope.Level == hierarchy.LevelUser {
-				outcomes[i].Warnings = dropWarning(outcomes[i].Warnings, cursorTarget, ir.KindRule, hierarchy.LevelUser)
-			}
-		}
-	}
 	var notice string
 	switch {
 	case len(outcomes) == 0:
 		notice = emptyRunNotice(scopes, cwd)
-	case !userDeclined:
+	default:
 		// Plan R17: a user manifest that exists but was not synced is worth a
 		// persistent pointer even when project scopes emitted fine — today's
 		// silence is how user-scope config quietly drifts stale.
-		if us, ok := skippedUserScope(scopes); ok {
+		us, ok := skippedUserScope(scopes)
+		if ok {
 			notice = fmt.Sprintf("user-level manifest at %s was not synced; pass --user to include it", us.ManifestPath)
 		}
 	}
 	return outcomes, notice, nil
+}
+
+func selectWriteScopes(scopes []hierarchy.Scope, includeUser bool) []hierarchy.Scope {
+	out := make([]hierarchy.Scope, len(scopes))
+	copy(out, scopes)
+	for i := range out {
+		out[i].Emit = false
+	}
+
+	if includeUser {
+		for i := range out {
+			if out[i].Level == hierarchy.LevelUser {
+				out[i].Emit = true
+				return out
+			}
+		}
+		return out
+	}
+
+	for i := len(out) - 1; i >= 0; i-- {
+		if out[i].Level == hierarchy.LevelUser {
+			continue
+		}
+		out[i].Emit = true
+		break
+	}
+
+	return out
+}
+
+func materializeLayerReadOnly(ctx context.Context, rc *runtimeContext, sc hierarchy.Scope, now time.Time) (preparedLayer, error) {
+	m, err := manifest.LoadFile(sc.ManifestPath, manifest.LoadOptions{NonInteractive: true})
+	if err != nil {
+		return preparedLayer{}, fmt.Errorf("load manifest: %w", err)
+	}
+
+	root, err := fsroot.OpenWorkspaceRoot(sc.Root)
+	if err != nil {
+		return preparedLayer{}, fmt.Errorf("open scope root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	offline := m.Canonical.URL != ""
+	if rc != nil {
+		offline = offline || rc.Flags.Offline
+	}
+	mat, err := materialize(ctx, m, materializeOptions{Offline: offline, Now: now, Root: root})
+	if err != nil {
+		return preparedLayer{}, fmt.Errorf("materialize: %w", err)
+	}
+
+	return preparedLayer{
+		Scope:        sc,
+		Materialized: mat,
+		Manifest:     m,
+	}, nil
+}
+
+func hierarchyUserScope(scopes []hierarchy.Scope) (hierarchy.Scope, bool) {
+	for _, sc := range scopes {
+		if sc.Level == hierarchy.LevelUser {
+			return sc, true
+		}
+	}
+	return hierarchy.Scope{}, false
+}
+
+func layersForScope(sc hierarchy.Scope, scopes []hierarchy.Scope, preparedLayers []preparedLayer, current harness.Layer) []harness.Layer {
+	preparedByManifest := make(map[string]preparedLayer, len(preparedLayers))
+	for _, pl := range preparedLayers {
+		preparedByManifest[pl.Scope.ManifestPath] = pl
+	}
+	var out []harness.Layer
+	for _, discovered := range scopes {
+		if discovered.ManifestPath == sc.ManifestPath {
+			out = append(out, current)
+			break
+		}
+		if pl, ok := preparedByManifest[discovered.ManifestPath]; ok {
+			out = append(out, layerFromPrepared(pl))
+		}
+	}
+	return out
+}
+
+func layerFromPrepared(pl preparedLayer) harness.Layer {
+	return harness.Layer{
+		Scope:     pl.Scope.Level.String(),
+		Nodes:     pl.Materialized.Nodes,
+		Skills:    pl.Materialized.Skills,
+		Fragments: pl.Materialized.Fragments,
+		SourceURL: pl.Materialized.SourceURL,
+		Commit:    pl.Materialized.Commit,
+	}
+}
+
+func layerFromRequest(req *engine.Request) harness.Layer {
+	return harness.Layer{
+		Scope:     req.Scope,
+		Nodes:     req.Nodes,
+		Skills:    req.Skills,
+		Fragments: req.Fragments,
+		SourceURL: req.SourceURL,
+		Commit:    req.Commit,
+	}
+}
+
+func applyResolvedLayers(req *engine.Request, sc hierarchy.Scope, scopes []hierarchy.Scope, preparedLayers []preparedLayer) {
+	layers := layersForScope(sc, scopes, preparedLayers, layerFromRequest(req))
+	req.Nodes, req.Skills = harness.ResolveNodes(layers, req.Scope)
+	req.Fragments = harness.ResolveFragments(layers, req.Scope)
 }
 
 // skippedUserScope returns the discovered user-level scope that is not being
@@ -200,20 +284,6 @@ func emptyRunNotice(scopes []hierarchy.Scope, cwd string) string {
 	return fmt.Sprintf("no .agent-sync.yaml found from %s up to the project root; run 'agent-sync init' to create one", cwd)
 }
 
-// dropWarning returns ws without any warning matching (target, kind, level).
-// Used to suppress the user-scope Cursor rule warning when composition makes it
-// misleading (U5). The input slice is not mutated.
-func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hierarchy.Level) []coverage.Warning {
-	out := make([]coverage.Warning, 0, len(ws))
-	for _, w := range ws {
-		if w.Target == target && w.Kind == kind && w.Level == level {
-			continue
-		}
-		out = append(out, w)
-	}
-	return out
-}
-
 // applyCursorComposition folds the user-scope Cursor rule layer into a
 // project-scope request when the project manifest opts in. It is the single
 // composition entry point shared by the hierarchy sync loop AND the single-scope
@@ -225,17 +295,18 @@ func dropWarning(ws []coverage.Warning, target string, kind ir.Kind, level hiera
 //
 // It mutates req in place and returns whether rules were composed. All paths are
 // gated on m.Compose.CursorRulesFromUser:
-//   - scope != project: composition is project-only (D1) — warn that the opt-in
-//     has no effect at this scope, return false.
+//   - scope is not project-like: composition is project-only (D1) — warn that
+//     the opt-in has no effect at this scope, return false. `global` is a
+//     legacy project-scope alias, so it is project-like for this gate.
 //   - cursor not a target, or no user manifest at home: silent no-op, false.
 //   - user source unreadable: defer cursor (drop it from req.Targets) so a
 //     transient failure can't wipe previously-composed rules; warn; false.
 //   - rules composed: append to req.Nodes; true.
-func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine.Request, m *manifest.Manifest, scope, home string, now time.Time) bool {
+func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine.Request, m *manifest.Manifest, scope string, user hierarchy.Scope, hasUser bool, now time.Time) bool {
 	if !m.Compose.CursorRulesFromUser {
 		return false
 	}
-	if scope != hierarchy.LevelProject.String() {
+	if !isProjectCompositionScope(scope) {
 		// Directory/user manifest set the opt-in; composition only applies at
 		// project scope. Warn so it isn't a silent no-op.
 		rc.Logger.Warn("compose: cursor-rules-from-user has no effect at this scope; set it on the project manifest", "scope", scope)
@@ -244,8 +315,7 @@ func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine
 	if !slices.Contains(req.Targets, cursorTarget) {
 		return false
 	}
-	user, ok := hierarchy.UserScope(home)
-	if !ok {
+	if !hasUser {
 		return false // no user manifest to compose from
 	}
 	composed, failed := composeUserRules(ctx, rc, user, cursorRuleIDsOf(req.Nodes), now)
@@ -268,6 +338,10 @@ func applyCursorComposition(ctx context.Context, rc *runtimeContext, req *engine
 		return true
 	}
 	return false
+}
+
+func isProjectCompositionScope(scope string) bool {
+	return scope == hierarchy.LevelProject.String() || scope == manifest.ScopeGlobal
 }
 
 // composeUserRules materializes the user-scope manifest read-only and returns

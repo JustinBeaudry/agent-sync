@@ -9,6 +9,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/cache"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
 	"github.com/agent-sync/agent-sync/internal/git"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/trust"
@@ -23,9 +24,10 @@ var ErrFloatingLocalUnsupported = errors.New("cli: floating local_path sync is n
 
 // materialized is the decoded canonical source ready to hand to the engine.
 type materialized struct {
-	Nodes  []ir.Node
-	Skills map[string]ir.Skill
-	Commit string // the resolved SHA, stamped into the report + staging
+	Nodes     []ir.Node
+	Skills    map[string]ir.Skill
+	Fragments []harness.Fragment
+	Commit    string // the resolved SHA, stamped into the report + staging
 	// SourceURL is the audit-safe identity of the canonical source: the
 	// cache-canonicalized URL for url sources (userinfo, query, and
 	// fragment stripped — never the raw manifest field) or the path
@@ -62,13 +64,17 @@ type materializeOptions struct {
 // The git-backed kinds require a pinned commit in v1; the local_dir kind is
 // unpinned by nature.
 func materialize(ctx context.Context, m *manifest.Manifest, opts materializeOptions) (materialized, error) {
+	scope := m.Scope
+	if scope == "" {
+		scope = manifest.ScopeProject
+	}
 	switch {
 	case m.Canonical.LocalDir != "":
-		return materializeLocalDir(m, opts)
+		return materializeLocalDir(m, scope, opts)
 	case m.Canonical.LocalPath != "":
-		return materializeLocal(m)
+		return materializeLocal(m, scope)
 	case m.Canonical.URL != "":
-		return materializeURL(ctx, m, opts)
+		return materializeURL(ctx, m, scope, opts)
 	default:
 		return materialized{}, errors.New("cli: manifest has no canonical source (url, local_path, or local_dir)")
 	}
@@ -78,7 +84,7 @@ func materialize(ctx context.Context, m *manifest.Manifest, opts materializeOpti
 // skips git materialization, the trust (TOFU) gate, and the offline-strict
 // SHA requirement: a working-tree source touches no network and has no commit
 // to pin or trust. The empty ref flows to the engine as a zero-SHA placeholder.
-func materializeLocalDir(m *manifest.Manifest, opts materializeOptions) (materialized, error) {
+func materializeLocalDir(m *manifest.Manifest, scope string, opts materializeOptions) (materialized, error) {
 	if opts.Root == nil {
 		return materialized{}, errors.New("cli: local_dir source requires an open workspace root")
 	}
@@ -86,7 +92,7 @@ func materializeLocalDir(m *manifest.Manifest, opts materializeOptions) (materia
 	if err != nil {
 		return materialized{}, fmt.Errorf("cli: local_dir source: %w", err)
 	}
-	mat, err := decodeAt(reader, "")
+	mat, err := decodeAt(reader, "", scope)
 	if err != nil {
 		return materialized{}, err
 	}
@@ -94,7 +100,7 @@ func materializeLocalDir(m *manifest.Manifest, opts materializeOptions) (materia
 	return mat, nil
 }
 
-func materializeLocal(m *manifest.Manifest) (materialized, error) {
+func materializeLocal(m *manifest.Manifest, scope string) (materialized, error) {
 	if m.Canonical.Commit == "" {
 		return materialized{}, ErrFloatingLocalUnsupported
 	}
@@ -103,7 +109,7 @@ func materializeLocal(m *manifest.Manifest) (materialized, error) {
 		return materialized{}, fmt.Errorf("cli: open local canonical %q: %w", m.Canonical.LocalPath, err)
 	}
 	defer func() { _ = repo.Close() }()
-	mat, err := decodeAt(repo, m.Canonical.Commit)
+	mat, err := decodeAt(repo, m.Canonical.Commit, scope)
 	if err != nil {
 		return materialized{}, err
 	}
@@ -111,7 +117,7 @@ func materializeLocal(m *manifest.Manifest) (materialized, error) {
 	return mat, nil
 }
 
-func materializeURL(ctx context.Context, m *manifest.Manifest, opts materializeOptions) (materialized, error) {
+func materializeURL(ctx context.Context, m *manifest.Manifest, scope string, opts materializeOptions) (materialized, error) {
 	canonical, err := cache.Canonicalize(m.Canonical.URL)
 	if err != nil {
 		return materialized{}, fmt.Errorf("cli: canonicalize %q: %w", m.Canonical.URL, err)
@@ -152,7 +158,7 @@ func materializeURL(ctx context.Context, m *manifest.Manifest, opts materializeO
 		return materialized{}, fmt.Errorf("cli: open materialized repo: %w", err)
 	}
 	defer func() { _ = repo.Close() }()
-	mat, err := decodeAt(repo, res.ResolvedSHA)
+	mat, err := decodeAt(repo, res.ResolvedSHA, scope)
 	if err != nil {
 		return materialized{}, err
 	}
@@ -167,7 +173,7 @@ func materializeURL(ctx context.Context, m *manifest.Manifest, opts materializeO
 // git-backed sources and the empty string for the working-tree source (which
 // has no commit); an empty ref flows through to the engine's zero-SHA
 // placeholder.
-func decodeAt(src ir.SourceTree, ref string) (materialized, error) {
+func decodeAt(src ir.SourceTree, ref, scope string) (materialized, error) {
 	at := ref
 	if at == "" {
 		at = "working tree"
@@ -176,7 +182,20 @@ func decodeAt(src ir.SourceTree, ref string) (materialized, error) {
 	if err != nil {
 		return materialized{}, fmt.Errorf("cli: decode IR at %s: %w", at, err)
 	}
+	fragments, fragmentWarnings, err := harness.Decode(src, ref, harness.DecodeOptions{Scope: scope})
+	if err != nil {
+		return materialized{}, fmt.Errorf("cli: decode harness fragments at %s: %w", at, err)
+	}
 	skills, skillWarnings := ir.SkillsByID(nodes, src, ref)
 	warnings := append(append([]ir.Warning(nil), decodeWarnings...), skillWarnings...)
-	return materialized{Nodes: nodes, Skills: skills, Commit: ref, Warnings: warnings}, nil
+	for _, w := range fragmentWarnings {
+		warnings = append(warnings, ir.Warning{
+			Code:    w.Code,
+			Message: w.Message,
+			Provenance: ir.Provenance{
+				Path: w.Path,
+			},
+		})
+	}
+	return materialized{Nodes: nodes, Skills: skills, Fragments: fragments, Commit: ref, Warnings: warnings}, nil
 }

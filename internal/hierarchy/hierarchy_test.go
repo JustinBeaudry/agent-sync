@@ -11,6 +11,7 @@ func TestLevelString(t *testing.T) {
 		want  string
 	}{
 		{LevelUser, "user"},
+		{LevelWorkspace, "workspace"},
 		{LevelProject, "project"},
 		{LevelDirectory, "directory"},
 		{Level(99), "unknown"},
