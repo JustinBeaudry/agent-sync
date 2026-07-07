@@ -26,7 +26,7 @@ writable). Pin a version or change the location with env vars:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/JustinBeaudry/agent-sync/main/install.sh \
-  | AGENT_SYNC_VERSION=v0.1.0 AGENT_SYNC_INSTALL_DIR="$HOME/bin" sh
+  | AGENT_SYNC_VERSION=v0.8.0 AGENT_SYNC_INSTALL_DIR="$HOME/bin" sh
 ```
 
 Prefer not to pipe to a shell? Download the archive for your OS/arch from the
