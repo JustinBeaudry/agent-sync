@@ -68,7 +68,7 @@ func TestMergeNativeGeneratedJSON_RefusesNestedMarkerOnly(t *testing.T) {
 }
 
 func TestMergeNativeGeneratedJSON_AllowsIdempotentManagedRewrite(t *testing.T) {
-	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[]}}`)}
+	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[{"command":"printf '<done>' && echo ok"}]}}`)}
 	out, _, err := mergeNative(nil, []NativeEntry{entry})
 	if err != nil {
 		t.Fatalf("mergeNative create: %v", err)
@@ -79,5 +79,15 @@ func TestMergeNativeGeneratedJSON_AllowsIdempotentManagedRewrite(t *testing.T) {
 	}
 	if string(out) != string(out2) {
 		t.Fatalf("rewrite changed bytes:\n%s\n---\n%s", out, out2)
+	}
+	text := string(out)
+	if !strings.Contains(text, "\n  \"hooks\": {") {
+		t.Fatalf("generated JSON should be indented:\n%s", text)
+	}
+	if !strings.Contains(text, "printf '<done>' && echo ok") {
+		t.Fatalf("generated JSON should not HTML-escape command characters:\n%s", text)
+	}
+	if strings.HasSuffix(text, "\n") {
+		t.Fatalf("generated JSON should not have encoder trailing newline:\n%s", text)
 	}
 }

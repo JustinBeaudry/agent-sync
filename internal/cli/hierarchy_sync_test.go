@@ -96,7 +96,7 @@ func TestPrepareScope_UsesManifestScopeWhenPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareScope: %v", err)
 	}
-	defer prep.Close()
+	t.Cleanup(prep.Close)
 
 	if prep.Request.Scope != manifest.ScopeWorkspace {
 		t.Fatalf("request scope = %q, want %q", prep.Request.Scope, manifest.ScopeWorkspace)
@@ -260,7 +260,7 @@ func TestSyncCodexHooksFragmentGeneratesHooksJSON(t *testing.T) {
 		t.Fatalf("read hooks.json: %v", err)
 	}
 	text := string(data)
-	for _, want := range []string{`"_agent_sync_generated":"codex-hooks/v1"`, `"PreToolUse"`, `"statusMessage":"Checking Bash command"`} {
+	for _, want := range []string{`"_agent_sync_generated": "codex-hooks/v1"`, `"PreToolUse"`, `"statusMessage": "Checking Bash command"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("hooks.json missing %q:\n%s", want, text)
 		}

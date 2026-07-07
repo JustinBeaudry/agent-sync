@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -33,12 +34,14 @@ func mergeNativeGeneratedJSON(existing []byte, e NativeEntry) ([]byte, error) {
 		return nil, fmt.Errorf("%w: generated JSON payload must be an object", ErrMalformedToolOwnedFile)
 	}
 	doc[generatedJSONMarkerKey] = generatedJSONMarkerValue
-	out, err := json.Marshal(doc)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(doc); err != nil {
 		return nil, fmt.Errorf("merge: render generated JSON: %w", err)
 	}
-	out = append(out, '\n')
-	return out, nil
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 func isManagedGeneratedJSON(existing []byte) (bool, error) {

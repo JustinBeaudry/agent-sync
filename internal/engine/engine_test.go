@@ -140,7 +140,7 @@ func TestSync_FirstSyncWritesRuleFileAndLedger(t *testing.T) {
 func TestSync_AppliesCodexNativeFeatureFragment(t *testing.T) {
 	ws := t.TempDir()
 	req, done := codexReqOn(t, ws)
-	defer done()
+	t.Cleanup(done)
 	req.Fragments = []harness.Fragment{{
 		ID: "hooks", Target: "codex", Path: ".codex/config.toml",
 		Merge: harness.MergeTOMLKey, Locator: "features.hooks",

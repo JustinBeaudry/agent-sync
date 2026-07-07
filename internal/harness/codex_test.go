@@ -2,6 +2,7 @@ package harness
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/agent-sync/agent-sync/internal/merge"
@@ -22,7 +23,7 @@ func TestCodexNativeOperations_FeatureFlag(t *testing.T) {
 }
 
 func TestCodexNativeOperations_HooksJSON(t *testing.T) {
-	payload := []byte(`{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .codex/hooks/check.py","statusMessage":"Checking Bash command"}]}`)
+	payload := []byte(`{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .codex/hooks/check.py && printf '<done>'","statusMessage":"Checking Bash command"}]}`)
 	frag := Fragment{ID: "pre-tool-policy", Target: "codex", Path: ".codex/hooks.json", Merge: MergeCodexHooks, Locator: "PreToolUse/pre-tool-policy", Payload: payload}
 	ops, warnings := NativeOperationsForTarget([]Fragment{frag}, "codex")
 	if len(warnings) != 0 {
@@ -40,6 +41,13 @@ func TestCodexNativeOperations_HooksJSON(t *testing.T) {
 	}
 	if _, ok := doc["hooks"].(map[string]any)["PreToolUse"]; !ok {
 		t.Fatalf("generated hooks missing PreToolUse: %#v", doc)
+	}
+	text := string(ops[0].Entries[0].Content)
+	if !strings.Contains(text, "\n  \"hooks\": {") {
+		t.Fatalf("generated hooks should be indented:\n%s", text)
+	}
+	if !strings.Contains(text, "python3 .codex/hooks/check.py && printf '<done>'") {
+		t.Fatalf("generated hooks should not HTML-escape command characters:\n%s", text)
 	}
 }
 

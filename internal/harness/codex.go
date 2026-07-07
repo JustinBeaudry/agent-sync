@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -79,20 +80,20 @@ func renderCodexHooks(byEvent map[string][]json.RawMessage) ([]byte, error) {
 	}
 	sort.Strings(events)
 
-	hooks := map[string]any{}
+	hooks := make(map[string][]json.RawMessage, len(events))
 	for _, event := range events {
-		var arr []any
-		for _, raw := range byEvent[event] {
-			var v any
-			if err := json.Unmarshal(raw, &v); err != nil {
-				return nil, err
-			}
-			arr = append(arr, v)
-		}
-		hooks[event] = arr
+		hooks[event] = byEvent[event]
 	}
-	return json.MarshalIndent(map[string]any{
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(map[string]any{
 		"_agent_sync_generated": "codex-hooks/v1",
 		"hooks":                 hooks,
-	}, "", "  ")
+	}); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
