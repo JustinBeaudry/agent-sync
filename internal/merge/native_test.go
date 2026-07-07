@@ -1,0 +1,83 @@
+package merge
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestMergeNativeTOMLKey_UpsertsFeatureWithoutRewritingOtherContent(t *testing.T) {
+	base := []byte("# user comment\nmodel = \"gpt-5\"\n\n[features]\nfast_mode = false\n")
+	entry := NativeEntry{Kind: NativeKindTOMLKey, Locator: "features.hooks", Content: []byte("[features]\nhooks = true\n")}
+	out, hash, err := mergeNative(base, []NativeEntry{entry})
+	if err != nil {
+		t.Fatalf("mergeNative: %v", err)
+	}
+	text := string(out)
+	for _, want := range []string{"# user comment\n", "model = \"gpt-5\"\n", "fast_mode = false\n", "hooks = true\n"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+	if hash == "" {
+		t.Fatal("hash is empty")
+	}
+}
+
+func TestMergeNativeTOMLKey_ReplacesExistingKey(t *testing.T) {
+	base := []byte("[features]\nhooks = false\n")
+	entry := NativeEntry{Kind: NativeKindTOMLKey, Locator: "features.hooks", Content: []byte("[features]\nhooks = true\n")}
+	out, _, err := mergeNative(base, []NativeEntry{entry})
+	if err != nil {
+		t.Fatalf("mergeNative: %v", err)
+	}
+	if string(out) != "[features]\nhooks = true\n" {
+		t.Fatalf("out = %q", out)
+	}
+}
+
+func TestMergeNativeTOMLKey_InsertsIntoFeaturesTableWithInlineComment(t *testing.T) {
+	base := []byte("[features] # Codex feature flags\nfast_mode = false\n\n[other]\nvalue = 1\n")
+	entry := NativeEntry{Kind: NativeKindTOMLKey, Locator: "features.hooks", Content: []byte("[features]\nhooks = true\n")}
+	out, _, err := mergeNative(base, []NativeEntry{entry})
+	if err != nil {
+		t.Fatalf("mergeNative: %v", err)
+	}
+	text := string(out)
+	if strings.Count(text, "[features]") != 1 {
+		t.Fatalf("output has duplicate [features] table:\n%s", text)
+	}
+	if !strings.Contains(text, "[features] # Codex feature flags\nhooks = true\nfast_mode = false\n") {
+		t.Fatalf("output did not insert under existing features table:\n%s", text)
+	}
+}
+
+func TestMergeNativeGeneratedJSON_RefusesUnmanagedExistingFile(t *testing.T) {
+	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[]}}`)}
+	_, _, err := mergeNative([]byte(`{"hooks":{"Stop":[]}}`), []NativeEntry{entry})
+	if err == nil || !strings.Contains(err.Error(), "unmanaged existing JSON") {
+		t.Fatalf("err = %v, want unmanaged existing JSON refusal", err)
+	}
+}
+
+func TestMergeNativeGeneratedJSON_RefusesNestedMarkerOnly(t *testing.T) {
+	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[]}}`)}
+	_, _, err := mergeNative([]byte(`{"nested":{"_agent_sync_generated":"codex-hooks/v1"}}`), []NativeEntry{entry})
+	if err == nil || !strings.Contains(err.Error(), "unmanaged existing JSON") {
+		t.Fatalf("err = %v, want unmanaged existing JSON refusal", err)
+	}
+}
+
+func TestMergeNativeGeneratedJSON_AllowsIdempotentManagedRewrite(t *testing.T) {
+	entry := NativeEntry{Kind: NativeKindGeneratedJSON, Locator: "codex-hooks", Content: []byte(`{"hooks":{"PreToolUse":[]}}`)}
+	out, _, err := mergeNative(nil, []NativeEntry{entry})
+	if err != nil {
+		t.Fatalf("mergeNative create: %v", err)
+	}
+	out2, _, err := mergeNative(out, []NativeEntry{entry})
+	if err != nil {
+		t.Fatalf("mergeNative rewrite: %v", err)
+	}
+	if string(out) != string(out2) {
+		t.Fatalf("rewrite changed bytes:\n%s\n---\n%s", out, out2)
+	}
+}
