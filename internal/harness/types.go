@@ -1,6 +1,9 @@
 package harness
 
-import "github.com/agent-sync/agent-sync/internal/ir"
+import (
+	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/merge"
+)
 
 type Visibility string
 type Inheritance string
@@ -46,6 +49,12 @@ type Warning struct {
 	Code    string
 	Message string
 	Path    string
+}
+
+type NativeOperation struct {
+	Target  string
+	Path    string
+	Entries []merge.NativeEntry
 }
 
 type DecodeOptions struct {
