@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "ee1fefbd67ba",
+  "session_id": "019f3863-aa77-7f42-9591-fc2a5d7de153",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-07T02:18:44.617053Z",
+  "branch": "feat/agent-harness-hierarchy",
+  "checkpoints_count": 2,
+  "save_step_count": 1,
+  "files_touched": [
+    "docs/superpowers/specs/2026-07-06-agent-harness-hierarchy-design.md"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "9fe70d79f038",
+  "token_usage": {
+    "input_tokens": 3146671,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 54648704,
+    "output_tokens": 192296,
+    "api_call_count": 420
+  },
+  "session_metrics": {
+    "turn_count": 21
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-07T02:18:44.489838Z",
+    "agent_lines": 29,
+    "agent_removed": 10,
+    "human_added": 82,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 111,
+    "total_lines_changed": 133,
+    "agent_percentage": 29.32330827067669,
+    "metric_version": 2
+  }
+}
