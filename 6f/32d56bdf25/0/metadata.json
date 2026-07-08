@@ -1,0 +1,216 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "6f32d56bdf25",
+  "session_id": "ac6cbf1b-d808-4936-be08-c5f1abe790cb",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-08T21:56:54.323123Z",
+  "branch": "feat/inline-auto-update",
+  "checkpoints_count": 5,
+  "save_step_count": 2,
+  "files_touched": [
+    "internal/cli/cmd_sync_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "2efb9f66ae07",
+  "token_usage": {
+    "input_tokens": 64022,
+    "cache_creation_tokens": 1935618,
+    "cache_read_tokens": 90245830,
+    "output_tokens": 267301,
+    "api_call_count": 250
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-compound-engineering:ce-work-beta-2026-07-08T18:03:29.107562Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-work-beta"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "a9bc134ea1f4",
+      "timestamp": "2026-07-08T18:03:29.107562Z",
+      "native": {
+        "command": "/compound-engineering:ce-work-beta"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/compound-engineering:ce-work-beta",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "prompt-skill-claude-code-compound-engineering:ce-work-beta-2026-07-08T18:03:35.691708Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-work-beta"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "e5f32d0d289e",
+      "timestamp": "2026-07-08T18:03:35.691708Z",
+      "native": {
+        "command": "/compound-engineering:ce-work-beta"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/compound-engineering:ce-work-beta",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "prompt-skill-claude-code-compound-engineering:ce-resolve-pr-feedback-2026-07-08T20:09:50.819039Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-resolve-pr-feedback"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "0148e0e963c7",
+      "timestamp": "2026-07-08T20:09:50.819039Z",
+      "native": {
+        "command": "/compound-engineering:ce-resolve-pr-feedback"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/compound-engineering:ce-resolve-pr-feedback",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01VYXSxHrr4ywv1Tg5gRRZcJ",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-brainstorm"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "2efb9f66ae07",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 52,
+        "end": 53,
+        "entry_ids": [
+          "e9b554be-00e4-4619-89a6-62042513170f"
+        ],
+        "tool_use_id": "toolu_01VYXSxHrr4ywv1Tg5gRRZcJ"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01VYXSxHrr4ywv1Tg5gRRZcJ"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-brainstorm",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_011oBogEghCFucKnxtowAFu2",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-plan"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "2efb9f66ae07",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 94,
+        "end": 95,
+        "entry_ids": [
+          "2b930185-888c-4f5c-b736-c8ef8f529ea6"
+        ],
+        "tool_use_id": "toolu_011oBogEghCFucKnxtowAFu2"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_011oBogEghCFucKnxtowAFu2"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-plan",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_012PsiWsjD3Zgtpzv1xZo7Hi",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "compound-engineering:ce-commit-push-pr"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "2efb9f66ae07",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 677,
+        "end": 678,
+        "entry_ids": [
+          "8bcd509d-f5b0-45b1-8709-76eeb1b805b7"
+        ],
+        "tool_use_id": "toolu_012PsiWsjD3Zgtpzv1xZo7Hi"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_012PsiWsjD3Zgtpzv1xZo7Hi"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: compound-engineering:ce-commit-push-pr",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 18
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-08T21:56:54.256055Z",
+    "agent_lines": 66,
+    "agent_removed": 3,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 66,
+    "total_lines_changed": 69,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 66,
+      "agent_lines_removed": 3
+    }
+  ]
+}
