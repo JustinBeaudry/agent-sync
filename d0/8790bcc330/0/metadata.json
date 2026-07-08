@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "d08790bcc330",
+  "session_id": "019f42e9-2f08-7a22-8f81-83b5831e9494",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-08T18:19:09.599709Z",
+  "branch": "feat/inline-auto-update",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "docs/spec/manifest-v1.md",
+    "internal/cli/cmd_sync.go",
+    "internal/cli/cmd_sync_test.go",
+    "internal/git/materialize.go",
+    "internal/git/materialize_test.go",
+    "internal/manifest/load_test.go",
+    "internal/manifest/schema.go",
+    "internal/manifest/schema_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.4",
+  "turn_id": "032cc119b9d2",
+  "token_usage": {
+    "input_tokens": 135217,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4369408,
+    "output_tokens": 21172,
+    "api_call_count": 45
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-08T18:19:09.575703Z",
+    "agent_lines": 404,
+    "agent_removed": 14,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 404,
+    "total_lines_changed": 418,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

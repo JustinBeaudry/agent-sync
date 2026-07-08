@@ -1,0 +1,78 @@
+<task>
+You are implementing Batch 1 of the plan at `docs/plans/2026-07-08-001-feat-inline-auto-update-plan.md` in the Go repo `agent-sync` (module github.com/agent-sync/agent-sync, Go 1.25). Read that plan file first for full context; the origin requirements are at `docs/brainstorms/2026-07-08-inline-auto-update-requirements.md`. Also read `AGENTS.md` and honor its invariants (all filesystem writes go through internal/fsroot; adapters/wire frame are additive-only; non-interactive paths never prompt/hang).
+
+Three INDEPENDENT units (no shared files). Implement all three:
+
+U1 — Manifest schema `canonical.auto` + loader/spec reconciliation.
+  Goal: Add an opt-out field so `sync` auto-advance can be disabled per manifest, and reconcile the loader so an advancing manifest is valid.
+
+U2 — Materialize resolve-or-fallback mode.
+  Goal: Add a materialize path that resolves the newest upstream commit online and, on network failure, falls back to the cached pin with a warning (never errors).
+
+U6 — `--frozen` flag on `sync`.
+  Goal: Add the per-invocation opt-out flag to the sync command surface. (It is consumed later by U5, which is NOT in this batch — for now just add and register the flag and thread its value to where the prepare-path decision will read it; do not implement auto-advance behavior itself.)
+</task>
+
+<files>
+U1: internal/manifest/schema.go, internal/manifest/load.go, docs/spec/manifest-v1.md, internal/manifest/load_test.go, internal/manifest/schema_test.go (create if absent)
+U2: internal/git/materialize.go, internal/git/materialize_test.go
+U6: internal/cli/cmd_sync.go, internal/cli/cmd_sync_test.go
+Read for context: internal/manifest/write.go, internal/cli/cmd_update.go, internal/cli/setup.go, internal/git/shell.go
+</files>
+
+<patterns>
+U1: mirror existing `omitempty` fields in CanonicalSource; follow the additive-schema PR checklist in AGENTS.md. Strict load uses yaml.DisallowUnknownField() (internal/manifest/load.go ~line 113) — a new field MUST be added to the struct.
+U2: mirror the existing zero-network fast path in internal/git/materialize.go (~lines 123-137), ErrRemoteUnreachable handling in internal/git/shell.go, and the input-shape guards (~lines 102-118).
+U6: mirror existing BoolVar flags declared/registered in newSyncCommand (internal/cli/cmd_sync.go ~line 32 declare, ~line 138 register).
+</patterns>
+
+<approach>
+U1:
+- Add `Auto *bool `yaml:"auto,omitempty"`` to CanonicalSource in schema.go. Semantics: nil ⇒ auto-on (default); explicit false ⇒ opt out. Use *bool because plain bool+omitempty cannot express default-true.
+- In load.go, verify the new field passes strict load, and that old manifests without `auto` still load. Confirm the existing invariants still hold for an auto manifest: (a) `canonical.commit` MUST equal `trusted_sha` when both set; (b) the "trusted_sha set but canonical.commit empty" hybrid remains rejected. An auto manifest always re-pins to a concrete SHA each run, so both keys stay present and equal — do NOT loosen these invariants; just confirm an auto manifest satisfies them.
+- Update docs/spec/manifest-v1.md: replace/augment the `floating` "reserved; not yet in v1 schema" section to document `canonical.auto` instead, and update the validation table to include `auto`.
+
+U2:
+- Add a new input mode to the Input struct (e.g. `ResolveOrFallback bool`), mutually exclusive with `Floating` and with pinned-strict offline. Do NOT relax the existing `Floating && Offline` hard-refuse — this is a separate, new mode.
+- Behavior: when ResolveOrFallback is set and a PinnedSHA is present: attempt online ref resolution (ResolveRef against CanonicalURL/Ref). On `git.ErrRemoteUnreachable`, return a Result using the cached pin (FromCache true) and signal that a fallback/warning occurred, without erroring. On success, return the newly resolved SHA. If unreachable AND no cache present, return a clear error.
+- Preserve the existing reachability defense (IsAncestor force-push guard) on the resolved SHA.
+- Add input-shape guards rejecting ResolveOrFallback combined with Floating.
+
+U6:
+- Declare `frozen bool` alongside the other sync flag vars; register with cmd.Flags().BoolVar with a clear help string ("Disable auto-advance; sync at the pinned commit only"). Thread the value into the options/struct the prepare path will consult. Compose cleanly with existing flags (--best-effort, --expect-deletions, --post-merge, --target, --user). Do not implement advance logic.
+
+Ordering: U1, U2, U6 are independent — any order.
+</approach>
+
+<constraints>
+- Do NOT run git commit, git push, or create PRs — the orchestrating agent handles all git operations.
+- Restrict all modifications to files within the repository root.
+- Keep changes tightly scoped to the stated task — avoid unrelated refactors, renames, or cleanup.
+- Resolve the task fully before stopping — do not stop at the first plausible answer.
+- All filesystem writes in production code must go through internal/fsroot (do not bypass it).
+- Additive-only schema/struct changes with omitempty; keep backward compatibility with existing manifests.
+- If you discover mid-execution that you need to modify files outside the repo root, complete what you can within the repo and report it in the issues field.
+</constraints>
+
+<testing>
+Check the plan's test scenarios for U1/U2/U6 and supplement any gaps before writing tests.
+- U1 happy: manifest with `auto: false` loads (Auto non-nil false); manifest without auto loads (Auto nil); `auto: true` round-trips. Edge/error: old pre-auto manifest still validates; commit==trusted_sha both present passes; empty-commit-with-trusted_sha hybrid still rejected; unknown sibling field under canonical still rejected.
+- U2 happy: online + newer ref resolves to new SHA. Error/edge: ErrRemoteUnreachable + cached pin ⇒ returns cached pin, fallback signalled, no error (Covers R4); unreachable + no cache ⇒ clear error; resolved SHA fails reachability ⇒ ErrReachabilityCheckFailed; ResolveOrFallback combined with Floating ⇒ rejected.
+- U6 happy: `sync --frozen` parses and sets the flag; help text present. Edge: --frozen composes with --best-effort and --post-merge without conflict.
+Use the existing test fixture helpers: internal/gittest (RequireGit, MustGit) for git repos; the makeRepo/materialize_test.go patterns for U2; the cmd_update_test.go / cmd_sync_test.go harness patterns for CLI tests. Tests use real filesystem + t.TempDir() + shelled git.
+</testing>
+
+<verify>
+After implementing, run these together and fix until green:
+`go build ./... && go vet ./... && go test -race ./internal/manifest/... ./internal/git/... ./internal/cli/...`
+Then, if golangci-lint is installed, run `golangci-lint run ./internal/manifest/... ./internal/git/... ./internal/cli/...` and fix lint issues; if it is not installed, note that in verification_summary. Run all test files in a package together (default `go test` behavior), not one at a time. Do not report status "completed" unless build, vet, and tests pass. Note: the CI job "test (darwin/amd64)" is known to stall on runner scarcity — that is infra, not your concern; just make the local suite green.
+</verify>
+
+<output_contract>
+Report your result via the --output-schema mechanism. Fill in every field:
+- status: "completed" ONLY if all changes were made AND verification passes; "partial" if incomplete; "failed" if no meaningful progress.
+- files_modified: array of file paths you changed.
+- issues: array of strings describing any problems, gaps, deviations from the plan, or out-of-scope work discovered (e.g. if you had to touch a file not listed, or if a plan assumption was wrong).
+- summary: one-paragraph description of what was done across U1/U2/U6.
+- verification_summary: exact commands run and outcomes (e.g. "go test -race ./internal/... — ok; golangci-lint not installed").
+</output_contract>

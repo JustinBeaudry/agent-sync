@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "d08790bcc330",
+  "strategy": "manual-commit",
+  "branch": "feat/inline-auto-update",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/spec/manifest-v1.md",
+    "internal/cli/cmd_sync.go",
+    "internal/cli/cmd_sync_test.go",
+    "internal/git/materialize.go",
+    "internal/git/materialize_test.go",
+    "internal/manifest/load_test.go",
+    "internal/manifest/schema.go",
+    "internal/manifest/schema_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d0/8790bcc330/0/metadata.json",
+      "transcript": "/d0/8790bcc330/0/full.jsonl",
+      "content_hash": "/d0/8790bcc330/0/content_hash.txt",
+      "prompt": "/d0/8790bcc330/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 135217,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4369408,
+    "output_tokens": 21172,
+    "api_call_count": 45
+  }
+}
