@@ -57,21 +57,40 @@ serves malicious content (e.g. a `rule` or `mcp-server-entry` that exfiltrates
 secrets once an agent loads it).
 
 **Mitigations.**
-- **Pinning is default** (invariant #4): `init` resolves refs to a SHA and writes
-  it back. A moving branch cannot silently change what syncs.
-- **`trusted_sha:`** is the authoritative integrity anchor in non-interactive/CI
-  contexts: sync **fails closed** on a mismatch, with no prompt. The pin is a
-  value a human code-reviewed into the repo, mirroring `go.sum` / lockfile
-  precedent.
+- **The manifest always carries a concrete pin.** `init` resolves refs to a SHA
+  and writes it back; auto-advance (below) re-pins **forward** to a new concrete
+  SHA rather than floating. A moving branch never silently changes what syncs —
+  every synced state is a recorded commit.
+- **Auto-advance is fast-forward-only.** By default `sync` advances the pin to the
+  newest upstream commit, but only when the new SHA is a descendant of the current
+  `trusted_sha`. A rewritten / force-pushed history is **not** a fast-forward and
+  is refused (the pin is kept; the scope is reported). This is the primary rail
+  now that human review is not in the default advance path.
+- **Auto-advance routes through the trust policy engine, not around it.** The
+  allow-new-shas posture is evaluated by `internal/trust` `Decide`: an active
+  **revoke always wins** (even under auto), and the posture is **fail-closed
+  without loaded trust state** — a caller that has not folded the trust store
+  cannot auto-advance. Every auto-advance appends to `pending.jsonl` for audit.
+- **`trusted_sha:`** remains the authoritative integrity anchor: with auto-advance
+  disabled (`--frozen` / `canonical.auto: false`) sync **fails closed** on a
+  mismatch in non-interactive/CI, with no prompt — the human-code-reviewed,
+  `go.sum`-like behavior, preserved for reproducibility-sensitive workspaces.
 - **TOFU on `(URL, SHA)`** (B3): first use of an unseen pair requires an explicit
   interactive decision; CI never auto-accepts.
 - Git fetches verify the resolved SHA matches the requested pin before the commit
-  is admitted to cache (B1).
+  is admitted to cache (B1); offline / unreachable sync falls back to the cached
+  pin rather than adopting an unverified head.
 
-**Residual risk.** agent-sync does **not** verify upstream commit signatures
-(e.g. GPG/SSH-signed tags) in v1. A maliciously authored commit that a user
-pins and trusts will sync. Defense relies on the human review that produced the
-pin. Commit-signature verification is a candidate for a future minor version.
+**Residual risk.** With auto-advance as the default, **human review is no longer
+in the default path** for moving the pin forward — fast-forward-only and the
+trust policy (revoke + fail-closed) are the remaining rails. agent-sync still does
+**not** verify upstream commit signatures (e.g. GPG/SSH-signed tags), so a
+malicious but fast-forward commit pushed to the tracked ref by someone with push
+access **will** auto-advance and sync unless the anchor is revoked or the
+workspace opts out via `--frozen` / `canonical.auto: false`. Commit-signature
+verification is now a higher-value candidate for a future version. Workspaces that
+require human-reviewed advancement should set `canonical.auto: false` and move the
+pin with the explicit, gated `agent-sync update`.
 
 ### T2 — Cache-key / URL poisoning
 An attacker crafts a canonical URL whose `userinfo` or alternate encoding

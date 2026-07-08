@@ -375,7 +375,7 @@ func TestConfirmUpdate_InteractiveGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := updateResolution{newSHA: newSHA, refName: "main", mirrorPath: canonical}
+	res := advanceResolution{newSHA: newSHA, refName: "main", mirrorPath: canonical}
 
 	cmd := newUpdateCommand(RootDeps{})
 	cmd.SetContext(context.Background())

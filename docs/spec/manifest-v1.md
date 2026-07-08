@@ -61,7 +61,11 @@ trusted_sha: 1111111111111111111111111111111111111111
 
 # --- Optional ---------------------------------------------------------
 
-# floating: reserved; not yet in the v1 schema. Will be added by Unit 5/6.
+# Sync auto-advances git-backed canonical sources by default. Set
+# `auto: false` to opt this manifest back into pinned-only sync behavior.
+# Nil / omitted means "auto on".
+# Not valid for `local_dir` sources.
+# auto: false
 
 # Target adapters active for this workspace. Inactive adapters emit
 # nothing.
@@ -115,6 +119,7 @@ The loader enforces these at parse time. Any violation returns
 | `canonical.local_dir` set with `commit`/`ref`/`trusted_sha` | `canonical.local_dir is an unpinned working-tree source and cannot set commit, ref, or trusted_sha` |
 | `canonical.local_dir` is the workspace root (`.`) | `canonical.local_dir must name a workspace subdirectory, not the workspace root` |
 | `canonical.local_dir` is absolute / rooted / contains `..` | `canonical.local_dir: …` (wraps the reserved-prefix path rules) |
+| Unknown key under `canonical` | `unknown field` (goccy formatter names line + field) |
 | `trusted_sha` set, `canonical.commit` empty | `trusted_sha is set but canonical.commit is empty (no floating-with-pin hybrid)` |
 | `canonical.commit` not 40-hex | `canonical.commit must be 40 lowercase hex` |
 | `trusted_sha` not 40-hex | `trusted_sha must be 40 lowercase hex` |
@@ -128,9 +133,9 @@ The loader enforces these at parse time. Any violation returns
 
 Rules that are **deliberately** not enforced at load:
 
-- `floating: true` without the `--floating` CLI flag — caught at sync
-  level (a manifest marked floating is always parseable; only sync
-  refuses if the flag is missing).
+- `canonical.auto: false` is only a sync-time policy switch; the loader
+  accepts both `true` and `false` and leaves the behavioral decision to
+  the sync path.
 - `canonical.commit` reachability from `canonical.ref` on the remote —
   network operation, handled by unit 5.
 - Pre-existing keys for `WriteResolvedSHA` — checked only when that
@@ -163,8 +168,12 @@ Describes where the portable agent-config source lives.
   authored skill ids (the reader skips `skills/agent-sync-*`).
 - `canonical.ref` (string, optional): symbolic git ref; only consumed
   by `agent-sync init` to resolve to `commit`. Not valid with `local_dir`.
-- `canonical.commit` (string, optional when `floating: true`): 40-char
-  lowercase hex SHA. Pinning is the default. Not valid with `local_dir`.
+- `canonical.commit` (string, optional): 40-char lowercase hex SHA.
+  Pinning is the default. Not valid with `local_dir`.
+- `canonical.auto` (bool, optional): sync-time auto-advance policy for
+  git-backed sources. Omitted means enabled by default. Set `false` to opt
+  this manifest back into pinned-only sync behavior. `true` is accepted
+  explicitly for round-trip clarity. Not valid for `local_dir`.
 
 ### `trusted_sha` (string, optional)
 
@@ -173,10 +182,14 @@ alongside `canonical.commit`. CI's `agent-sync trust verify` fails closed if
 this drifts from the resolved SHA. **Must** mirror `canonical.commit`
 exactly when both are set.
 
-### `floating` (reserved — not yet in v1 schema)
+### `canonical.auto` (bool, optional)
 
-Will be added by Unit 5/6. Explicit opt-in to floating-ref mode. Must be
-paired with a CLI `--floating` flag at init/sync (enforced at sync, not load).
+Controls whether `agent-sync sync` is allowed to auto-advance a git-backed
+canonical source. The default is on when the key is omitted; `auto: false`
+is the durable opt-out. The loader keeps the existing pin/trust invariants:
+an advancing manifest still re-pins to a concrete `canonical.commit` and
+matching `trusted_sha` on each run, so `trusted_sha` without `canonical.commit`
+remains invalid and `trusted_sha` must still mirror `canonical.commit`.
 
 ### `targets` (seq of string, optional)
 

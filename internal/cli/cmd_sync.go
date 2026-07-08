@@ -14,7 +14,9 @@ import (
 
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/report"
+	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
 // hookSkippedMarker records that a git-hook-driven sync yielded to an
@@ -35,6 +37,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 		expectDeletions int
 		postMerge       bool
 		userScope       bool
+		frozen          bool
 	)
 
 	cmd := &cobra.Command{
@@ -81,7 +84,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 				if userScope {
 					return errUserWithWorkspace
 				}
-				return runSingleScopeSync(cmd, rc, opts, postMerge, now)
+				return runSingleScopeSync(cmd, rc, opts, postMerge, frozen, now)
 			}
 
 			// Hierarchy path: discover every emit scope from cwd and sync each.
@@ -93,7 +96,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
 			}
-			hOpts := hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts}
+			hOpts := hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts, Frozen: frozen, PostMerge: postMerge}
 			outcomes, notice, err := runHierarchySync(cmd.Context(), rc, cwd, home, hOpts, now)
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
@@ -128,16 +131,21 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 	cmd.Flags().IntVar(&expectDeletions, "expect-deletions", 0, "abort unless exactly this many files would be deleted")
 	cmd.Flags().BoolVar(&postMerge, "post-merge", false, "git-hook mode: yield to an in-progress sync and exit 0")
 	cmd.Flags().BoolVar(&userScope, "user", false, "also sync the user-level (~) manifest")
+	cmd.Flags().BoolVar(&frozen, "frozen", false, "Disable auto-advance; sync at the pinned commit only")
 	return cmd
 }
 
 // runSingleScopeSync runs the legacy single-scope sync against the nearest
 // (or explicit --workspace) scope. It preserves today's behavior verbatim and
 // is taken only when an explicit --workspace override is in effect; the
-// default path is the hierarchy orchestrator. validate also relies on this
-// single-scope shape via prepareEngine.
-func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Options, postMerge bool, now time.Time) error {
-	prep, err := prepareEngine(cmd.Context(), rc, now)
+// default path is the hierarchy orchestrator. It uses prepareScopeForSync so an
+// explicit --workspace sync auto-advances the pin like the hierarchy path does.
+func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Options, postMerge, frozen bool, now time.Time) error {
+	ws, err := workspace.Find(rc.Flags.Workspace, workspace.Options{Workspace: rc.Flags.Workspace})
+	if err != nil {
+		return fmt.Errorf("sync: %w", err)
+	}
+	prep, err := prepareScopeForSync(cmd.Context(), rc, ws.Root, ws.ManifestPath, "project", now, syncPrepareOptions{Frozen: frozen, PostMerge: postMerge})
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
@@ -145,10 +153,21 @@ func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Opti
 
 	req := prep.Request
 	req.Options = opts
+	req.Options.RunLockHeld = prep.RunLockHeld
+	// Compose the user-scope Cursor rule layer, matching prepareEngine and the
+	// hierarchy path (scope-aware signature from the harness-hierarchy work).
+	actualScope := requestScope(prep.Manifest, "project")
+	if home, herr := resolveHome(); herr == nil {
+		user, ok := hierarchy.UserScope(home)
+		applyCursorComposition(cmd.Context(), rc, &req, prep.Manifest, actualScope, user, ok, now)
+	}
 
 	root := prep.Root
 	summary, err := engine.Sync(cmd.Context(), req)
 	if err != nil {
+		if prep.PinMovedTo != "" {
+			return pinMovedSyncError(prep.PinMovedTo, err)
+		}
 		return fmt.Errorf("sync: %w", err)
 	}
 
@@ -166,6 +185,9 @@ func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Opti
 		return err
 	}
 	if summary.Outcome.ExitCode != 0 {
+		if prep.PinMovedTo != "" {
+			return pinMovedSyncError(prep.PinMovedTo, fmt.Errorf("sync reported failures: %s", summary.Outcome.Line))
+		}
 		return &exitError{code: summary.Outcome.ExitCode, err: errors.New("sync reported failures")}
 	}
 	return nil

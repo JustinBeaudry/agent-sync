@@ -38,6 +38,25 @@ type DecideInput struct {
 	// history".
 	State State
 
+	// StateLoaded asserts that State was populated from the trust store
+	// (Store.Fold) rather than left zero-valued. The PostureAllowNewSHAs
+	// auto path refuses to run unless this is true: a zero State has
+	// Revoked==false, so honoring the auto posture without a loaded State
+	// would silently skip the revoke check above. Making the posture
+	// require StateLoaded keeps the revoke guarantee structural rather than
+	// dependent on each caller remembering to Fold.
+	StateLoaded bool
+
+	// Posture selects the trust posture for this decision. Zero value keeps
+	// today's gated behavior; PostureAllowNewSHAs enables the auto-advance
+	// posture for manifest-pin drift when FastForward is also true.
+	Posture Posture
+
+	// FastForward tells the policy engine whether the caller already proved
+	// the new SHA is a descendant of the current trusted pin. The auto
+	// posture only activates when this is true.
+	FastForward bool
+
 	// TTY reports whether the process has an interactive stdin+stderr. When
 	// false, policy never chooses a Prompt* Kind.
 	TTY bool
@@ -81,7 +100,9 @@ func ExitCodeFor(err error) int {
 //
 //  1. Revoke is absolute — even a TTY never overrides it.
 //  2. ManifestTrustedSHA is authoritative when present: match proceeds,
-//     mismatch fails closed.
+//     mismatch either fails closed (default posture) or proceeds through
+//     the explicit allow-new-shas posture when the caller also proved a
+//     fast-forward.
 //  3. User history is consulted next. Known+same proceeds. Known+new
 //     either auto-promotes (AllowNewSHAs with active cooldown) or yields
 //     KindProceedWithReminder (plan decision #9: no mid-sync prompt).
@@ -100,10 +121,31 @@ func Decide(in DecideInput) (Decision, error) {
 		return d, fmt.Errorf("%w: %s", ErrRevokedTrustAnchor, in.URL)
 	}
 
+	// 1b. The allow-new-shas auto path is fail-closed without loaded trust
+	// state. A zero State has Revoked==false, so proceeding here would skip
+	// the revoke check above. Refuse structurally rather than trusting the
+	// caller to have Folded the store.
+	if in.Posture == PostureAllowNewSHAs && !in.StateLoaded {
+		d.Kind = KindDecisionRequired
+		return d, fmt.Errorf("%w: allow-new-shas posture requires loaded trust state", ErrTrustDecisionRequired)
+	}
+
 	// 2. Manifest pin authoritative when set.
 	if in.ManifestTrustedSHA != "" {
 		if in.ManifestTrustedSHA == in.ResolvedSHA {
 			d.Kind = KindProceed
+			return d, nil
+		}
+		if in.Posture == PostureAllowNewSHAs && in.FastForward {
+			d.Kind = KindProceedAutoAdvance
+			d.TrustedSHA = in.ResolvedSHA
+			d.AppendPending = PendingEntry{
+				TS:     in.Now,
+				TSRaw:  in.Now.UTC().Format(time.RFC3339),
+				URL:    in.URL,
+				NewSHA: in.ResolvedSHA,
+				OldSHA: in.ManifestTrustedSHA,
+			}
 			return d, nil
 		}
 		// Pin mismatch: CI fails closed. For a TTY, sync still uses the pin

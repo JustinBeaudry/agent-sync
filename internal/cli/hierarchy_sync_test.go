@@ -59,6 +59,45 @@ func hierarchyTree(t *testing.T) (string, string, string) {
 	return home, repo, nested
 }
 
+func hierarchyURLTree(t *testing.T, projectURL, projectSHA string, projectAuto *bool, dirURL, dirSHA string, dirAuto *bool) (string, string, string) {
+	t.Helper()
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	nested := filepath.Join(repo, "packages", "api")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeURLManifestAt(t, filepath.Join(repo, ".agent-sync.yaml"), projectURL, projectSHA, "main", projectAuto)
+	writeURLManifestAt(t, filepath.Join(nested, ".agent-sync.yaml"), dirURL, dirSHA, "main", dirAuto)
+	return home, repo, nested
+}
+
+func writeURLManifestAt(t *testing.T, path, canonicalURL, sha, ref string, auto *bool) {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("version: 1\ncanonical:\n")
+	b.WriteString("  url: " + canonicalURL + "\n")
+	if ref != "" {
+		b.WriteString("  ref: " + ref + "\n")
+	}
+	b.WriteString("  commit: " + sha + "\n")
+	if auto != nil {
+		if *auto {
+			b.WriteString("  auto: true\n")
+		} else {
+			b.WriteString("  auto: false\n")
+		}
+	}
+	b.WriteString("trusted_sha: " + sha + "\n")
+	b.WriteString("targets:\n  - claude\n")
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // newTestRuntime builds a runtimeContext suitable for driving prepareScope /
 // runHierarchySync directly, mirroring how the root command populates rc.
 func newTestRuntime() *runtimeContext {
@@ -681,6 +720,105 @@ func TestSyncCommandNoManifestHintsInit(t *testing.T) {
 	}
 	if !strings.Contains(doc.Notice, "agent-sync init") {
 		t.Errorf("notice %q does not point at agent-sync init", doc.Notice)
+	}
+}
+
+func TestRunHierarchySync_MixedFrozenAndAutoScopes(t *testing.T) {
+	requireGit(t)
+	setTestXDG(t)
+
+	projectWT, _, projectHead := makeUpdateRepo(t)
+	projectSrv := serveCanonicalRepo(t, projectWT)
+	dirWT, _, dirHead := makeUpdateRepo(t)
+	dirSrv := serveCanonicalRepo(t, dirWT)
+	autoFalse := false
+	home, repo, nested := hierarchyURLTree(t, projectSrv.URL, projectHead, &autoFalse, dirSrv.URL, dirHead, nil)
+
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("initial hierarchy sync: %v\nstderr: %s", err, errOut)
+	}
+
+	_ = commitFile(t, projectWT, "rules/project-new.md", "Project new.\n", "project second")
+	projectSrv.PushMain(t)
+	dirNew := commitFile(t, dirWT, "rules/dir-new.md", "Dir new.\n", "dir second")
+	dirSrv.PushMain(t)
+
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("second hierarchy sync: %v\nstderr: %s", err, errOut)
+	}
+	projectManifest := string(readManifest(t, repo))
+	if !strings.Contains(projectManifest, "commit: "+projectHead) {
+		t.Fatalf("frozen project scope should stay pinned:\n%s", projectManifest)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, ".claude", "rules", "agent-sync", "project-new.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("frozen project scope should not land the new rule, stat err = %v", statErr)
+	}
+	dirManifest := string(readManifest(t, nested))
+	if !strings.Contains(dirManifest, "commit: "+dirNew) {
+		t.Fatalf("auto directory scope should advance:\n%s", dirManifest)
+	}
+	mustExist(t, filepath.Join(nested, ".claude", "rules", "agent-sync", "dir-new.md"))
+}
+
+// TestRunHierarchySync_AdvanceRefusalReportsScopeAndContinues verifies that when
+// the single write scope's upstream is force-pushed (rewritten history), the
+// auto-advance refuses fast-forward-only, reports the refusal with the
+// trust-decision exit code, keeps the cached pin, and does not emit the
+// rewritten content. Under the harness-hierarchy model exactly one scope writes
+// per run (the nearest non-user scope); ancestors are read-only layers.
+func TestRunHierarchySync_AdvanceRefusalReportsScopeAndContinues(t *testing.T) {
+	requireGit(t)
+	setTestXDG(t)
+
+	projectWT, _, projectHead := makeUpdateRepo(t)
+	projectSrv := serveCanonicalRepo(t, projectWT)
+	dirWT, dirRoot, dirHead := makeUpdateRepo(t)
+	dirSrv := serveCanonicalRepo(t, dirWT)
+	home, _, nested := hierarchyURLTree(t, projectSrv.URL, projectHead, nil, dirSrv.URL, dirHead, nil)
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
+
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("initial hierarchy sync: %v\nstderr: %s", err, errOut)
+	}
+
+	// Rewrite the write scope's (nested) upstream history so the newest SHA is
+	// not a fast-forward from the pin.
+	mustGit(t, dirWT, "reset", "--hard", dirRoot)
+	_ = commitFile(t, dirWT, "rules/rewritten.md", "Rewritten.\n", "rewritten history")
+	dirSrv.PushMain(t)
+
+	outcomes, _, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{IncludeUser: false, Frozen: false, EngineOpts: engine.Options{
+			Mode:   report.ModeAtomic,
+			Now:    func() time.Time { return now },
+			Logger: rc.Logger,
+		}},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("got %d outcomes, want 1 (single write scope)", len(outcomes))
+	}
+	if outcomes[0].Err == nil {
+		t.Fatal("rewritten-history write scope should report a refusal")
+	}
+	if !strings.Contains(outcomes[0].Err.Error(), "fast-forward") {
+		t.Fatalf("scope error should name the fast-forward refusal, got: %v", outcomes[0].Err)
+	}
+	if got := hierarchyExitCode(outcomes); got != trust.ExitTrustDecisionRequired {
+		t.Fatalf("hierarchy exit code = %d, want %d", got, trust.ExitTrustDecisionRequired)
+	}
+
+	dirManifest := string(readManifest(t, nested))
+	if !strings.Contains(dirManifest, "commit: "+dirHead) {
+		t.Fatalf("rewritten-history scope should keep its cached pin:\n%s", dirManifest)
+	}
+	if _, statErr := os.Stat(filepath.Join(nested, ".claude", "rules", "agent-sync", "rewritten.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("rewritten-history scope should not land the rewritten rule, stat err = %v", statErr)
 	}
 }
 

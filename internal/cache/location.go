@@ -1,13 +1,16 @@
 package cache
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/adrg/xdg"
 )
@@ -40,6 +43,16 @@ type Location struct {
 	AuditPath string
 	Key       string
 	Canonical string
+}
+
+// AdvanceAudit is one auto-advance record appended to the cache audit file.
+type AdvanceAudit struct {
+	TS     time.Time
+	OldSHA string
+	NewSHA string
+	Ref    string
+	Scope  string
+	URL    string
 }
 
 // ResolveOptions controls where the cache lives on disk.
@@ -111,7 +124,95 @@ func (l *Location) WriteAudit() error {
 	if err := os.MkdirAll(l.Dir, 0o750); err != nil {
 		return fmt.Errorf("cache: mkdir %q: %w", l.Dir, err)
 	}
-	return stagedWriteCache(l.Dir, AuditFileName, []byte(l.Canonical+"\n"), 0o644)
+	content, err := l.auditContent(nil)
+	if err != nil {
+		return err
+	}
+	return stagedWriteCache(l.Dir, AuditFileName, content, 0o644)
+}
+
+// AppendAutoAdvance extends the cache audit file with one auto-advance record,
+// preserving the leading canonical URL line WriteAudit maintains.
+func (l *Location) AppendAutoAdvance(a AdvanceAudit) error {
+	if l == nil {
+		return errors.New("cache: nil Location")
+	}
+	if Key(l.Canonical) != l.Key {
+		return fmt.Errorf("audit: canonical %q does not match key %q", l.Canonical, l.Key)
+	}
+	if a.OldSHA == "" || a.NewSHA == "" {
+		return errors.New("audit: auto-advance requires old and new SHAs")
+	}
+	if err := os.MkdirAll(l.Dir, 0o750); err != nil {
+		return fmt.Errorf("cache: mkdir %q: %w", l.Dir, err)
+	}
+	content, err := l.auditContent([]AdvanceAudit{a})
+	if err != nil {
+		return err
+	}
+	return stagedWriteCache(l.Dir, AuditFileName, content, 0o644)
+}
+
+func (l *Location) auditContent(appends []AdvanceAudit) ([]byte, error) {
+	tail, err := readAuditTail(l.Dir, AuditFileName, l.Canonical)
+	if err != nil {
+		return nil, err
+	}
+	var b bytes.Buffer
+	b.WriteString(l.Canonical)
+	b.WriteByte('\n')
+	b.Write(tail)
+	for _, a := range appends {
+		if b.Len() > 0 && b.Bytes()[b.Len()-1] != '\n' {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b,
+			"auto-advance ts=%s old_sha=%s new_sha=%s ref=%s scope=%s url=%s\n",
+			a.TS.UTC().Format(time.RFC3339),
+			a.OldSHA,
+			a.NewSHA,
+			a.Ref,
+			a.Scope,
+			a.URL,
+		)
+	}
+	return b.Bytes(), nil
+}
+
+func readAuditTail(dir, name, canonical string) ([]byte, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("cache: open root %q: %w", dir, err)
+	}
+	defer func() { _ = root.Close() }()
+
+	f, err := root.Open(name)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("cache: open audit %q: %w", name, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("cache: read audit %q: %w", name, err)
+	}
+	if len(data) == 0 {
+		return nil, nil
+	}
+	firstNL := bytes.IndexByte(data, '\n')
+	if firstNL < 0 {
+		// Single line, no trailing newline: header only, no appended tail.
+		return nil, nil
+	}
+	if string(data[:firstNL]) != canonical {
+		return nil, nil
+	}
+	tail := make([]byte, len(data[firstNL+1:]))
+	copy(tail, data[firstNL+1:])
+	return tail, nil
 }
 
 // stagedWriteCache writes content atomically to dir/name by creating a
