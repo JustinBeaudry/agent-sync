@@ -1,0 +1,85 @@
+<task>
+You are implementing Batch 3 of the plan at `docs/plans/2026-07-08-001-feat-inline-auto-update-plan.md` in the Go repo `agent-sync` (Go 1.25). READ THE PLAN FIRST (esp. U5, U7, KTD1/KTD4/KTD8), plus `AGENTS.md` (invariants: all fs writes via internal/fsroot; non-interactive paths NEVER prompt/hang; per-scope continue-and-report). This is the ACTIVATION batch — it turns auto-advance ON by default. It is security-critical.
+
+Batches 1 & 2 already landed and are on this branch:
+- manifest `CanonicalSource.Auto *bool` (nil ⇒ auto-ON; false ⇒ opt out).
+- `internal/git/materialize.go` `ResolveOrFallback` Input mode → resolves ref online, falls back to cached pin on ErrRemoteUnreachable, returns `Result.FellBackToPinned`; enforces ff via IsAncestor.
+- `internal/cli/advance.go`: `resolveAdvance` (resolves newest + computes `fastForward` via git.IsAncestor against `m.Canonical.Commit`), `repinManifest` (WriteResolvedSHA+WriteFile).
+- `internal/trust`: `Decide` with `Posture` + `KindProceedAutoAdvance`. IMPORTANT: `Decide` now REQUIRES `DecideInput.StateLoaded = true` when `Posture == PostureAllowNewSHAs`, else it fails closed with ErrTrustDecisionRequired. `StateLoaded` must only be set true after you actually load trust State from the store (trust.Store.Fold), so real revocations are detected.
+- `internal/cli/cmd_sync.go`: `--frozen` flag currently stashed in context via `withSyncRequest`/`syncRequestFrom` (a bridge — see U5 task 3).
+
+Two units, U5 then U7:
+
+U5 — Wire auto-advance into the per-scope sync prepare path.
+U7 — Record every auto-advance (old→new SHA) to the structured log + the cache audit file.
+</task>
+
+<files>
+U5: internal/cli/setup.go (prepareScope), internal/cli/cmd_sync.go (single-scope path + --frozen threading), internal/cli/hierarchy_sync.go (per-scope loop, continue-and-report for refused advance), internal/cli/advance.go (add an auto-path resolve + ff-baseline fix), internal/cli/materialize.go (use ResolveOrFallback on the auto path), internal/cli/cmd_sync_test.go, internal/cli/hierarchy_sync_test.go, internal/cli/advance_test.go
+U7: the advance helper / setup.go (log emit), internal/cache (audit write — see cache.WriteAudit referenced in internal/git/materialize.go), plus tests
+Read for context: internal/cli/cmd_update.go (run-lock discipline: NewRunLock/Acquire + syncAfterRepin with RunLockHeld=true), internal/engine/engine.go (Options.RunLockHeld ~line 147-167), internal/locks/runlock.go, internal/trust/store.go (Fold), internal/trust/policy.go (DecideInput), internal/git/materialize.go.
+</files>
+
+<patterns>
+- Run-lock: mirror cmd_update.go exactly — open fsroot workspace root, NewRunLock(root), Acquire with a timeout, defer release, re-pin, then engine.Sync with req.Options.RunLockHeld=true (re-acquiring inside engine would deadlock; see engine.go comment).
+- Continue-and-report: mirror hierarchy_sync.go scopeOutcome — a refused/failed advance for one scope sets out.Err (or a warning) and the loop continues; it must NOT abort the whole run.
+- Offline best-effort: mirror composeUserRules' handling of ErrRemoteUnreachable — warn and proceed with the cached pin.
+- Trust load: mirror how the trust Store is opened/folded elsewhere in internal/cli (find the existing Store usage) to populate State before Decide.
+</patterns>
+
+<approach>
+Per-scope decision, placed where the loaded manifest is in hand (in or adjacent to prepareScope, and in the single-scope path). For EACH scope:
+
+1. Eligibility: auto-advance applies only when the source is git-backed (Canonical.URL or Canonical.LocalPath) AND NOT `--frozen` AND `Canonical.Auto` is not explicitly false (nil ⇒ ON). `Canonical.LocalDir` sources are a NO-OP (no pin to advance). Frozen / auto:false / local_dir ⇒ today's behavior unchanged (do NOT acquire the CLI run lock for these; let engine.Sync self-lock as it does now).
+
+2. For an eligible scope, acquire the scope's CLI-level RunLock (like update) and hold it across re-pin + prepare + sync. Then:
+   a. Resolve newest with OFFLINE FALLBACK. For URL sources, use git.Materialize with `ResolveOrFallback: true`, `PinnedSHA: m.Canonical.Commit`, `Ref: m.Canonical.Ref`. If `Result.FellBackToPinned` (remote unreachable) ⇒ WARN, do NOT advance, proceed to prepare+sync at the existing pin. For LocalPath sources, resolve the ref locally (offline is not a concern).
+   b. FAST-FORWARD BASELINE FIX (review finding #2): compute the ff proof against the SAME SHA the trust engine gates on — `m.TrustedSHA` (ManifestTrustedSHA) — NOT `m.Canonical.Commit`. If the baseline (trusted_sha) is empty, treat fastForward as FALSE (fail-safe), never default-true. Add/adjust an auto-path resolve in advance.go so the ff baseline is trusted_sha for the auto path. (Leave update's existing resolveAdvance using Canonical.Commit unchanged — update writes them equal and has a human gate.)
+   c. Load trust State: open the trust Store and Fold for the canonical URL so revocations are seen. Call trust.Decide with Posture=PostureAllowNewSHAs, FastForward=<the ff verdict from (b)>, ManifestTrustedSHA=m.TrustedSHA, StateLoaded=true, and the resolved SHA.
+   d. On `KindProceedAutoAdvance`: append the returned AppendPending to pending.jsonl (reuse the existing writer), repinManifest(newSHA), then continue to prepare+sync (which now materializes the new pin). On a refusal (KindDecisionRequired from non-ff, or ErrRevokedTrustAnchor, or any error): do NOT advance, report the scope (continue-and-report), keep the existing pin, and — for revoke — surface the revoke error clearly. NEVER prompt/hang in non-interactive mode.
+   e. Re-pin MUST happen BEFORE prepareScope so prepare reads the advanced manifest and materializes the new SHA.
+   f. If re-pin SUCCEEDS but the subsequent engine.Sync FAILS: surface a distinct condition/exit signal meaning "pin moved but files did not land — re-run sync" (model on cmd_update.go's exitUpdatePinMoved = 6). Do not roll back the pin silently.
+
+3. --frozen threading (review finding #3): replace the context.WithValue bridge (withSyncRequest/syncRequestFrom) with an explicit field threaded through the options/request the prepare path consumes (e.g. on engine.Options or a prepare parameter). Both `--frozen` and `Canonical.Auto == false` must force the pinned-only path. Remove the now-dead context bridge if fully replaced.
+
+U7 — On every actual auto-advance (KindProceedAutoAdvance applied), emit a structured log line with fields {old_sha, new_sha, ref, scope/level, url} AND write/extend the cache audit record (see cache.WriteAudit usage in internal/git/materialize.go). No advance record on frozen/offline-fallback/refused paths (offline emits a WARNING, not an advance record). No adapter/header changes (deferred).
+</approach>
+
+<constraints>
+- Do NOT run git commit/push or create PRs — the orchestrator handles git.
+- Restrict modifications to the repo root; keep scope tight (no unrelated refactors).
+- SECURITY, non-negotiable: (a) a revoked trust anchor must NEVER auto-advance — you MUST load trust State (Fold) before Decide and pass StateLoaded=true only then; (b) the ff proof MUST be computed against trusted_sha and an empty baseline is fastForward=false; (c) never prompt or hang in non-interactive mode; (d) --frozen and auto:false each force pinned-only.
+- All fs writes via internal/fsroot.
+- Do NOT weaken update's existing behavior or the pinned-path CI fail-closed behavior.
+- Resolve fully before stopping. Report any file you touch outside the listed set in issues.
+</constraints>
+
+<testing>
+Supplement the plan's U5/U7 scenarios. REQUIRED tests (several are review-mandated integration tests):
+- Single-scope URL manifest, upstream advanced by a fast-forward commit → second `sync` lands the newer content with NO --accept-update and NO prompt; manifest commit+trusted_sha rewritten to new SHA. (Covers R1/R6)
+- `sync --frozen` and `Canonical.Auto: false` → byte-identical to today's pinned output; no advance. (Covers R2) — one test each.
+- Upstream FORCE-PUSH (rewritten history, non-ff) → auto-advance refuses, reports, keeps the cached pin, run continues. (Covers R3)
+- REVOKED trust anchor + healthy fast-forward upstream → auto-advance REFUSES (revoke error), pin unchanged. (review-mandated integration test — exercise the real sync→Fold→Decide path, not just the pure policy unit.)
+- Offline (remote unreachable) with a floating manifest → sync SUCCEEDS on the cached pin, warns, no error, no advance record. (Covers R4)
+- ff-baseline divergence: manifest where trusted_sha is set but canonical.commit differs/empty → the auto path computes ff against trusted_sha and does NOT advance non-fast-forward. (review finding #2)
+- Hierarchy run: one frozen scope + one auto scope → auto advances, frozen unchanged; one scope's ff-guard refuses → that scope reports, others still sync.
+- local_dir scope → no pin write, clean no-op.
+- Re-pin succeeds but emit fails → distinct exit signal; re-run recovers.
+- U7: an actual advance emits exactly one structured record + one audit entry with old→new; frozen/offline/refused emit none.
+Use existing fixtures: internal/gittest (RequireGit, MustGit); cmd_update_test.go helpers (makeUpdateRepo, commitFile, writeUpdateWS) and cmd_sync_test.go harness. Real FS + t.TempDir() + shelled git. For the revoke test, use the trust Store test helpers to record a revoke.
+</testing>
+
+<verify>
+Run together and fix until green:
+`go build ./... && go vet ./... && go test -race ./...`
+Then `golangci-lint run` if installed (note in verification_summary if not). Run all test files per package together. Do NOT report "completed" unless build, vet, and the FULL `go test -race ./...` pass. (CI "test (darwin/amd64)" stalls on runner scarcity — ignore; make the local suite green.)
+</verify>
+
+<output_contract>
+Report via --output-schema. Fill every field:
+- status: "completed" only if all changes made AND full `go test -race ./...` passes; "partial" if incomplete; "failed" otherwise.
+- files_modified: paths changed.
+- issues: problems, gaps, deviations, and — CRITICAL — any place you were unsure whether a security guarantee (revoke, ff-only, opt-out, no-hang) holds. Call out explicitly whether the revoke integration test and the ff-baseline test are present and passing.
+- summary: one paragraph across U5/U7.
+- verification_summary: exact commands run and outcomes, including the full `go test -race ./...` result.
+</output_contract>
