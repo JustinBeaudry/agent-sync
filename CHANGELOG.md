@@ -11,6 +11,33 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (semver-major): `agent-sync sync` auto-advances the canonical pin by
+  default.** Previously `sync` materialized the pinned `commit` and never moved it;
+  advancing required the explicit, gated `agent-sync update`. Now `sync` resolves
+  the newest upstream commit on the manifest's `ref`, and — for git-backed sources
+  that are pinned and carry a `trusted_sha` — advances the pin and re-pins
+  `commit` + `trusted_sha` forward automatically, auto-accepting the trust
+  decision **through the trust policy engine**. Safety rails: advancement is
+  **fast-forward-only** (rewritten/force-pushed history is refused, pin kept); a
+  **revoked trust anchor always refuses**; **offline / unreachable falls back to
+  the cached pin** with a warning (never errors); every advance is recorded to the
+  structured log and the cache audit file. `local_dir` sources are unaffected
+  (nothing to pin); `local_path` sources advance fast-forward-only.
+
+  **Migration.** On upgrade, existing pinned workspaces begin tracking upstream on
+  the next `sync`. To keep today's deterministic, human-gated behavior:
+  - pass `--frozen` for a single run, or
+  - set `canonical.auto: false` in `.agent-sync.yaml` to opt a workspace out
+    permanently (then advance deliberately with `agent-sync update`).
+
+  CI and any reproducibility-sensitive pipeline should use one of the opt-outs.
+  See `docs/threat-model.md` (T1) for the revised supply-chain posture: human
+  review is no longer in the default advance path, so fast-forward-only and the
+  trust policy are the remaining rails, and commit-signature verification is still
+  absent.
+
 ### Added
 
 - **Zero-flag `init`.** `agent-sync init` no longer requires a source or

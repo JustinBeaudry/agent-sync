@@ -57,7 +57,10 @@ footprints (`.claude/`, `.cursor/`, ...) already in your workspace.
    never merges across levels — each target tool resolves precedence via its own
    native config hierarchy, and `sync` warns when a scope emits a kind a tool
    won't read natively at that level.
-2. **Explicit `sync`.** `agent-sync sync` materializes the pinned content,
+2. **Explicit `sync`.** `agent-sync sync` advances the canonical pin to the
+   newest upstream commit by default (fast-forward-only, revoke-aware, with
+   offline fallback to the cached pin; opt out per run with `--frozen` or per
+   workspace with `canonical.auto: false`), materializes that content,
    compiles it via per-tool adapters, stages the output, and atomically
    swaps it into each tool's reserved subdirectory (e.g.
    `.claude/rules/agent-sync/`, `.cursor/rules/agent-sync/`, `.codex/skills/agent-sync-<id>/`,
