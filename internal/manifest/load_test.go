@@ -72,6 +72,44 @@ func TestLoad_ValidPinned(t *testing.T) {
 	}
 }
 
+func TestLoadBytes_AcceptsWorkspaceActivationRoot(t *testing.T) {
+	src := []byte("version: 1\nscope: workspace\nactivation_root: true\ncanonical:\n  local_dir: .agents\n")
+	m, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if m.Scope != manifest.ScopeWorkspace {
+		t.Fatalf("Scope = %q, want %q", m.Scope, manifest.ScopeWorkspace)
+	}
+	if !m.ActivationRoot {
+		t.Fatal("ActivationRoot = false, want true")
+	}
+}
+
+func TestLoadBytes_RejectsActivationRootOutsideWorkspace(t *testing.T) {
+	for _, scope := range []string{"", "user", "project", "global"} {
+		src := []byte("version: 1\nscope: " + scope + "\nactivation_root: true\ncanonical:\n  local_dir: .agents\n")
+		if scope == "" {
+			src = []byte("version: 1\nactivation_root: true\ncanonical:\n  local_dir: .agents\n")
+		}
+		_, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+		if err == nil || !errors.Is(err, manifest.ErrInvalidManifest) {
+			t.Fatalf("scope %q: err = %v, want ErrInvalidManifest", scope, err)
+		}
+	}
+}
+
+func TestLoadBytes_AcceptsWorkspaceScopeWithoutActivationRoot(t *testing.T) {
+	src := []byte("version: 1\nscope: workspace\ncanonical:\n  local_dir: .agents\n")
+	m, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if m.ActivationRoot {
+		t.Fatal("ActivationRoot = true, want false")
+	}
+}
+
 func TestLoad_ValidLocalPath(t *testing.T) {
 	m, err := loadFixture(t, "valid-local-path.yaml", manifest.LoadOptions{})
 	if err != nil {

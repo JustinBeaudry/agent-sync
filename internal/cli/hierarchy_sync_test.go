@@ -15,8 +15,10 @@ import (
 
 	"github.com/agent-sync/agent-sync/internal/coverage"
 	"github.com/agent-sync/agent-sync/internal/engine"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/ir"
+	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/report"
 	"github.com/agent-sync/agent-sync/internal/trust"
 )
@@ -106,7 +108,41 @@ func newTestRuntime() *runtimeContext {
 	}
 }
 
-func TestRunHierarchySyncEmitsEachScope(t *testing.T) {
+func TestPrepareScope_UsesManifestScopeWhenPresent(t *testing.T) {
+	ws := t.TempDir()
+	manifestPath := filepath.Join(ws, ".agent-sync.yaml")
+	manifestText := "version: 1\n" +
+		"scope: " + manifest.ScopeWorkspace + "\n" +
+		"activation_root: true\n" +
+		"canonical:\n" +
+		"  local_dir: .agents\n" +
+		"targets:\n" +
+		"  - codex\n"
+	if err := os.WriteFile(manifestPath, []byte(manifestText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, ws, ".agents/AGENTS.md", "team standards\n")
+
+	rc := newTestRuntime()
+	prep, err := prepareScope(
+		context.Background(),
+		rc,
+		ws,
+		manifestPath,
+		"project",
+		time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("prepareScope: %v", err)
+	}
+	t.Cleanup(prep.Close)
+
+	if prep.Request.Scope != manifest.ScopeWorkspace {
+		t.Fatalf("request scope = %q, want %q", prep.Request.Scope, manifest.ScopeWorkspace)
+	}
+}
+
+func TestRunHierarchySyncEmitsClosestScope(t *testing.T) {
 	home, repo, nested := hierarchyTree(t)
 	rc := newTestRuntime()
 	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
@@ -124,14 +160,11 @@ func TestRunHierarchySyncEmitsEachScope(t *testing.T) {
 		t.Fatalf("runHierarchySync: %v", err)
 	}
 
-	if len(outcomes) != 2 {
-		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	if len(outcomes) != 1 {
+		t.Fatalf("got %d outcomes, want 1", len(outcomes))
 	}
-	if outcomes[0].Scope.Level != hierarchy.LevelProject {
-		t.Errorf("first scope level = %s, want project", outcomes[0].Scope.Level)
-	}
-	if outcomes[1].Scope.Level != hierarchy.LevelDirectory {
-		t.Errorf("second scope level = %s, want directory", outcomes[1].Scope.Level)
+	if outcomes[0].Scope.Level != hierarchy.LevelDirectory {
+		t.Fatalf("scope level = %s, want directory", outcomes[0].Scope.Level)
 	}
 	for _, o := range outcomes {
 		if o.Err != nil {
@@ -139,15 +172,50 @@ func TestRunHierarchySyncEmitsEachScope(t *testing.T) {
 		}
 	}
 
-	// Project scope emitted under repo/.claude.
-	mustExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
-	// Directory scope emitted under packages/api/.claude.
+	// Closest scope (directory) emitted under packages/api/.claude.
 	mustExist(t, filepath.Join(nested, ".claude", "skills", "agent-sync-api-skill", "SKILL.md"))
+	// Project scope was inherited for layer resolution but not synced.
+	mustNotExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
 	// The user scope was NOT emitted: no .claude under home itself.
 	mustNotExist(t, filepath.Join(home, ".claude"))
 
 	if got := hierarchyExitCode(outcomes); got != 0 {
 		t.Errorf("aggregate exit = %d, want 0", got)
+	}
+}
+
+func TestRunHierarchySyncContinuesWhenAncestorLayerCannotMaterialize(t *testing.T) {
+	home, repo, nested := hierarchyTree(t)
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte("version: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rc := newTestRuntime()
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+
+	outcomes, _, err := runHierarchySync(
+		context.Background(), rc, nested, home,
+		hierarchySyncOptions{IncludeUser: false, EngineOpts: engine.Options{
+			Mode:   report.ModeAtomic,
+			Now:    func() time.Time { return now },
+			Logger: rc.Logger,
+		}},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("runHierarchySync: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("outcomes = %d, want 1: %+v", len(outcomes), outcomes)
+	}
+	if outcomes[0].Err != nil {
+		t.Fatalf("descendant sync should continue despite ancestor materialize error: %v", outcomes[0].Err)
+	}
+	data, err := os.ReadFile(filepath.Join(nested, ".claude", "skills", "agent-sync-api-skill", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read synced descendant skill: %v", err)
+	}
+	if !strings.Contains(string(data), "api skill body") {
+		t.Fatalf("descendant skill missing body:\n%s", data)
 	}
 }
 
@@ -176,10 +244,115 @@ func TestSyncCommandHierarchy(t *testing.T) {
 		t.Fatalf("sync failed: %v\nstderr: %s", err, errOut)
 	}
 
-	mustExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
+	mustNotExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
 	mustExist(t, filepath.Join(nested, ".claude", "skills", "agent-sync-api-skill", "SKILL.md"))
 	// A repo sync without --user must never write under the home directory.
 	mustNotExist(t, filepath.Join(home, ".claude"))
+}
+
+func TestSyncInsideActivationRootInheritsWorkspaceCodexFragmentsAndSkipsUser(t *testing.T) {
+	home := t.TempDir()
+	ws := filepath.Join(home, "ActualReality")
+	repo := filepath.Join(ws, "apps", "api")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".git"), []byte("gitdir: .git/worktrees/api\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeWS(t, home, ".agent-sync.yaml", "version: 1\nscope: user\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, home, ".agents/configs/codex/features/hooks/fragment.yaml", "id: hooks\ntarget: codex\npath: .codex/config.toml\nmerge: toml-key\nlocator: features.hooks\nvisibility: team\ninheritance: descendants\npayload: payload.toml\n")
+	writeWS(t, home, ".agents/configs/codex/features/hooks/payload.toml", "[features]\nhooks = false\n")
+
+	writeWS(t, ws, ".agent-sync.yaml", "version: 1\nscope: workspace\nactivation_root: true\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, ws, ".agents/configs/codex/features/hooks/fragment.yaml", "id: hooks\ntarget: codex\npath: .codex/config.toml\nmerge: toml-key\nlocator: features.hooks\npayload: payload.toml\n")
+	writeWS(t, ws, ".agents/configs/codex/features/hooks/payload.toml", "[features]\nhooks = true\n")
+
+	writeWS(t, repo, ".agent-sync.yaml", "version: 1\nscope: project\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, repo, ".agents/AGENTS.md", "project instructions\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
+	}
+	data, err := os.ReadFile(filepath.Join(repo, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatalf("read project codex config: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "hooks = true") {
+		t.Fatalf("project config did not inherit workspace fragment:\n%s", text)
+	}
+	if strings.Contains(text, "hooks = false") {
+		t.Fatalf("project config inherited user fragment despite activation root:\n%s", text)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("plain sync wrote user config, err=%v", err)
+	}
+}
+
+func TestSyncInsideActivationRootInheritsWorkspaceSkill(t *testing.T) {
+	home := t.TempDir()
+	ws := filepath.Join(home, "ActualReality")
+	repo := filepath.Join(ws, "apps", "api")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".git"), []byte("gitdir: .git/worktrees/api\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeWS(t, ws, ".agent-sync.yaml", "version: 1\nscope: workspace\nactivation_root: true\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, ws, ".agents/skills/code-review/SKILL.md", "workspace code review skill\n")
+
+	writeWS(t, repo, ".agent-sync.yaml", "version: 1\nscope: project\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, repo, ".agents/AGENTS.md", "project instructions\n")
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
+	}
+	data, err := os.ReadFile(filepath.Join(repo, ".agents", "skills", "agent-sync-code-review", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read inherited skill: %v", err)
+	}
+	if !strings.Contains(string(data), "workspace code review skill") {
+		t.Fatalf("inherited skill content mismatch:\n%s", data)
+	}
+}
+
+func TestSyncCodexHooksFragmentGeneratesHooksJSON(t *testing.T) {
+	home, repo, _ := hierarchyTree(t)
+	writeWS(t, repo, ".agent-sync.yaml", "version: 1\nscope: project\ncanonical:\n  local_dir: .agents\ntargets:\n  - codex\n")
+	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-policy/fragment.yaml", "id: pre-tool-policy\ntarget: codex\npath: .codex/hooks.json\nmerge: codex-hooks\nlocator: PreToolUse/pre-tool-policy\nsafety: executable\npayload: payload.json\n")
+	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-policy/payload.json", `{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .codex/hooks/check.py","statusMessage":"Checking Bash command"}]}`)
+	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-edit/fragment.yaml", "id: pre-tool-edit\ntarget: codex\npath: .codex/hooks.json\nmerge: codex-hooks\nlocator: PreToolUse/pre-tool-edit\nsafety: executable\npayload: payload.json\n")
+	writeWS(t, repo, ".agents/configs/codex/hooks/pre-tool-edit/payload.json", `{"matcher":"Edit","hooks":[{"type":"command","command":"python3 .codex/hooks/check_edit.py","statusMessage":"Checking Edit command"}]}`)
+
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("sync: %v\nstderr: %s", err, errOut)
+	}
+	data, err := os.ReadFile(filepath.Join(repo, ".codex", "hooks.json"))
+	if err != nil {
+		t.Fatalf("read hooks.json: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{`"hooks": {`, `"PreToolUse"`, `"statusMessage": "Checking Bash command"`, `"statusMessage": "Checking Edit command"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("hooks.json missing %q:\n%s", want, text)
+		}
+	}
+	var doc struct {
+		Hooks map[string][]json.RawMessage `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse hooks.json: %v\n%s", err, text)
+	}
+	if got := len(doc.Hooks["PreToolUse"]); got != 2 {
+		t.Fatalf("PreToolUse hooks = %d, want 2:\n%s", got, text)
+	}
+	if strings.Contains(text, "_agent_sync_generated") {
+		t.Fatalf("hooks.json should not include agent-sync marker:\n%s", text)
+	}
 }
 
 // TestRunHierarchySyncContinuesPastMalformedScope drives the real
@@ -209,60 +382,198 @@ func TestRunHierarchySyncContinuesPastMalformedScope(t *testing.T) {
 		now,
 	)
 	// Discovery succeeded (both manifests are present), so the orchestrator
-	// returns no top-level error — the bad scope is reported per-scope.
+	// returns no top-level error — the bad selected scope is reported.
 	if err != nil {
 		t.Fatalf("runHierarchySync returned a top-level error: %v", err)
 	}
 
-	if len(outcomes) != 2 {
-		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	// Directory scope is the selected emit scope and it should report the YAML error.
+	if len(outcomes) != 1 {
+		t.Fatalf("got %d outcomes, want 1", len(outcomes))
 	}
-	// Outcomes are shallow→deep: project (valid) first, directory (bad) second.
-	valid, bad := outcomes[0], outcomes[1]
-	if valid.Scope.Level != hierarchy.LevelProject {
-		t.Fatalf("first scope level = %s, want project", valid.Scope.Level)
+	if outcomes[0].Scope.Level != hierarchy.LevelDirectory {
+		t.Fatalf("scope level = %s, want directory", outcomes[0].Scope.Level)
 	}
-	if bad.Scope.Level != hierarchy.LevelDirectory {
-		t.Fatalf("second scope level = %s, want directory", bad.Scope.Level)
-	}
-
-	// (b) Exactly one outcome errored (the malformed scope), and the valid
-	// scope has a nil error with a populated summary.
-	if valid.Err != nil {
-		t.Errorf("valid scope errored: %v", valid.Err)
-	}
-	if valid.Summary.Workspace == "" {
-		t.Errorf("valid scope summary not populated: %+v", valid.Summary)
-	}
-	if bad.Err == nil {
+	if outcomes[0].Err == nil {
 		t.Fatal("malformed scope must report an error")
 	}
-	errored := 0
-	for _, o := range outcomes {
-		if o.Err != nil {
-			errored++
+
+	mustNotExist(t, filepath.Join(nested, ".claude"))
+	if got := hierarchyExitCode(outcomes); got == 0 {
+		t.Error("aggregate exit code must be non-zero when the selected scope fails")
+	}
+
+	// Project scope was not emitted; selection is closest non-user scope.
+	mustNotExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
+}
+
+func TestSelectWriteScopes_DefaultSelectsClosestNonUser(t *testing.T) {
+	scopes := []hierarchy.Scope{
+		{Level: hierarchy.LevelUser, Emit: true, ManifestPath: "/home/.agent-sync.yaml"},
+		{Level: hierarchy.LevelWorkspace, Emit: true, ManifestPath: "/ws/.agent-sync.yaml"},
+		{Level: hierarchy.LevelProject, Emit: true, ManifestPath: "/repo/.agent-sync.yaml"},
+		{Level: hierarchy.LevelDirectory, Emit: true, ManifestPath: "/repo/pkg/.agent-sync.yaml"},
+	}
+
+	got := selectWriteScopes(scopes, false)
+	emit := 0
+	for _, sc := range got {
+		if sc.Emit {
+			emit++
 		}
 	}
-	if errored != 1 {
-		t.Errorf("got %d errored outcomes, want exactly 1", errored)
+	if emit != 1 {
+		t.Fatalf("emit scopes = %d, want 1", emit)
+	}
+	if got[len(got)-1].Level != hierarchy.LevelDirectory || !got[len(got)-1].Emit {
+		t.Fatalf("got %#v, want directory scope as selected emit", got[len(got)-1])
+	}
+}
+
+func TestSelectWriteScopes_UserFlagSelectsOnlyUser(t *testing.T) {
+	scopes := []hierarchy.Scope{
+		{Level: hierarchy.LevelWorkspace, Emit: true, ManifestPath: "/ws/.agent-sync.yaml"},
+		{Level: hierarchy.LevelProject, Emit: true, ManifestPath: "/repo/.agent-sync.yaml"},
+		{Level: hierarchy.LevelUser, Emit: false, ManifestPath: "/home/.agent-sync.yaml"},
 	}
 
-	// (a) The valid scope still emitted its .claude files on disk despite the
-	// sibling scope failing.
-	mustExist(t, filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md"))
-	// The malformed scope emitted nothing.
-	mustNotExist(t, filepath.Join(nested, ".claude"))
-
-	// (c) The aggregate exit code is non-zero because a scope failed.
-	if got := hierarchyExitCode(outcomes); got == 0 {
-		t.Error("aggregate exit code must be non-zero when a scope fails")
+	got := selectWriteScopes(scopes, true)
+	emit := 0
+	for _, sc := range got {
+		if sc.Emit {
+			emit++
+		}
 	}
+	if emit != 1 {
+		t.Fatalf("emit scopes = %d, want 1", emit)
+	}
+	if got[2].Level != hierarchy.LevelUser || !got[2].Emit {
+		t.Fatalf("got %#v, want user scope as selected emit", got[2])
+	}
+}
+
+func TestApplyResolvedLayersUsesRequestScope(t *testing.T) {
+	sc := hierarchy.Scope{Level: hierarchy.LevelProject, ManifestPath: "/repo/.agent-sync.yaml"}
+	req := engine.Request{
+		Scope: manifest.ScopeGlobal,
+		Fragments: []harness.Fragment{{
+			ID:          "hooks",
+			Target:      "codex",
+			Path:        ".codex/config.toml",
+			Merge:       harness.MergeTOMLKey,
+			Locator:     "features.hooks",
+			Scope:       manifest.ScopeGlobal,
+			Inheritance: harness.InheritanceRootOnly,
+			Visibility:  harness.VisibilityTeam,
+			Payload:     []byte("current\n"),
+		}},
+	}
+
+	applyResolvedLayers(&req, sc, []hierarchy.Scope{sc}, nil)
+	if len(req.Fragments) != 1 {
+		t.Fatalf("fragments = %+v, want current global fragment", req.Fragments)
+	}
+	if string(req.Fragments[0].Payload) != "current\n" {
+		t.Fatalf("payload = %q, want current", req.Fragments[0].Payload)
+	}
+}
+
+func TestApplyResolvedLayersKeepsCurrentScopeWhenReadOnlyLayerMissing(t *testing.T) {
+	workspace := hierarchy.Scope{Level: hierarchy.LevelWorkspace, ManifestPath: "/ws/.agent-sync.yaml"}
+	project := hierarchy.Scope{Level: hierarchy.LevelProject, ManifestPath: "/ws/repo/.agent-sync.yaml"}
+	req := engine.Request{
+		Scope: manifest.ScopeProject,
+		Nodes: []ir.Node{{
+			ID:   "project-skill",
+			Kind: ir.KindSkill,
+			Body: []byte("project\n"),
+		}},
+		Skills: map[string]ir.Skill{
+			"project-skill": {Node: ir.Node{ID: "project-skill", Kind: ir.KindSkill}},
+		},
+		SourceURL: "project-source",
+	}
+	preparedLayers := []preparedLayer{{
+		Scope: workspace,
+		Materialized: materialized{
+			Nodes: []ir.Node{{ID: "workspace-skill", Kind: ir.KindSkill, Body: []byte("workspace\n")}},
+			Skills: map[string]ir.Skill{
+				"workspace-skill": {Node: ir.Node{ID: "workspace-skill", Kind: ir.KindSkill}},
+			},
+			SourceURL: "workspace-source",
+		},
+	}}
+
+	applyResolvedLayers(&req, project, []hierarchy.Scope{workspace, project}, preparedLayers)
+	if len(req.Nodes) != 2 {
+		t.Fatalf("nodes = %+v, want workspace plus current project", req.Nodes)
+	}
+	if _, ok := req.Skills["project-skill"]; !ok {
+		t.Fatalf("current project skill missing: %+v", req.Skills)
+	}
+	if req.Nodes[1].ID != "project-skill" {
+		t.Fatalf("last node = %+v, want current project node", req.Nodes[1])
+	}
+}
+
+func TestRunHierarchySync_ContinuesWhenInheritedWorkspaceLayerFails(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "ActualReality")
+	repo := filepath.Join(workspaceRoot, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workspaceManifest := "version: 1\n" +
+		"scope: " + manifest.ScopeWorkspace + "\n" +
+		"activation_root: true\n" +
+		"canonical:\n" +
+		"  local_dir: .agents\n" +
+		"targets:\n" +
+		"  - claude\n"
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".agent-sync.yaml"), []byte(workspaceManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, workspaceRoot, ".agents/skills/ws-skill/SKILL.md", "workspace skill\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/AGENTS.md", "project instructions\n")
+
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	if _, _, err := runHierarchySync(
+		context.Background(), rc, repo, home,
+		hierarchySyncOptions{EngineOpts: hierarchyEngineOpts(rc, now)},
+		now,
+	); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	inherited := filepath.Join(repo, ".claude", "skills", "agent-sync-ws-skill", "SKILL.md")
+	mustExist(t, inherited)
+
+	if err := os.RemoveAll(filepath.Join(workspaceRoot, ".agents")); err != nil {
+		t.Fatal(err)
+	}
+	outcomes, _, err := runHierarchySync(
+		context.Background(), rc, repo, home,
+		hierarchySyncOptions{EngineOpts: hierarchyEngineOpts(rc, now)},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("second sync returned top-level error: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("outcomes = %d, want 1", len(outcomes))
+	}
+	if outcomes[0].Err != nil {
+		t.Fatalf("selected scope should continue when inherited workspace layer cannot materialize: %v", outcomes[0].Err)
+	}
+	mustNotExist(t, inherited)
 }
 
 // TestHierarchySyncEmitsCoverageWarning checks that a directory-level scope
 // emitting a skill for target claude carries a coverage warning (claude does
-// not read nested skills natively), while the project-level scope emitting the
-// same skill carries none (project level is always native).
+// not read nested skills natively).
 func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
 	home, _, nested := hierarchyTree(t)
 	rc := newTestRuntime()
@@ -280,20 +591,12 @@ func TestHierarchySyncEmitsCoverageWarning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runHierarchySync: %v", err)
 	}
-	if len(outcomes) != 2 {
-		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	if len(outcomes) != 1 {
+		t.Fatalf("got %d outcomes, want 1", len(outcomes))
 	}
-	proj, dir := outcomes[0], outcomes[1]
-	if proj.Scope.Level != hierarchy.LevelProject {
-		t.Fatalf("first scope level = %s, want project", proj.Scope.Level)
-	}
+	dir := outcomes[0]
 	if dir.Scope.Level != hierarchy.LevelDirectory {
-		t.Fatalf("second scope level = %s, want directory", dir.Scope.Level)
-	}
-
-	// Project scope: skill at project level is native, so no warnings.
-	if len(proj.Warnings) != 0 {
-		t.Errorf("project scope should carry no coverage warnings, got: %+v", proj.Warnings)
+		t.Fatalf("scope level = %s, want directory", dir.Scope.Level)
 	}
 	// Directory scope: claude does not read nested skills natively → 1 warning.
 	if len(dir.Warnings) != 1 {
@@ -457,6 +760,12 @@ func TestRunHierarchySync_MixedFrozenAndAutoScopes(t *testing.T) {
 	mustExist(t, filepath.Join(nested, ".claude", "rules", "agent-sync", "dir-new.md"))
 }
 
+// TestRunHierarchySync_AdvanceRefusalReportsScopeAndContinues verifies that when
+// the single write scope's upstream is force-pushed (rewritten history), the
+// auto-advance refuses fast-forward-only, reports the refusal with the
+// trust-decision exit code, keeps the cached pin, and does not emit the
+// rewritten content. Under the harness-hierarchy model exactly one scope writes
+// per run (the nearest non-user scope); ancestors are read-only layers.
 func TestRunHierarchySync_AdvanceRefusalReportsScopeAndContinues(t *testing.T) {
 	requireGit(t)
 	setTestXDG(t)
@@ -465,7 +774,7 @@ func TestRunHierarchySync_AdvanceRefusalReportsScopeAndContinues(t *testing.T) {
 	projectSrv := serveCanonicalRepo(t, projectWT)
 	dirWT, dirRoot, dirHead := makeUpdateRepo(t)
 	dirSrv := serveCanonicalRepo(t, dirWT)
-	home, repo, nested := hierarchyURLTree(t, projectSrv.URL, projectHead, nil, dirSrv.URL, dirHead, nil)
+	home, _, nested := hierarchyURLTree(t, projectSrv.URL, projectHead, nil, dirSrv.URL, dirHead, nil)
 	rc := newTestRuntime()
 	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
 
@@ -473,8 +782,8 @@ func TestRunHierarchySync_AdvanceRefusalReportsScopeAndContinues(t *testing.T) {
 		t.Fatalf("initial hierarchy sync: %v\nstderr: %s", err, errOut)
 	}
 
-	projectNew := commitFile(t, projectWT, "rules/project-new.md", "Project new.\n", "project second")
-	projectSrv.PushMain(t)
+	// Rewrite the write scope's (nested) upstream history so the newest SHA is
+	// not a fast-forward from the pin.
 	mustGit(t, dirWT, "reset", "--hard", dirRoot)
 	_ = commitFile(t, dirWT, "rules/rewritten.md", "Rewritten.\n", "rewritten history")
 	dirSrv.PushMain(t)
@@ -491,27 +800,18 @@ func TestRunHierarchySync_AdvanceRefusalReportsScopeAndContinues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runHierarchySync: %v", err)
 	}
-	if len(outcomes) != 2 {
-		t.Fatalf("got %d outcomes, want 2", len(outcomes))
+	if len(outcomes) != 1 {
+		t.Fatalf("got %d outcomes, want 1 (single write scope)", len(outcomes))
 	}
-	if outcomes[0].Err != nil {
-		t.Fatalf("project scope should still sync: %v", outcomes[0].Err)
+	if outcomes[0].Err == nil {
+		t.Fatal("rewritten-history write scope should report a refusal")
 	}
-	if outcomes[1].Err == nil {
-		t.Fatal("rewritten-history scope should report a per-scope error")
-	}
-	if !strings.Contains(outcomes[1].Err.Error(), "fast-forward") {
-		t.Fatalf("scope error should name the fast-forward refusal, got: %v", outcomes[1].Err)
+	if !strings.Contains(outcomes[0].Err.Error(), "fast-forward") {
+		t.Fatalf("scope error should name the fast-forward refusal, got: %v", outcomes[0].Err)
 	}
 	if got := hierarchyExitCode(outcomes); got != trust.ExitTrustDecisionRequired {
 		t.Fatalf("hierarchy exit code = %d, want %d", got, trust.ExitTrustDecisionRequired)
 	}
-
-	projectManifest := string(readManifest(t, repo))
-	if !strings.Contains(projectManifest, "commit: "+projectNew) {
-		t.Fatalf("project scope should auto-advance:\n%s", projectManifest)
-	}
-	mustExist(t, filepath.Join(repo, ".claude", "rules", "agent-sync", "project-new.md"))
 
 	dirManifest := string(readManifest(t, nested))
 	if !strings.Contains(dirManifest, "commit: "+dirHead) {
@@ -924,105 +1224,6 @@ func hierarchyEngineOpts(rc *runtimeContext, now time.Time) engine.Options {
 	}
 }
 
-// TestRunHierarchySync_OfferUserAccepted pins plan R16: an accepted offer
-// includes the user scope in the same run, exactly as --user would.
-func TestRunHierarchySync_OfferUserAccepted(t *testing.T) {
-	home, _, nested := hierarchyTree(t)
-	writeUserManifest(t, home)
-	rc := newTestRuntime()
-	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-
-	asked := 0
-	outcomes, notice, err := runHierarchySync(
-		context.Background(), rc, nested, home,
-		hierarchySyncOptions{
-			IncludeUser: false,
-			EngineOpts:  hierarchyEngineOpts(rc, now),
-			OfferUser:   func(string) bool { asked++; return true },
-		},
-		now,
-	)
-	if err != nil {
-		t.Fatalf("runHierarchySync: %v", err)
-	}
-	if asked != 1 {
-		t.Fatalf("offer asked %d times, want 1", asked)
-	}
-	foundUser := false
-	for _, o := range outcomes {
-		if o.Scope.Level == hierarchy.LevelUser {
-			foundUser = true
-		}
-	}
-	if !foundUser {
-		t.Fatalf("accepted offer must emit the user scope; outcomes: %d", len(outcomes))
-	}
-	mustExist(t, filepath.Join(home, ".claude", "skills", "agent-sync-user-skill", "SKILL.md"))
-	if notice != "" {
-		t.Fatalf("notice = %q, want empty when the user scope was synced", notice)
-	}
-}
-
-// TestRunHierarchySync_OfferUserDeclined pins plan R16/R17: a decline skips
-// the user scope for this run and suppresses the skipped-user notice (the
-// user answered; no nagging).
-func TestRunHierarchySync_OfferUserDeclined(t *testing.T) {
-	home, _, nested := hierarchyTree(t)
-	writeUserManifest(t, home)
-	rc := newTestRuntime()
-	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-
-	outcomes, notice, err := runHierarchySync(
-		context.Background(), rc, nested, home,
-		hierarchySyncOptions{
-			IncludeUser: false,
-			EngineOpts:  hierarchyEngineOpts(rc, now),
-			OfferUser:   func(string) bool { return false },
-		},
-		now,
-	)
-	if err != nil {
-		t.Fatalf("runHierarchySync: %v", err)
-	}
-	for _, o := range outcomes {
-		if o.Scope.Level == hierarchy.LevelUser {
-			t.Fatal("declined offer must not emit the user scope")
-		}
-	}
-	mustNotExist(t, filepath.Join(home, ".claude"))
-	if notice != "" {
-		t.Fatalf("notice = %q, want empty after an explicit decline", notice)
-	}
-}
-
-// TestRunHierarchySync_NoOfferWithoutUserManifest: the offer only fires when
-// there is a user manifest to sync.
-func TestRunHierarchySync_NoOfferWithoutUserManifest(t *testing.T) {
-	home, _, nested := hierarchyTree(t)
-	rc := newTestRuntime()
-	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-
-	asked := 0
-	_, notice, err := runHierarchySync(
-		context.Background(), rc, nested, home,
-		hierarchySyncOptions{
-			IncludeUser: false,
-			EngineOpts:  hierarchyEngineOpts(rc, now),
-			OfferUser:   func(string) bool { asked++; return true },
-		},
-		now,
-	)
-	if err != nil {
-		t.Fatalf("runHierarchySync: %v", err)
-	}
-	if asked != 0 {
-		t.Fatalf("offer asked %d times, want 0 (no user manifest)", asked)
-	}
-	if notice != "" {
-		t.Fatalf("notice = %q, want empty (nothing was skipped)", notice)
-	}
-}
-
 // TestRunHierarchySync_SkippedUserNotice pins plan R17: without a prompt
 // (non-interactive), a user manifest that was not synced yields a persistent
 // notice even though project scopes emitted fine.
@@ -1041,7 +1242,7 @@ func TestRunHierarchySync_SkippedUserNotice(t *testing.T) {
 		t.Fatalf("runHierarchySync: %v", err)
 	}
 	if len(outcomes) == 0 {
-		t.Fatal("expected project/directory outcomes")
+		t.Fatal("expected one emitted scope")
 	}
 	if !strings.Contains(notice, "--user") {
 		t.Fatalf("notice = %q, want a skipped-user notice pointing at --user", notice)
@@ -1125,8 +1326,8 @@ func TestSyncCommandSkippedUserNoticeJSON(t *testing.T) {
 	if uerr := json.Unmarshal([]byte(out), &doc); uerr != nil {
 		t.Fatalf("output is not valid JSON: %v\n%s", uerr, out)
 	}
-	if len(doc.Scopes) != 2 {
-		t.Fatalf("scopes = %d, want 2", len(doc.Scopes))
+	if len(doc.Scopes) != 1 {
+		t.Fatalf("scopes = %d, want 1", len(doc.Scopes))
 	}
 	if !strings.Contains(doc.Notice, "--user") {
 		t.Fatalf("notice = %q, want skipped-user notice", doc.Notice)

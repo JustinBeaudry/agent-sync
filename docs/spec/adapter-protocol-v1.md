@@ -206,7 +206,7 @@ Method summary:
 | `workspace_root` | string | yes | absolute workspace path |
 | `reserved_prefix` | string | yes | workspace-relative prefix the adapter owns |
 | `ir_version` | string | yes | IR schema version, currently `v1` |
-| `scope` | string | no | hierarchy level being emitted: `user`, `project`, or `directory`. Additive (omitempty); absent or unrecognized ⇒ `project`. Lets an adapter choose scope-appropriate output paths. |
+| `scope` | string | no | hierarchy level being emitted: `user`, `workspace`, `project`, `directory`, or `global` (`global` is a legacy/project alias). Additive (omitempty); absent or unrecognized ⇒ `project`. Lets an adapter choose scope-appropriate output paths. |
 | `source_url` | string | no | audit-safe identity of the session's canonical source: the credential-stripped canonical git URL, or the local source path. Additive (omitempty). Adapters render it in managed-file headers. A per-node override on the IR node (below) supersedes it for composed nodes. |
 | `source_commit` | string | no | resolved canonical commit SHA the IR was decoded at. Additive (omitempty); absent for working-tree (`local_dir`) sources. |
 | `_meta` | any JSON | no | reserved |

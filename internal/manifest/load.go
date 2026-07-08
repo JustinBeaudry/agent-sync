@@ -198,9 +198,13 @@ func Validate(m *Manifest, opts LoadOptions) error {
 	}
 
 	switch m.Scope {
-	case "", "user", "project", "global":
+	case "", ScopeUser, ScopeProject, ScopeWorkspace, ScopeGlobal:
 	default:
-		return fmt.Errorf("%w: scope must be one of user|project|global (got %q)", ErrInvalidManifest, m.Scope)
+		return fmt.Errorf("%w: scope must be one of user|project|workspace|global (got %q)", ErrInvalidManifest, m.Scope)
+	}
+
+	if m.ActivationRoot && m.Scope != ScopeWorkspace {
+		return fmt.Errorf("%w: activation_root can only be used when scope is %q", ErrInvalidManifest, ScopeWorkspace)
 	}
 
 	if m.Cache.Override != "" {

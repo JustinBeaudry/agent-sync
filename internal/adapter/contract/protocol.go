@@ -137,9 +137,13 @@ type InitializeParams struct {
 	WorkspaceRoot    string   `json:"workspace_root"`
 	ReservedPrefix   string   `json:"reserved_prefix"`
 	IRVersion        string   `json:"ir_version"`
-	// Scope is the hierarchy level this emit targets: "user", "project",
-	// or "directory". Additive/optional under "freeze the frame, grow
-	// capabilities"; absent or unknown ⇒ treated as "project". Mirrors
+	// Scope is the hierarchy level this emit targets:
+	// "user", "project", "workspace", "directory", or "global".
+	// "global" is accepted as a legacy alias while v1 remains backward
+	// compatible and is treated as project by current adapters unless they
+	// explicitly handle it.
+	// Additive/optional under "freeze the frame, grow capabilities";
+	// absent or unknown ⇒ treated as "project". Mirrors
 	// adapterkit.InitializeParams.Scope and the initialize.json schema.
 	Scope string `json:"scope,omitempty"`
 	// SourceURL identifies the canonical source of this session's IR:

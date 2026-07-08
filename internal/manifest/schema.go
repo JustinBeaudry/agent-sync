@@ -1,5 +1,12 @@
 package manifest
 
+const (
+	ScopeUser      = "user"
+	ScopeProject   = "project"
+	ScopeWorkspace = "workspace"
+	ScopeGlobal    = "global"
+)
+
 // Manifest is the v1 schema for `.agent-sync.yaml`.
 //
 // NOTE: This is a strict schema. Unknown keys are rejected at load time,
@@ -14,8 +21,11 @@ type Manifest struct {
 	Targets []string `yaml:"targets,omitempty"`
 
 	// Scope declares where the rendered config is intended to apply for the
-	// target tools. v1 accepts: user, project, global.
+	// target tools. v1 accepts: user, project, workspace, global.
 	Scope string `yaml:"scope,omitempty"`
+
+	// ActivationRoot marks this manifest as the workspace activation root.
+	ActivationRoot bool `yaml:"activation_root,omitempty"`
 
 	Cache CacheConfig `yaml:"cache,omitempty"`
 

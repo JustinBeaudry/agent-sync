@@ -7,6 +7,7 @@ import (
 
 	"github.com/agent-sync/agent-sync/internal/adapter"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/harness"
 	"github.com/agent-sync/agent-sync/internal/ir"
 	"github.com/agent-sync/agent-sync/internal/report"
 )
@@ -68,9 +69,10 @@ type Request struct {
 	// WorkspacePath is the absolute workspace path, for the report header.
 	WorkspacePath string
 
-	// Scope is the hierarchy level being emitted ("user", "project", or
-	// "directory"), passed to each adapter session so it can pick
-	// scope-appropriate output paths. Empty ⇒ "project" (back-compat).
+	// Scope is the hierarchy level being emitted ("user", "project",
+	// "workspace", "directory", or legacy "global" alias), passed to each
+	// adapter session so it can pick scope-appropriate output paths. Empty ⇒
+	// "project" (back-compat).
 	Scope string
 
 	// Registry holds the discovered adapters.
@@ -83,6 +85,10 @@ type Request struct {
 	// Nodes is the decoded IR; Skills supplies skill asset bundles by node ID.
 	Nodes  []ir.Node
 	Skills map[string]ir.Skill
+	// Fragments are resolved target-native fragments for this request's scope.
+	// They are emitted by core allowlisted surfaces and are not applied by
+	// adapters today; harness resolution writes them into request.Request.
+	Fragments []harness.Fragment
 
 	// Commit is the resolved canonical SHA, stamped into staging metadata
 	// and the report.

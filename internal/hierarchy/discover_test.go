@@ -1,12 +1,26 @@
 package hierarchy
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/agent-sync/agent-sync/internal/workspace"
 )
+
+func writeManifestContent(t *testing.T, dir, content string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %q: %v", dir, err)
+	}
+	path := filepath.Join(dir, workspace.ManifestName)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write manifest %q: %v", path, err)
+	}
+	return path
+}
 
 // writeManifest creates a minimal manifest file at dir/.agent-sync.yaml.
 func writeManifest(t *testing.T, dir string) string {
@@ -19,6 +33,14 @@ func writeManifest(t *testing.T, dir string) string {
 		t.Fatalf("write manifest %q: %v", path, err)
 	}
 	return path
+}
+
+func gotLevels(scopes []Scope) []Level {
+	levels := make([]Level, 0, len(scopes))
+	for _, scope := range scopes {
+		levels = append(levels, scope.Level)
+	}
+	return levels
 }
 
 // mkGit creates a .git directory marking dir as a git project root.
@@ -269,6 +291,228 @@ func TestDiscoverFullHierarchy(t *testing.T) {
 	}
 	if !scopes[1].Emit || !scopes[2].Emit {
 		t.Error("project/directory scopes must have Emit = true")
+	}
+}
+
+func TestDiscover_ActivationRootStopsUserScope(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "workspace")
+	repo := filepath.Join(workspaceRoot, "repo")
+	mkGit(t, repo)
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	writeManifest(t, home) // user scope
+	writeManifestContent(t, workspaceRoot, "version: 1\nscope: workspace\nactivation_root: true\n")
+	writeManifest(t, repo) // project scope
+
+	scopes, err := Discover(repo, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	wantRoots := []string{workspaceRoot, repo}
+	wantLevels := []Level{LevelWorkspace, LevelProject}
+	if len(scopes) != len(wantRoots) {
+		t.Fatalf("got %d scopes, want %d: %+v", len(scopes), len(wantRoots), scopes)
+	}
+	for i := range scopes {
+		if scopes[i].Root != wantRoots[i] {
+			t.Errorf("scope[%d].Root = %q, want %q", i, scopes[i].Root, wantRoots[i])
+		}
+		if scopes[i].Level != wantLevels[i] {
+			t.Errorf("scope[%d].Level = %v, want %v", i, scopes[i].Level, wantLevels[i])
+		}
+	}
+	if got := gotLevels(scopes); len(got) != len(wantLevels) {
+		t.Fatalf("unexpected levels count: %v", got)
+	}
+}
+
+func TestDiscover_OutsideActivationRootIncludesUserScope(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	mkGit(t, repo)
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	writeManifest(t, home) // user scope
+	writeManifest(t, repo) // project scope
+
+	scopes, err := Discover(repo, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	wantRoots := []string{home, repo}
+	wantLevels := []Level{LevelUser, LevelProject}
+	if len(scopes) != len(wantRoots) {
+		t.Fatalf("got %d scopes, want %d: %+v", len(scopes), len(wantRoots), scopes)
+	}
+	for i := range scopes {
+		if scopes[i].Root != wantRoots[i] {
+			t.Errorf("scope[%d].Root = %q, want %q", i, scopes[i].Root, wantRoots[i])
+		}
+		if scopes[i].Level != wantLevels[i] {
+			t.Errorf("scope[%d].Level = %v, want %v", i, scopes[i].Level, wantLevels[i])
+		}
+	}
+}
+
+func TestDiscover_MalformedManifestSkipsActivationButDoesNotFail(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	mid := filepath.Join(repo, "packages", "api")
+	cwd := filepath.Join(mid, "src")
+	mkGit(t, repo)
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+	writeManifest(t, home)                           // user scope
+	writeManifest(t, repo)                           // project scope
+	writeManifestContent(t, mid, ":\n  not: [valid") // malformed directory manifest
+
+	scopes, err := Discover(cwd, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	// Discovery must stay presence-based: user and both project / directory manifests
+	// are returned even though the directory manifest is malformed.
+	wantRoots := []string{home, repo, mid}
+	wantLevels := []Level{LevelUser, LevelProject, LevelDirectory}
+	if len(scopes) != len(wantRoots) {
+		t.Fatalf("got %d scopes, want %d: %+v", len(scopes), len(wantRoots), scopes)
+	}
+	for i := range scopes {
+		if scopes[i].Root != wantRoots[i] || scopes[i].Level != wantLevels[i] {
+			t.Errorf("scope[%d] = {%q, %v}, want {%q, %v}", i, scopes[i].Root, scopes[i].Level, wantRoots[i], wantLevels[i])
+		}
+	}
+}
+
+func TestDiscover_MalformedWorkspaceActivationManifestFailsClosed(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "workspace")
+	repo := filepath.Join(workspaceRoot, "repo")
+	cwd := filepath.Join(repo, "packages", "api")
+	mkGit(t, repo)
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+	writeManifest(t, home) // user scope
+	manifest := writeManifestContent(t, workspaceRoot, "version: 1\nscope: workspace\nactivation_root: true\n:\n  not: [valid")
+	writeManifest(t, repo) // project scope
+
+	scopes, err := Discover(cwd, Options{Home: home})
+	if err == nil {
+		t.Fatalf("expected malformed activation-root manifest to fail discovery, got scopes=%+v", scopes)
+	}
+	if len(scopes) != 0 {
+		t.Fatalf("expected no scopes on fail-closed activation-root parse error, got %+v", scopes)
+	}
+	if !strings.Contains(err.Error(), manifest) {
+		t.Fatalf("error = %q, want include manifest path %q", err, manifest)
+	}
+	if !errors.Is(err, ErrMalformedActivationRootMarker) {
+		t.Fatalf("error = %v, want ErrMalformedActivationRootMarker", err)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "activation-root") || !strings.Contains(strings.ToLower(err.Error()), "malformed") {
+		t.Fatalf("error = %q, want activation-root malformed wording", err)
+	}
+}
+
+func TestDiscover_QuotedMalformedActivationRootManifestFailsClosed(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "workspace")
+	repo := filepath.Join(workspaceRoot, "repo")
+	cwd := filepath.Join(repo, "packages", "api")
+	mkGit(t, repo)
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+	writeManifest(t, home) // user scope
+	writeManifest(t, repo) // project scope
+
+	tests := []struct {
+		name     string
+		manifest string
+	}{
+		{
+			name:     "double-quoted scope + capitalized bool",
+			manifest: "version: 1\nscope: \"workspace\"\nactivation_root: True\n:\n  not: [valid",
+		},
+		{
+			name:     "single-quoted scope + TRUE bool",
+			manifest: "version: 1\nscope: 'workspace'\nactivation_root: TRUE\n:\n  not: [valid",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := writeManifestContent(t, workspaceRoot, tc.manifest)
+			scopes, err := Discover(cwd, Options{Home: home})
+			if err == nil {
+				t.Fatalf("expected malformed activation-root manifest to fail discovery, got scopes=%+v", scopes)
+			}
+			if len(scopes) != 0 {
+				t.Fatalf("expected no scopes on fail-closed activation-root parse error, got %+v", scopes)
+			}
+			if !strings.Contains(err.Error(), manifest) {
+				t.Fatalf("error = %q, want include manifest path %q", err, manifest)
+			}
+			lower := strings.ToLower(err.Error())
+			if !strings.Contains(lower, "activation-root") || !strings.Contains(lower, "malformed") {
+				t.Fatalf("error = %q, want activation-root malformed wording", err)
+			}
+		})
+	}
+}
+
+func TestDiscover_CwdAtWorkspaceActivationRoot(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "workspace")
+	writeManifest(t, home) // user scope
+	writeManifestContent(t, workspaceRoot, "version: 1\nscope: workspace\nactivation_root: true\n")
+
+	scopes, err := Discover(workspaceRoot, Options{Home: home})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(scopes) != 1 {
+		t.Fatalf("got %d scopes, want 1: %+v", len(scopes), scopes)
+	}
+	if scopes[0].Root != workspaceRoot {
+		t.Errorf("scope.Root = %q, want %q", scopes[0].Root, workspaceRoot)
+	}
+	if scopes[0].Level != LevelWorkspace {
+		t.Errorf("scope.Level = %v, want %v", scopes[0].Level, LevelWorkspace)
+	}
+	if scopes[0].ManifestPath == "" {
+		t.Fatal("workspace scope missing manifest path")
+	}
+}
+
+func TestDiscover_NestedActivationRootsFailClosed(t *testing.T) {
+	home := t.TempDir()
+	outer := filepath.Join(home, "workspace")
+	inner := filepath.Join(outer, "team")
+	repo := filepath.Join(inner, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	outerManifest := writeManifestContent(t, outer, "version: 1\nscope: workspace\nactivation_root: true\n")
+	innerManifest := writeManifestContent(t, inner, "version: 1\nscope: workspace\nactivation_root: true\n")
+
+	_, err := Discover(repo, Options{Home: home})
+	if err == nil {
+		t.Fatal("expected discover to fail with nested activation roots")
+	}
+	if !strings.Contains(err.Error(), "nested activation roots") {
+		t.Fatalf("error = %v, want nested activation roots", err)
+	}
+	if !errors.Is(err, ErrNestedActivationRoots) {
+		t.Fatalf("error = %v, want ErrNestedActivationRoots", err)
+	}
+	if !strings.Contains(err.Error(), outerManifest) || !strings.Contains(err.Error(), innerManifest) {
+		t.Fatalf("error = %q, want include %q and %q", err, outerManifest, innerManifest)
 	}
 }
 

@@ -89,6 +89,24 @@ func TestInitConfig_ManifestYAML(t *testing.T) {
 	}
 }
 
+func TestInitConfig_ManifestYAML_RendersScopeAndActivationRoot(t *testing.T) {
+	out, err := InitConfig{
+		LocalDir:       ".agents",
+		Scope:          "workspace",
+		ActivationRoot: true,
+		Targets:        []string{"codex"},
+	}.ManifestYAML()
+	if err != nil {
+		t.Fatalf("ManifestYAML: %v", err)
+	}
+	text := string(out)
+	for _, want := range []string{"scope: workspace\n", "activation_root: true\n"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("manifest missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestLooksLikeLocalPath(t *testing.T) {
 	cases := []struct {
 		in   string

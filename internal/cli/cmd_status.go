@@ -145,6 +145,7 @@ func runHierarchyStatus(cmd *cobra.Command, rc *runtimeContext) error {
 	if err != nil {
 		return fmt.Errorf("status: discover hierarchy: %w", err)
 	}
+	scopes = selectWriteScopes(scopes, false)
 
 	rep := hierarchyStatusReport{Scopes: make([]scopeStatus, 0, len(scopes))}
 	for _, sc := range scopes {

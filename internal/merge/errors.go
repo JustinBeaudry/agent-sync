@@ -31,4 +31,9 @@ var (
 	// duplicate id, or an uncorroborated/indented section colliding with
 	// a managed id). The message names the offending line.
 	ErrMalformedManagedSection = errors.New("merge: malformed agent-sync managed section")
+
+	// ErrUnmanagedGeneratedFile is returned when a generated whole-file
+	// native target already exists but the caller has not identified it as
+	// agent-sync-owned through the ledger.
+	ErrUnmanagedGeneratedFile = errors.New("merge: unmanaged existing JSON at generated native path")
 )

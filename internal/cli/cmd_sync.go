@@ -14,8 +14,8 @@ import (
 
 	"github.com/agent-sync/agent-sync/internal/engine"
 	"github.com/agent-sync/agent-sync/internal/fsroot"
+	"github.com/agent-sync/agent-sync/internal/hierarchy"
 	"github.com/agent-sync/agent-sync/internal/report"
-	"github.com/agent-sync/agent-sync/internal/tui"
 	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
@@ -97,18 +97,6 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 				return fmt.Errorf("sync: %w", err)
 			}
 			hOpts := hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts, Frozen: frozen, PostMerge: postMerge}
-			// Interactive runs offer to include a discovered user manifest
-			// instead of silently skipping it (plan R16). Never on the
-			// git-hook path — a `git pull` must not block on a prompt — and
-			// tui.Interactive already excludes --non-interactive, piped
-			// stdin, and accessible mode (AGENTS invariant #3).
-			if !userScope && !postMerge &&
-				tui.Interactive(rc.Access.IsTTY, rc.Access.NonInteractive, rc.Access.Accessible) {
-				hOpts.OfferUser = func(manifestPath string) bool {
-					return promptYes(deps.in(), cmd.ErrOrStderr(),
-						fmt.Sprintf("Also sync the user-level manifest at %s? [Y/n] ", manifestPath))
-				}
-			}
 			outcomes, notice, err := runHierarchySync(cmd.Context(), rc, cwd, home, hOpts, now)
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
@@ -150,8 +138,8 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 // runSingleScopeSync runs the legacy single-scope sync against the nearest
 // (or explicit --workspace) scope. It preserves today's behavior verbatim and
 // is taken only when an explicit --workspace override is in effect; the
-// default path is the hierarchy orchestrator. validate also relies on this
-// single-scope shape via prepareEngine.
+// default path is the hierarchy orchestrator. It uses prepareScopeForSync so an
+// explicit --workspace sync auto-advances the pin like the hierarchy path does.
 func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Options, postMerge, frozen bool, now time.Time) error {
 	ws, err := workspace.Find(rc.Flags.Workspace, workspace.Options{Workspace: rc.Flags.Workspace})
 	if err != nil {
@@ -166,8 +154,12 @@ func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Opti
 	req := prep.Request
 	req.Options = opts
 	req.Options.RunLockHeld = prep.RunLockHeld
+	// Compose the user-scope Cursor rule layer, matching prepareEngine and the
+	// hierarchy path (scope-aware signature from the harness-hierarchy work).
+	actualScope := requestScope(prep.Manifest, "project")
 	if home, herr := resolveHome(); herr == nil {
-		applyCursorComposition(cmd.Context(), rc, &req, prep.Manifest, "project", home, now)
+		user, ok := hierarchy.UserScope(home)
+		applyCursorComposition(cmd.Context(), rc, &req, prep.Manifest, actualScope, user, ok, now)
 	}
 
 	root := prep.Root

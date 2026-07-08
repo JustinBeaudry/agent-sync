@@ -1,11 +1,36 @@
 package hierarchy
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
+	"github.com/goccy/go-yaml"
+
+	"github.com/agent-sync/agent-sync/internal/manifest"
 	"github.com/agent-sync/agent-sync/internal/workspace"
+)
+
+// manifestMarker keeps discovery light enough to read activation-root hints from
+// potentially legacy manifests where a full load would fail validation.
+type manifestMarker struct {
+	Scope          string `yaml:"scope"`
+	ActivationRoot bool   `yaml:"activation_root"`
+}
+
+var (
+	activationRootScopePattern   = regexp.MustCompile(`(?m)^\s*scope\s*:\s*(?:workspace|"workspace"|'workspace')\s*(#.*)?$`)
+	activationRootEnabledPattern = regexp.MustCompile(`(?m)^\s*activation_root\s*:\s*[Tt][Rr][Uu][Ee]\s*(#.*)?$`)
+
+	// ErrMalformedActivationRootMarker reports a manifest that looks like an
+	// activation-root marker but cannot be parsed safely.
+	ErrMalformedActivationRootMarker = errors.New("hierarchy: malformed activation-root marker")
+
+	// ErrNestedActivationRoots reports more than one activation root in the
+	// active ancestor chain.
+	ErrNestedActivationRoots = errors.New("hierarchy: nested activation roots are invalid")
 )
 
 // manifestAt reports the manifest path in dir, if a regular .agent-sync.yaml
@@ -20,6 +45,50 @@ func manifestAt(dir string) (string, bool) {
 	return path, true
 }
 
+// markerAt reports whether dir has a manifest and, if so, returns marker fields
+// from that manifest when YAML parses successfully. Unlike manifest.LoadFile, it
+// is intentionally lightweight: only scope and activation_root are read. YAML
+// parse failures are tolerated as non-fatal so discovery remains presence-based
+// except when raw bytes still look like an activation-root marker, which is
+// treated as a boundary and fails closed.
+func markerAt(dir string) (manifestMarker, string, bool, error) {
+	path, has := manifestAt(dir)
+	if !has {
+		return manifestMarker{}, "", false, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return manifestMarker{}, path, false, fmt.Errorf("hierarchy: stat manifest marker %s: %w", path, err)
+	}
+	if info.Size() > manifest.MaxManifestSize {
+		return manifestMarker{}, path, false, fmt.Errorf("hierarchy: manifest marker %s exceeds %d bytes (got %d)", path, manifest.MaxManifestSize, info.Size())
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return manifestMarker{}, path, false, fmt.Errorf("hierarchy: read manifest marker %s: %w", path, err)
+	}
+	if len(b) > manifest.MaxManifestSize {
+		return manifestMarker{}, path, false, fmt.Errorf("hierarchy: manifest marker %s exceeds %d bytes (got %d)", path, manifest.MaxManifestSize, len(b))
+	}
+	var marker manifestMarker
+	if err := yaml.Unmarshal(b, &marker); err != nil {
+		if looksLikeActivationRootMarker(b) {
+			return manifestMarker{}, path, true, fmt.Errorf("%w %s: %w", ErrMalformedActivationRootMarker, path, err)
+		}
+		// Keep discovery behavior presence-based when the malformed manifest is
+		// not an activation-root marker.
+		return manifestMarker{}, path, true, nil
+	}
+	return marker, path, true, nil
+}
+
+// looksLikeActivationRootMarker performs a conservative marker-only check for
+// activation-root manifests, avoiding any full YAML parsing in the error path.
+func looksLikeActivationRootMarker(raw []byte) bool {
+	s := string(raw)
+	return activationRootScopePattern.MatchString(s) && activationRootEnabledPattern.MatchString(s)
+}
+
 // hasGit reports whether dir contains a .git entry (directory for a normal
 // clone, file for a worktree/submodule). Existence is all we need.
 func hasGit(dir string) bool {
@@ -29,13 +98,13 @@ func hasGit(dir string) bool {
 
 // findProjectRoot returns the nearest ancestor of cwd (inclusive) that
 // contains a .git entry, walking up the logical parent chain. The search
-// stops at home: home is the user level and is never a project root, so a
-// repo whose .git sits at home yields ok=false. ok is also false when the
-// filesystem root or the hop budget is reached without a match.
-func findProjectRoot(cwd, home string, maxHops int) (string, bool) {
+// stops at stopRoot: that level is not a project root. A repo whose .git sits
+// at stopRoot yields ok=false. ok is also false when the filesystem root or the
+// hop budget is reached without a match.
+func findProjectRoot(cwd, stopRoot string, maxHops int) (string, bool) {
 	dir := cwd
 	for hops := 0; hops < maxHops; hops++ {
-		if dir == home {
+		if dir == stopRoot {
 			return "", false
 		}
 		if hasGit(dir) {
@@ -95,6 +164,59 @@ func collectEmitScopes(cwd, projectRoot string) ([]Scope, error) {
 	return found, nil
 }
 
+// activationRootsBetween scans from cwd upward toward home or the filesystem root
+// for workspace activation roots and returns them as scopes. It collects from
+// deep→shallow then reverses, so the caller gets shallow→deep (outermost→innermost).
+func activationRootsBetween(cwd, home string, maxHops int) ([]Scope, error) {
+	var roots []Scope
+	dir := cwd
+	for hops := 0; hops < maxHops; hops++ {
+		marker, path, ok, err := markerAt(dir)
+		if err != nil {
+			return nil, err
+		}
+		if ok && marker.Scope == manifest.ScopeWorkspace && marker.ActivationRoot {
+			roots = append(roots, Scope{
+				Root:         dir,
+				ManifestPath: path,
+				Level:        LevelWorkspace,
+				Emit:         true,
+			})
+		}
+		if dir == home {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	for i, j := 0, len(roots)-1; i < j; i, j = i+1, j-1 {
+		roots[i], roots[j] = roots[j], roots[i]
+	}
+	if len(roots) > 1 {
+		return nil, fmt.Errorf("%w: %s and %s", ErrNestedActivationRoots, roots[0].ManifestPath, roots[len(roots)-1].ManifestPath)
+	}
+	return roots, nil
+}
+
+// dedupeScopes removes duplicate scopes by manifest path while preserving the
+// existing order. This avoids accidentally returning the same scope twice when
+// the activation root and emit walk resolve to the same manifest.
+func dedupeScopes(in []Scope) []Scope {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]Scope, 0, len(in))
+	for _, scope := range in {
+		if _, ok := seen[scope.ManifestPath]; ok {
+			continue
+		}
+		seen[scope.ManifestPath] = struct{}{}
+		out = append(out, scope)
+	}
+	return out
+}
+
 // userScope returns the user-home scope when home holds a manifest. Emit is
 // set only when includeUser is true (the --user flag); otherwise the scope
 // is returned read-only so callers can still display it in the precedence
@@ -122,9 +244,9 @@ func UserScope(home string) (Scope, bool) {
 }
 
 // Discover returns every manifest that applies at cwd, ordered from
-// broadest (lowest precedence) to most specific (highest precedence):
-// the user-home scope first (if present), then the project scope, then any
-// directory scopes down to cwd.
+// broadest (lowest precedence) to most specific (highest precedence).
+// Normally this is user -> project -> directory. When inside a workspace
+// activation root, user is omitted and workspace is returned instead.
 //
 // Emit scopes are the manifests from cwd up to the project root (the nearest
 // .git ancestor). When there is no .git ancestor, only cwd's own manifest is
@@ -162,6 +284,30 @@ func Discover(cwd string, opts Options) ([]Scope, error) {
 	}
 
 	var emit []Scope
+
+	activation, err := activationRootsBetween(absCwd, home, maxHops)
+	if err != nil {
+		return nil, err
+	}
+	if len(activation) == 1 {
+		stopRoot := activation[0].Root
+		if root, ok := findProjectRoot(absCwd, stopRoot, maxHops); ok {
+			emit, err = collectEmitScopes(absCwd, root)
+			if err != nil {
+				return nil, err
+			}
+		} else if absCwd != stopRoot {
+			// No .git ancestor before the activation root: only cwd's own manifest
+			// applies, classified as project scope.
+			if path, has := manifestAt(absCwd); has {
+				emit = []Scope{{Root: absCwd, ManifestPath: path, Level: LevelProject, Emit: true}}
+			}
+		}
+		out := append([]Scope(nil), activation...)
+		out = append(out, emit...)
+		return dedupeScopes(out), nil
+	}
+
 	if root, ok := findProjectRoot(absCwd, home, maxHops); ok {
 		emit, err = collectEmitScopes(absCwd, root)
 		if err != nil {
