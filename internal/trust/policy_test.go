@@ -380,6 +380,7 @@ func TestDecideAutoAdvanceAllowsHealthyFastForwardPinnedDrift(t *testing.T) {
 	in.ManifestTrustedSHA = shaB
 	in.Posture = PostureAllowNewSHAs
 	in.FastForward = true
+	in.StateLoaded = true
 
 	d, err := Decide(in)
 	if err != nil {
@@ -393,6 +394,51 @@ func TestDecideAutoAdvanceAllowsHealthyFastForwardPinnedDrift(t *testing.T) {
 	}
 	if d.AppendPending.URL != urlX || d.AppendPending.OldSHA != shaB || d.AppendPending.NewSHA != shaA {
 		t.Fatalf("AppendPending = %+v, want url=%q old=%q new=%q", d.AppendPending, urlX, shaB, shaA)
+	}
+}
+
+func TestDecideAutoAdvanceRequiresLoadedState(t *testing.T) {
+	t.Parallel()
+
+	// Fail-closed guard: the auto posture with a proven fast-forward must
+	// still refuse when State was not loaded from the store, because a zero
+	// State has Revoked==false and would silently skip the revoke check.
+	in := baseInput()
+	in.TTY = false
+	in.ManifestTrustedSHA = shaB
+	in.Posture = PostureAllowNewSHAs
+	in.FastForward = true
+	in.StateLoaded = false
+
+	d, err := Decide(in)
+	if !errors.Is(err, ErrTrustDecisionRequired) {
+		t.Fatalf("err = %v, want ErrTrustDecisionRequired", err)
+	}
+	if d.Kind != KindDecisionRequired {
+		t.Fatalf("Kind = %q, want decision-required", d.Kind)
+	}
+}
+
+func TestDecideAutoAdvanceRevokeBeatsPostureWithLoadedState(t *testing.T) {
+	t.Parallel()
+
+	// Even with the auto posture, a proven fast-forward, and loaded state,
+	// an active revoke must hard-block. This pins the revoke-before-posture
+	// ordering so a future reorder is caught.
+	in := baseInput()
+	in.TTY = false
+	in.ManifestTrustedSHA = shaB
+	in.Posture = PostureAllowNewSHAs
+	in.FastForward = true
+	in.StateLoaded = true
+	in.State = State{Revoked: true, LastOp: OpRevoke}
+
+	d, err := Decide(in)
+	if !errors.Is(err, ErrRevokedTrustAnchor) {
+		t.Fatalf("err = %v, want ErrRevokedTrustAnchor", err)
+	}
+	if d.Kind != KindRevokedBlock {
+		t.Fatalf("Kind = %q, want revoked-block", d.Kind)
 	}
 }
 
@@ -438,6 +484,7 @@ func TestDecideAutoAdvancePinnedDriftPostureMatrix(t *testing.T) {
 			in.ManifestTrustedSHA = shaB
 			in.Posture = tc.posture
 			in.FastForward = tc.fastForward
+			in.StateLoaded = true
 			if tc.revoked {
 				in.State = State{Revoked: true, LastOp: OpRevoke}
 			}
@@ -461,6 +508,7 @@ func TestDecideAutoAdvancePendingEntryAppendsOnce(t *testing.T) {
 	in.ManifestTrustedSHA = shaB
 	in.Posture = PostureAllowNewSHAs
 	in.FastForward = true
+	in.StateLoaded = true
 
 	d, err := Decide(in)
 	if err != nil {

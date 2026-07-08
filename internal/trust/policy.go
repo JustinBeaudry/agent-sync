@@ -38,6 +38,15 @@ type DecideInput struct {
 	// history".
 	State State
 
+	// StateLoaded asserts that State was populated from the trust store
+	// (Store.Fold) rather than left zero-valued. The PostureAllowNewSHAs
+	// auto path refuses to run unless this is true: a zero State has
+	// Revoked==false, so honoring the auto posture without a loaded State
+	// would silently skip the revoke check above. Making the posture
+	// require StateLoaded keeps the revoke guarantee structural rather than
+	// dependent on each caller remembering to Fold.
+	StateLoaded bool
+
 	// Posture selects the trust posture for this decision. Zero value keeps
 	// today's gated behavior; PostureAllowNewSHAs enables the auto-advance
 	// posture for manifest-pin drift when FastForward is also true.
@@ -110,6 +119,15 @@ func Decide(in DecideInput) (Decision, error) {
 	if in.State.Revoked {
 		d.Kind = KindRevokedBlock
 		return d, fmt.Errorf("%w: %s", ErrRevokedTrustAnchor, in.URL)
+	}
+
+	// 1b. The allow-new-shas auto path is fail-closed without loaded trust
+	// state. A zero State has Revoked==false, so proceeding here would skip
+	// the revoke check above. Refuse structurally rather than trusting the
+	// caller to have Folded the store.
+	if in.Posture == PostureAllowNewSHAs && !in.StateLoaded {
+		d.Kind = KindDecisionRequired
+		return d, fmt.Errorf("%w: allow-new-shas posture requires loaded trust state", ErrTrustDecisionRequired)
 	}
 
 	// 2. Manifest pin authoritative when set.
