@@ -39,6 +39,16 @@ type materialized struct {
 	Warnings []ir.Warning
 }
 
+// resolvedGitMaterialization reuses an already-resolved git mirror + commit.
+// The sync auto-advance path fills the cache / resolves the SHA before
+// prepareScope builds the engine request, so materialization can decode that
+// exact approved commit without re-resolving the ref.
+type resolvedGitMaterialization struct {
+	LocalPath string
+	Commit    string
+	SourceURL string
+}
+
 // materializeOptions controls network posture and supplies the workspace root
 // needed by the in-repo (local_dir) source kind.
 type materializeOptions struct {
@@ -49,6 +59,10 @@ type materializeOptions struct {
 	// url/local_path paths ignore it. The nil check in materializeLocalDir is a
 	// defensive guard for direct callers, not a state setup.go produces.
 	Root *fsroot.Root
+	// ResolvedGit, when non-nil, bypasses source resolution entirely and decodes
+	// Commit from LocalPath. Used only by sync's auto-advance path after it has
+	// already resolved + approved the exact SHA to land.
+	ResolvedGit *resolvedGitMaterialization
 }
 
 // materialize turns a loaded manifest into decoded IR. It dispatches on
@@ -62,6 +76,9 @@ type materializeOptions struct {
 // The git-backed kinds require a pinned commit in v1; the local_dir kind is
 // unpinned by nature.
 func materialize(ctx context.Context, m *manifest.Manifest, opts materializeOptions) (materialized, error) {
+	if opts.ResolvedGit != nil {
+		return materializeResolvedGit(opts.ResolvedGit)
+	}
 	switch {
 	case m.Canonical.LocalDir != "":
 		return materializeLocalDir(m, opts)
@@ -72,6 +89,23 @@ func materialize(ctx context.Context, m *manifest.Manifest, opts materializeOpti
 	default:
 		return materialized{}, errors.New("cli: manifest has no canonical source (url, local_path, or local_dir)")
 	}
+}
+
+func materializeResolvedGit(resolved *resolvedGitMaterialization) (materialized, error) {
+	if resolved == nil {
+		return materialized{}, errors.New("cli: resolved git materialization is nil")
+	}
+	repo, err := git.Open(resolved.LocalPath)
+	if err != nil {
+		return materialized{}, fmt.Errorf("cli: open resolved repo %q: %w", resolved.LocalPath, err)
+	}
+	defer func() { _ = repo.Close() }()
+	mat, err := decodeAt(repo, resolved.Commit)
+	if err != nil {
+		return materialized{}, err
+	}
+	mat.SourceURL = resolved.SourceURL
+	return mat, nil
 }
 
 // materializeLocalDir reads an in-repo working-tree source. It deliberately

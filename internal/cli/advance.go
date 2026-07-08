@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -14,10 +15,15 @@ import (
 // caller-specific gate or messaging runs.
 type advanceResolution struct {
 	newSHA      string
+	sourceURL   string
 	refName     string // the ref that was resolved (manifest ref, or HEAD fallback)
 	mirrorPath  string // local mirror to inspect for ancestry / change summary
-	refFromHEAD bool   // true when the manifest had no ref and HEAD was followed
-	fastForward bool   // true when old pin is an ancestor of newSHA
+	cacheLoc    *cache.Location
+	refFromHEAD bool // true when the manifest had no ref and HEAD was followed
+	fastForward bool // true when old pin is an ancestor of newSHA
+	// fellBackToPinned is true only on the sync auto-advance path for a URL
+	// source whose remote was unreachable and whose cached pin was used.
+	fellBackToPinned bool
 }
 
 // resolveAdvance resolves the newest SHA for the manifest source, inspects the
@@ -42,6 +48,29 @@ func resolveAdvance(ctx context.Context, m *manifest.Manifest) (advanceResolutio
 	return res, nil
 }
 
+// resolveAutoAdvance resolves the newest candidate SHA for sync's auto-advance
+// path and proves fast-forward safety against the manifest's trusted_sha. An
+// empty trusted_sha is fail-safe: fastForward stays false.
+func resolveAutoAdvance(ctx context.Context, m *manifest.Manifest) (advanceResolution, error) {
+	res, err := resolveAutoAdvanceTarget(ctx, m)
+	if err != nil {
+		return advanceResolution{}, err
+	}
+
+	res.fastForward = false
+	baseline := m.TrustedSHA
+	if baseline == "" || res.mirrorPath == "" {
+		return res, nil
+	}
+	res.fastForward, err = git.IsAncestor(ctx, res.mirrorPath, baseline, res.newSHA)
+	if err != nil {
+		// The auto path treats an unreadable ancestry check as a refusal, the
+		// same fail-safe posture update already takes for rewritten history.
+		res.fastForward = false
+	}
+	return res, nil
+}
+
 func resolveAdvanceTarget(ctx context.Context, m *manifest.Manifest) (advanceResolution, error) {
 	if m.Canonical.LocalPath != "" {
 		ref := m.Canonical.Ref
@@ -58,6 +87,7 @@ func resolveAdvanceTarget(ctx context.Context, m *manifest.Manifest) (advanceRes
 		}
 		return advanceResolution{
 			newSHA:      sha,
+			sourceURL:   m.Canonical.LocalPath,
 			refName:     refName,
 			mirrorPath:  m.Canonical.LocalPath,
 			refFromHEAD: fromHEAD,
@@ -91,9 +121,102 @@ func resolveAdvanceTarget(ctx context.Context, m *manifest.Manifest) (advanceRes
 	}
 	return advanceResolution{
 		newSHA:      mres.ResolvedSHA,
+		sourceURL:   canonical,
 		refName:     refName,
 		mirrorPath:  mres.LocalPath,
+		cacheLoc:    loc,
 		refFromHEAD: fromHEAD,
+	}, nil
+}
+
+func resolveAutoAdvanceTarget(ctx context.Context, m *manifest.Manifest) (advanceResolution, error) {
+	if m.Canonical.LocalPath != "" {
+		return resolveLocalAdvanceTarget(ctx, m, true)
+	}
+	return resolveRemoteAutoAdvanceTarget(ctx, m)
+}
+
+func resolveLocalAdvanceTarget(ctx context.Context, m *manifest.Manifest, localDefault bool) (advanceResolution, error) {
+	ref := m.Canonical.Ref
+	refName := ref
+	fromHEAD := false
+	if ref == "" {
+		ref = "HEAD"
+		if localDefault {
+			refName = "HEAD (local default)"
+		} else {
+			refName = "HEAD"
+		}
+		fromHEAD = true
+	}
+	sha, err := git.ResolveLocalRef(ctx, m.Canonical.LocalPath, ref)
+	if err != nil {
+		return advanceResolution{}, fmt.Errorf("resolve local ref: %w", err)
+	}
+	return advanceResolution{
+		newSHA:      sha,
+		sourceURL:   m.Canonical.LocalPath,
+		refName:     refName,
+		mirrorPath:  m.Canonical.LocalPath,
+		refFromHEAD: fromHEAD,
+	}, nil
+}
+
+func resolveRemoteAutoAdvanceTarget(ctx context.Context, m *manifest.Manifest) (advanceResolution, error) {
+	canonical, err := cache.Canonicalize(m.Canonical.URL)
+	if err != nil {
+		return advanceResolution{}, fmt.Errorf("canonicalize: %w", err)
+	}
+	loc, err := cache.Resolve(canonical, cache.ResolveOptions{Override: m.Cache.Override})
+	if err != nil {
+		return advanceResolution{}, fmt.Errorf("resolve cache: %w", err)
+	}
+	ref := m.Canonical.Ref
+	refName := ref
+	fromHEAD := false
+	if ref == "" {
+		ref = "HEAD"
+		refName = "HEAD (remote default)"
+		fromHEAD = true
+	}
+
+	mres, err := git.Materialize(ctx, git.Input{
+		CanonicalURL: canonical,
+		Cache:        loc,
+		Ref:          ref,
+		Floating:     true,
+	})
+	if err == nil {
+		return advanceResolution{
+			newSHA:      mres.ResolvedSHA,
+			sourceURL:   canonical,
+			refName:     refName,
+			mirrorPath:  mres.LocalPath,
+			cacheLoc:    loc,
+			refFromHEAD: fromHEAD,
+		}, nil
+	}
+	if !errors.Is(err, git.ErrRemoteUnreachable) {
+		return advanceResolution{}, fmt.Errorf("resolve remote ref: %w", err)
+	}
+
+	fallback, ferr := git.Materialize(ctx, git.Input{
+		CanonicalURL: canonical,
+		Cache:        loc,
+		PinnedSHA:    m.Canonical.Commit,
+		Offline:      true,
+	})
+	if ferr != nil {
+		return advanceResolution{}, fmt.Errorf("resolve remote ref: %w; cached pin fallback failed: %w", err, ferr)
+	}
+	return advanceResolution{
+		newSHA:           fallback.ResolvedSHA,
+		sourceURL:        canonical,
+		refName:          refName,
+		mirrorPath:       fallback.LocalPath,
+		cacheLoc:         loc,
+		refFromHEAD:      fromHEAD,
+		fellBackToPinned: true,
 	}, nil
 }
 

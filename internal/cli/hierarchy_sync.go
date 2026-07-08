@@ -41,6 +41,7 @@ type scopeOutcome struct {
 // every scope's engine.Request, plus the user-scope toggle.
 type hierarchySyncOptions struct {
 	IncludeUser bool
+	Frozen      bool
 	EngineOpts  engine.Options // mode, adopt, target filter, expect-deletions, logger, now
 	// OfferUser, when non-nil and IncludeUser is false, is invoked once when
 	// discovery finds a user-level manifest that would otherwise be skipped
@@ -114,7 +115,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		// coverage.Analyze / engine.Sync.
 		out := func() scopeOutcome {
 			out := scopeOutcome{Scope: sc}
-			prep, perr := prepareScope(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now)
+			prep, perr := prepareScopeForSync(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now, syncPrepareOptions{Frozen: opts.Frozen})
 			if perr != nil {
 				out.Err = perr
 				return out // continue-and-report
@@ -122,6 +123,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			defer prep.Close()
 			req := prep.Request
 			req.Options = opts.EngineOpts
+			req.Options.RunLockHeld = prep.RunLockHeld
 			// Fold the user-scope Cursor rule layer into this project scope's node
 			// set (plan U4/D1/D2), via the shared entry point also used by the
 			// single-scope path. composeActive gates the U5 coverage-warning
@@ -136,9 +138,17 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			out.Warnings = coverage.Analyze(sc.Level, kindsOf(req.Nodes), req.Targets)
 			summary, serr := engine.Sync(ctx, req)
 			if serr != nil {
-				out.Err = serr
+				if prep.PinMovedTo != "" {
+					out.Err = pinMovedSyncError(prep.PinMovedTo, serr)
+				} else {
+					out.Err = serr
+				}
 			} else {
 				out.Summary = summary
+				if prep.PinMovedTo != "" && summary.Outcome.ExitCode != 0 {
+					out.Err = pinMovedSyncError(prep.PinMovedTo, fmt.Errorf("sync reported failures: %s", summary.Outcome.Line))
+					out.Summary = report.Summary{}
+				}
 			}
 			return out
 		}()

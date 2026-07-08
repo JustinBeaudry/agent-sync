@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"github.com/agent-sync/agent-sync/internal/fsroot"
 	"github.com/agent-sync/agent-sync/internal/report"
 	"github.com/agent-sync/agent-sync/internal/tui"
+	"github.com/agent-sync/agent-sync/internal/workspace"
 )
 
 // hookSkippedMarker records that a git-hook-driven sync yielded to an
@@ -28,21 +28,6 @@ const hookSkippedMarker = ".agent-sync/state/hook-skipped"
 // 0. Short so a contended `git pull` is never stalled by the default multi-minute
 // wait.
 const postMergeRunLockTimeout = 3 * time.Second
-
-type syncRequest struct {
-	Frozen bool
-}
-
-type syncRequestKey struct{}
-
-func withSyncRequest(ctx context.Context, req syncRequest) context.Context {
-	return context.WithValue(ctx, syncRequestKey{}, req)
-}
-
-func syncRequestFrom(ctx context.Context) syncRequest {
-	req, _ := ctx.Value(syncRequestKey{}).(syncRequest)
-	return req
-}
 
 func newSyncCommand(deps RootDeps) *cobra.Command {
 	var (
@@ -67,7 +52,6 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmd.SetContext(withSyncRequest(cmd.Context(), syncRequest{Frozen: frozen}))
 			now := deps.now()()
 
 			opts := engine.Options{
@@ -100,7 +84,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 				if userScope {
 					return errUserWithWorkspace
 				}
-				return runSingleScopeSync(cmd, rc, opts, postMerge, now)
+				return runSingleScopeSync(cmd, rc, opts, postMerge, frozen, now)
 			}
 
 			// Hierarchy path: discover every emit scope from cwd and sync each.
@@ -112,7 +96,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
 			}
-			hOpts := hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts}
+			hOpts := hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts, Frozen: frozen}
 			// Interactive runs offer to include a discovered user manifest
 			// instead of silently skipping it (plan R16). Never on the
 			// git-hook path — a `git pull` must not block on a prompt — and
@@ -168,8 +152,12 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 // is taken only when an explicit --workspace override is in effect; the
 // default path is the hierarchy orchestrator. validate also relies on this
 // single-scope shape via prepareEngine.
-func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Options, postMerge bool, now time.Time) error {
-	prep, err := prepareEngine(cmd.Context(), rc, now)
+func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Options, postMerge, frozen bool, now time.Time) error {
+	ws, err := workspace.Find(rc.Flags.Workspace, workspace.Options{Workspace: rc.Flags.Workspace})
+	if err != nil {
+		return fmt.Errorf("sync: %w", err)
+	}
+	prep, err := prepareScopeForSync(cmd.Context(), rc, ws.Root, ws.ManifestPath, "project", now, syncPrepareOptions{Frozen: frozen})
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
@@ -177,10 +165,17 @@ func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Opti
 
 	req := prep.Request
 	req.Options = opts
+	req.Options.RunLockHeld = prep.RunLockHeld
+	if home, herr := resolveHome(); herr == nil {
+		applyCursorComposition(cmd.Context(), rc, &req, prep.Manifest, "project", home, now)
+	}
 
 	root := prep.Root
 	summary, err := engine.Sync(cmd.Context(), req)
 	if err != nil {
+		if prep.PinMovedTo != "" {
+			return pinMovedSyncError(prep.PinMovedTo, err)
+		}
 		return fmt.Errorf("sync: %w", err)
 	}
 
@@ -198,6 +193,9 @@ func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Opti
 		return err
 	}
 	if summary.Outcome.ExitCode != 0 {
+		if prep.PinMovedTo != "" {
+			return pinMovedSyncError(prep.PinMovedTo, fmt.Errorf("sync reported failures: %s", summary.Outcome.Line))
+		}
 		return &exitError{code: summary.Outcome.ExitCode, err: errors.New("sync reported failures")}
 	}
 	return nil

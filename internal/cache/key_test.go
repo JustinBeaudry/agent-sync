@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/agent-sync/agent-sync/internal/cache"
 )
@@ -250,5 +251,46 @@ func TestWriteAudit_OverwriteIsIdempotent(t *testing.T) {
 	}
 	if err := loc.WriteAudit(); err != nil {
 		t.Fatalf("second audit: %v", err)
+	}
+}
+
+func TestAppendAutoAdvance_PreservesCanonicalAudit(t *testing.T) {
+	tmp := t.TempDir()
+	loc, err := cache.Resolve("https://github.com/foo/bar.git", cache.ResolveOptions{Override: tmp})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if err := loc.WriteAudit(); err != nil {
+		t.Fatalf("WriteAudit: %v", err)
+	}
+	entry := cache.AdvanceAudit{
+		TS:     time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC),
+		OldSHA: "1111111111111111111111111111111111111111",
+		NewSHA: "2222222222222222222222222222222222222222",
+		Ref:    "main",
+		Scope:  "project",
+		URL:    loc.Canonical,
+	}
+	if err := loc.AppendAutoAdvance(entry); err != nil {
+		t.Fatalf("AppendAutoAdvance: %v", err)
+	}
+	// WriteAudit must preserve the appended history when it refreshes the
+	// canonical header on a later materialization.
+	if err := loc.WriteAudit(); err != nil {
+		t.Fatalf("WriteAudit after append: %v", err)
+	}
+	got, err := os.ReadFile(loc.AuditPath)
+	if err != nil {
+		t.Fatalf("read audit: %v", err)
+	}
+	text := string(got)
+	if !strings.HasPrefix(text, loc.Canonical+"\n") {
+		t.Fatalf("audit should keep canonical header first:\n%s", text)
+	}
+	if got := strings.Count(text, "auto-advance "); got != 1 {
+		t.Fatalf("auto-advance entry count = %d, want 1\n%s", got, text)
+	}
+	if !strings.Contains(text, "old_sha="+entry.OldSHA) || !strings.Contains(text, "new_sha="+entry.NewSHA) {
+		t.Fatalf("audit missing old/new SHAs:\n%s", text)
 	}
 }

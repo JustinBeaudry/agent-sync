@@ -80,6 +80,58 @@ func TestResolveAdvance_MissingRefFollowsHEAD(t *testing.T) {
 	}
 }
 
+func TestResolveAutoAdvance_UsesTrustedSHABaseline(t *testing.T) {
+	requireGit(t)
+	canonical, rootSHA, headSHA := makeUpdateRepo(t)
+	mustGit(t, canonical, "reset", "--hard", rootSHA)
+	rewritten := commitFile(t, canonical, "rules/rewritten.md", "Rewritten.\n", "rewritten history")
+
+	m := &manifest.Manifest{
+		Canonical: manifest.CanonicalSource{
+			LocalPath: canonical,
+			Ref:       "main",
+			Commit:    rootSHA,
+		},
+		TrustedSHA: headSHA,
+	}
+
+	res, err := resolveAutoAdvance(context.Background(), m)
+	if err != nil {
+		t.Fatalf("resolveAutoAdvance: %v", err)
+	}
+	if res.newSHA != rewritten {
+		t.Fatalf("newSHA = %q, want %q", res.newSHA, rewritten)
+	}
+	if res.fastForward {
+		t.Fatal("fastForward = true, want false against trusted_sha baseline")
+	}
+}
+
+func TestResolveAutoAdvance_EmptyTrustedBaselineFailsClosed(t *testing.T) {
+	requireGit(t)
+	canonical, _, head := makeUpdateRepo(t)
+	newSHA := commitFile(t, canonical, "rules/more.md", "More.\n", "second")
+
+	m := &manifest.Manifest{
+		Canonical: manifest.CanonicalSource{
+			LocalPath: canonical,
+			Ref:       "main",
+			Commit:    head,
+		},
+	}
+
+	res, err := resolveAutoAdvance(context.Background(), m)
+	if err != nil {
+		t.Fatalf("resolveAutoAdvance: %v", err)
+	}
+	if res.newSHA != newSHA {
+		t.Fatalf("newSHA = %q, want %q", res.newSHA, newSHA)
+	}
+	if res.fastForward {
+		t.Fatal("fastForward = true, want false when trusted_sha is empty")
+	}
+}
+
 func TestRepinManifest_PreservesCommentsAndUpdatesBothSHAs(t *testing.T) {
 	ws := t.TempDir()
 	manifestPath := filepath.Join(ws, ".agent-sync.yaml")
