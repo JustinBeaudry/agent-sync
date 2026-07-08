@@ -1,0 +1,72 @@
+<task>
+You are implementing Batch 2 of the plan at `docs/plans/2026-07-08-001-feat-inline-auto-update-plan.md` in the Go repo `agent-sync` (Go 1.25). READ THAT PLAN FIRST, plus `AGENTS.md` (honor its invariants: all fs writes via internal/fsroot; non-interactive paths never prompt/hang; additive changes) and `docs/spec/trust-store-v1.md` (the trust model — do not undermine it).
+
+Batch 1 already landed (do not redo it): the manifest now has `CanonicalSource.Auto *bool` (nil ⇒ auto-on), and `internal/git/materialize.go` has a `ResolveOrFallback` Input mode returning `Result.FellBackToPinned`.
+
+Two DEPENDENT units — implement U3 first, then U4 which builds on U3:
+
+U3 — Extract shared advance core from `update`.
+  Goal: Factor the "resolve newest → fast-forward check → re-pin" logic out of runUpdate (internal/cli/cmd_update.go) into a shared helper that BOTH `update` and the future sync auto-advance path can call. `update`'s externally observable behavior must stay byte-identical.
+
+U4 — Trust policy integration (allow-new-shas posture).
+  Goal: Make auto-update satisfy the trust gate THROUGH the trust policy engine (internal/trust/policy.go::Decide), not by bypassing it. A revoked/blocked trust anchor must ALWAYS refuse, even under auto. Observed auto-advances append to pending.jsonl for audit.
+</task>
+
+<files>
+U3: internal/cli/cmd_update.go, new internal/cli/advance.go, internal/cli/advance_test.go, internal/cli/cmd_update_test.go (keep update's suite green)
+U4: internal/trust/policy.go, internal/trust/*.go (pending.jsonl writer path), internal/trust/policy_test.go, docs/spec/trust-store-v1.md
+Read for context: internal/git/materialize.go, internal/git/shell.go (IsAncestor, ErrRemoteUnreachable), internal/manifest/write.go (WriteResolvedSHA, WriteFile), internal/manifest/schema.go (Auto field). READ THE ENTIRE internal/trust PACKAGE before changing it — understand Decide's existing cases, the trust ops (allow-new-shas-on/off), pending.jsonl, and the revoked-anchor handling as they exist today.
+</files>
+
+<patterns>
+U3: mirror the existing ff-guard and re-pin logic in internal/cli/cmd_update.go (resolveUpdate, the IsAncestor ff check, WriteResolvedSHA+WriteFile re-pin). Reuse git.IsAncestor(ctx, mirror, oldPin, newSHA) for the ff decision. Do NOT reimplement ff or re-pin — extract the existing implementation.
+U4: mirror the existing case structure and purity of internal/trust/policy.go::Decide; follow the two-tier trust model in docs/spec/trust-store-v1.md and the existing pending.jsonl writer.
+</patterns>
+
+<approach>
+U3 (characterization-first):
+- FIRST capture current `update` behavior with characterization tests if not already covered (fast-forward advance, non-ff refusal, missing-ref-follows-HEAD, re-pin writes both commit+trusted_sha). Confirm they pass BEFORE refactoring.
+- Extract a helper (e.g. in internal/cli/advance.go) with a clear input (manifest/canonical, cache-or-mirror path, old pin, ref) and output (resolution: newSHA + ff verdict, or a typed refusal). It performs: resolve newest (caller may pass an already-resolved SHA/mirror, or the helper uses git resolution), ff-check via git.IsAncestor, and provides the re-pin via manifest.WriteResolvedSHA(orig, newSHA, newSHA) + manifest.WriteFile.
+- Refactor runUpdate to call the helper. Keep update's exit codes, messages, and gating (--accept-update, --accept-rewritten-history, ExitTrustDecisionRequired) byte-identical.
+- Respect WriteResolvedSHA's contract: it UPDATES existing commit + trusted_sha keys (ErrKeyMissing if absent) — both keys must pre-exist.
+
+U4:
+- Read internal/trust fully. Extend Decide to handle an auto / allow-new-shas posture: given a NEW, fast-forward-OK SHA on a NON-revoked anchor with auto enabled, return an allow decision (no prompt, no accept-flag needed). On a revoked/blocked anchor, refuse REGARDLESS of auto (auto never overrides revocation). When auto is off (frozen / canonical.auto == false), fall back to today's gated decision (accept required).
+- On an allowed auto-advance, append the observed advance to pending.jsonl (old→new SHA), reusing the existing writer.
+- Keep Decide a pure, exhaustively table-tested function. Do NOT wire U4 into the sync path (that is U5, a later batch) — U4 only extends the policy layer and its callers within update/trust as needed to keep things compiling and tested.
+- Map: canonical.auto (nil or true) ⇒ auto ON; canonical.auto == false ⇒ auto OFF. The --frozen flag also forces auto OFF but that wiring is U5 — for U4 just make the policy input express the posture.
+
+Ordering: U3 then U4. U4's helper/decision may consume the ff verdict shape from U3.
+</approach>
+
+<constraints>
+- Do NOT run git commit, git push, or create PRs — the orchestrating agent handles git.
+- Restrict modifications to files within the repo root.
+- Keep changes tightly scoped — no unrelated refactors/renames/cleanup.
+- Do NOT undermine the trust model: revoked anchors always refuse; the existing fail-closed CI behavior for non-auto sync must remain intact.
+- All fs writes via internal/fsroot.
+- Do NOT wire auto-advance into the sync/prepare path — that is a later batch. Keep this batch to the update-helper extraction and the trust-policy layer.
+- Resolve the task fully before stopping. If you must touch a file outside the listed set, do it minimally and report it in issues.
+</constraints>
+
+<testing>
+Check the plan's U3/U4 test scenarios and supplement gaps.
+- U3: ff advance → helper returns newSHA, ff=true; rewritten history (newSHA not descendant) → ff=false refusal, no re-pin; missing ref follows default branch; re-pin writes both commit+trusted_sha with manifest comments/order preserved; the full existing cmd_update_test.go suite still passes unchanged.
+- U4: new ff-ok SHA + healthy anchor + auto on → allow (Covers R1); revoked/blocked anchor + auto on → refuse; auto off → today's gated decision (accept required); allowed advance appends exactly one pending.jsonl entry with old→new; Decide table covers posture × anchor-state combinations.
+Use existing fixtures: internal/gittest (RequireGit, MustGit); cmd_update_test.go helpers (makeUpdateRepo, commitFile, writeUpdateWS, runUpdateCmd). Real filesystem + t.TempDir() + shelled git.
+</testing>
+
+<verify>
+Run together and fix until green:
+`go build ./... && go vet ./... && go test -race ./internal/cli/... ./internal/trust/... ./internal/manifest/... ./internal/git/...`
+Then `golangci-lint run ./internal/cli/... ./internal/trust/...` if installed (note in verification_summary if not). Run all test files in a package together. Do NOT report "completed" unless build, vet, and tests pass. (The CI "test (darwin/amd64)" job stalls on runner scarcity — ignore that; just make the local suite green.)
+</verify>
+
+<output_contract>
+Report via --output-schema. Fill every field:
+- status: "completed" only if all changes made AND verification passes; "partial" if incomplete; "failed" if no meaningful progress.
+- files_modified: paths you changed.
+- issues: problems, gaps, deviations from the plan, trust-model concerns, or out-of-scope work discovered. Be explicit about ANY place you were unsure whether a change preserves the trust guarantees.
+- summary: one paragraph across U3/U4.
+- verification_summary: exact commands run and outcomes.
+</output_contract>
