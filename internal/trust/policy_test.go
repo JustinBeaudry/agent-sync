@@ -372,6 +372,118 @@ func TestDecideAllowNewSHAsIndefinite(t *testing.T) {
 	}
 }
 
+func TestDecideAutoAdvanceAllowsHealthyFastForwardPinnedDrift(t *testing.T) {
+	t.Parallel()
+
+	in := baseInput()
+	in.TTY = false
+	in.ManifestTrustedSHA = shaB
+	in.Posture = PostureAllowNewSHAs
+	in.FastForward = true
+
+	d, err := Decide(in)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if d.Kind != KindProceedAutoAdvance {
+		t.Fatalf("Kind = %q, want proceed-auto-advance", d.Kind)
+	}
+	if d.TrustedSHA != shaA {
+		t.Fatalf("TrustedSHA = %q, want %q", d.TrustedSHA, shaA)
+	}
+	if d.AppendPending.URL != urlX || d.AppendPending.OldSHA != shaB || d.AppendPending.NewSHA != shaA {
+		t.Fatalf("AppendPending = %+v, want url=%q old=%q new=%q", d.AppendPending, urlX, shaB, shaA)
+	}
+}
+
+func TestDecideAutoAdvancePinnedDriftPostureMatrix(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		posture     Posture
+		fastForward bool
+		revoked     bool
+		wantKind    Kind
+		wantErr     error
+	}{
+		{
+			name:        "default posture falls back to current gate",
+			posture:     PostureDefault,
+			fastForward: true,
+			wantKind:    KindDecisionRequired,
+			wantErr:     ErrTrustDecisionRequired,
+		},
+		{
+			name:        "auto posture requires fast forward",
+			posture:     PostureAllowNewSHAs,
+			fastForward: false,
+			wantKind:    KindDecisionRequired,
+			wantErr:     ErrTrustDecisionRequired,
+		},
+		{
+			name:        "revoked always blocks",
+			posture:     PostureAllowNewSHAs,
+			fastForward: true,
+			revoked:     true,
+			wantKind:    KindRevokedBlock,
+			wantErr:     ErrRevokedTrustAnchor,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := baseInput()
+			in.TTY = false
+			in.ManifestTrustedSHA = shaB
+			in.Posture = tc.posture
+			in.FastForward = tc.fastForward
+			if tc.revoked {
+				in.State = State{Revoked: true, LastOp: OpRevoke}
+			}
+
+			d, err := Decide(in)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tc.wantErr)
+			}
+			if d.Kind != tc.wantKind {
+				t.Fatalf("Kind = %q, want %q", d.Kind, tc.wantKind)
+			}
+		})
+	}
+}
+
+func TestDecideAutoAdvancePendingEntryAppendsOnce(t *testing.T) {
+	t.Parallel()
+
+	in := baseInput()
+	in.TTY = false
+	in.ManifestTrustedSHA = shaB
+	in.Posture = PostureAllowNewSHAs
+	in.FastForward = true
+
+	d, err := Decide(in)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+
+	p := newPendingInDir(t)
+	if err := p.Append(d.AppendPending); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	entries, err := p.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("pending entries = %d, want 1", len(entries))
+	}
+	if entries[0].OldSHA != shaB || entries[0].NewSHA != shaA {
+		t.Fatalf("pending entry = %+v, want old=%q new=%q", entries[0], shaB, shaA)
+	}
+}
+
 func TestDecideMapExitCode(t *testing.T) {
 	t.Parallel()
 

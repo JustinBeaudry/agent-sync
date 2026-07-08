@@ -145,7 +145,7 @@ func runUpdate(cmd *cobra.Command, rc *runtimeContext, flags updateFlags, now ti
 
 	// Resolve the new SHA + a current local mirror to inspect. Any failure
 	// here is before the gate: the manifest stays byte-identical.
-	res, err := resolveUpdate(cmd.Context(), m)
+	res, err := resolveAdvance(cmd.Context(), m)
 	if err != nil {
 		return fmt.Errorf("update: %w", err)
 	}
@@ -158,15 +158,7 @@ func runUpdate(cmd *cobra.Command, rc *runtimeContext, flags updateFlags, now ti
 	// Fast-forward guard (R10): the old pin must be an ancestor of the new
 	// SHA. A non-fast-forward result means history was rewritten upstream;
 	// refuse unless the caller passed the distinct override flag.
-	ff := true
-	if oldPin != "" && res.mirrorPath != "" {
-		ff, err = git.IsAncestor(cmd.Context(), res.mirrorPath, oldPin, res.newSHA)
-		if err != nil {
-			// oldPin unreachable in the mirror is itself a rewrite signal;
-			// treat as non-fast-forward rather than a hard error.
-			ff = false
-		}
-	}
+	ff := res.fastForward
 	if !ff {
 		if flags.acceptRewrite != res.newSHA {
 			return &exitError{code: trust.ExitTrustDecisionRequired, err: fmt.Errorf(
@@ -187,16 +179,8 @@ func runUpdate(cmd *cobra.Command, rc *runtimeContext, flags updateFlags, now ti
 	}
 
 	// Re-pin: commit + trusted_sha together, atomic, comment-preserving.
-	orig, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return fmt.Errorf("update: read manifest: %w", err)
-	}
-	updated, err := manifest.WriteResolvedSHA(orig, res.newSHA, res.newSHA)
-	if err != nil {
-		return fmt.Errorf("update: rewrite pin: %w", err)
-	}
-	if err := manifest.WriteFile(manifestPath, updated); err != nil {
-		return fmt.Errorf("update: write manifest: %w", err)
+	if err := repinManifest(manifestPath, res.newSHA); err != nil {
+		return fmt.Errorf("update: %w", err)
 	}
 
 	// Sync the scope under the lock we already hold (RunLockHeld=true).
@@ -209,68 +193,10 @@ func runUpdate(cmd *cobra.Command, rc *runtimeContext, flags updateFlags, now ti
 	return writeUpdateLine(cmd, fmt.Sprintf("updated: %s → %s (%s), synced", shortDisplaySHA(oldPin), shortDisplaySHA(res.newSHA), res.refName))
 }
 
-// updateResolution is what resolveUpdate discovers before the gate.
-type updateResolution struct {
-	newSHA      string
-	refName     string // the ref that was resolved (manifest ref, or "HEAD (remote default)")
-	mirrorPath  string // local mirror to inspect for the change summary / ancestry (empty for local_path)
-	refFromHEAD bool   // true when the manifest had no ref and HEAD was followed
-}
-
-// resolveUpdate resolves the new SHA and a mirror to inspect, without
-// touching the manifest. URL sources fetch + resolve online; local_path
-// sources resolve the ref in the local clone (no network).
-func resolveUpdate(ctx context.Context, m *manifest.Manifest) (updateResolution, error) {
-	if m.Canonical.LocalPath != "" {
-		ref := m.Canonical.Ref
-		refName := ref
-		fromHEAD := false
-		if ref == "" {
-			ref = "HEAD"
-			refName = "HEAD (local default)"
-			fromHEAD = true
-		}
-		sha, err := git.ResolveLocalRef(ctx, m.Canonical.LocalPath, ref)
-		if err != nil {
-			return updateResolution{}, fmt.Errorf("resolve local ref: %w", err)
-		}
-		return updateResolution{newSHA: sha, refName: refName, mirrorPath: m.Canonical.LocalPath, refFromHEAD: fromHEAD}, nil
-	}
-
-	canonical, err := cache.Canonicalize(m.Canonical.URL)
-	if err != nil {
-		return updateResolution{}, fmt.Errorf("canonicalize: %w", err)
-	}
-	loc, err := cache.Resolve(canonical, cache.ResolveOptions{Override: m.Cache.Override})
-	if err != nil {
-		return updateResolution{}, fmt.Errorf("resolve cache: %w", err)
-	}
-	ref := m.Canonical.Ref
-	refName := ref
-	fromHEAD := false
-	if ref == "" {
-		ref = "HEAD"
-		refName = "HEAD (remote default)"
-		fromHEAD = true
-	}
-	// Floating materialize fetches (or clones) the mirror and resolves the
-	// ref online, returning the new SHA + the mirror path.
-	mres, err := git.Materialize(ctx, git.Input{
-		CanonicalURL: canonical,
-		Cache:        loc,
-		Ref:          ref,
-		Floating:     true,
-	})
-	if err != nil {
-		return updateResolution{}, fmt.Errorf("resolve remote ref: %w", err)
-	}
-	return updateResolution{newSHA: mres.ResolvedSHA, refName: refName, mirrorPath: mres.LocalPath, refFromHEAD: fromHEAD}, nil
-}
-
 // confirmUpdate renders the gate and returns whether to proceed.
 // Non-interactive: the exact acceptance flag must match res.newSHA
 // (or, for a rewrite, acceptRewrite already matched at the guard).
-func confirmUpdate(cmd *cobra.Command, rc *runtimeContext, m *manifest.Manifest, oldPin string, res updateResolution, ff bool, flags updateFlags) (bool, error) {
+func confirmUpdate(cmd *cobra.Command, rc *runtimeContext, m *manifest.Manifest, oldPin string, res advanceResolution, ff bool, flags updateFlags) (bool, error) {
 	if rc.Access.NonInteractive {
 		// A rewrite that got here already passed the distinct override flag.
 		if !ff {
@@ -358,7 +284,7 @@ func resolveUpdateScope(rc *runtimeContext, userScope bool) (root, manifestPath 
 	return ws.Root, ws.ManifestPath, nil
 }
 
-func changeSummaryOrEmpty(ctx context.Context, res updateResolution, oldPin string) string {
+func changeSummaryOrEmpty(ctx context.Context, res advanceResolution, oldPin string) string {
 	if oldPin == "" || res.mirrorPath == "" {
 		return ""
 	}

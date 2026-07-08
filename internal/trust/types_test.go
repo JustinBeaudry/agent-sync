@@ -18,6 +18,7 @@ func TestKindString(t *testing.T) {
 		{KindPromptFirstURL, "prompt-first-url"},
 		{KindPromptNewSHA, "prompt-new-sha"},
 		{KindProceedAutoPromote, "proceed-auto-promote"},
+		{KindProceedAutoAdvance, "proceed-auto-advance"},
 		{KindRevokedBlock, "revoked-block"},
 		{KindDecisionRequired, "decision-required"},
 		{Kind(99), "unknown(99)"},

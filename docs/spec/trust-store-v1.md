@@ -162,6 +162,13 @@ it does **not** prompt — it appends to `pending.jsonl` and emits a one-line
 stderr reminder. The user drains the queue out-of-band via
 `agent-sync trust pending` → `agent-sync trust promote`.
 
+The same queue is also used when the caller explicitly selects the
+`allow-new-shas` posture through `internal/trust/policy.Decide` for a
+fast-forward manifest-pin advance (for example, sync auto-update driven by
+`canonical.auto`). In that posture, policy still blocks a revoked anchor,
+but an allowed advance proceeds and appends the old→new SHA pair here for
+audit.
+
 ### Line schema
 
 ```json

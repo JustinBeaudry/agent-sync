@@ -75,6 +75,12 @@ const (
 	// record (AppendTrustLog) and proceeds.
 	KindProceedAutoPromote
 
+	// KindProceedAutoAdvance: the caller explicitly requested the
+	// allow-new-shas posture for a fast-forward manifest-pin advance. The
+	// caller proceeds, treats ResolvedSHA as trusted for this run, and
+	// appends AppendPending for audit.
+	KindProceedAutoAdvance
+
 	// KindRevokedBlock: URL has an active revoke. Return
 	// ErrRevokedTrustAnchor.
 	KindRevokedBlock
@@ -97,6 +103,8 @@ func (k Kind) String() string {
 		return "prompt-new-sha"
 	case KindProceedAutoPromote:
 		return "proceed-auto-promote"
+	case KindProceedAutoAdvance:
+		return "proceed-auto-advance"
 	case KindRevokedBlock:
 		return "revoked-block"
 	case KindDecisionRequired:
@@ -123,8 +131,8 @@ type Decision struct {
 	// TrustedSHA is the SHA the caller should treat as trusted after acting
 	// on this decision. For most kinds this is the pre-decision effective
 	// trust (manifest pin if present, else the latest SHA in user history,
-	// else ""). For KindProceedAutoPromote it is set to ResolvedSHA, since
-	// applying AppendTrustLog makes ResolvedSHA the new effective trust.
+	// else ""). For KindProceedAutoPromote and KindProceedAutoAdvance it is
+	// set to ResolvedSHA, since the caller is proceeding on the new SHA.
 	TrustedSHA string
 
 	// Reminder is the one-line stderr message the CLI should emit when
@@ -132,7 +140,8 @@ type Decision struct {
 	Reminder string
 
 	// AppendPending carries the pending entry to append when
-	// Kind == KindProceedWithReminder. Zero value otherwise.
+	// Kind == KindProceedWithReminder or Kind == KindProceedAutoAdvance.
+	// Zero value otherwise.
 	AppendPending PendingEntry
 
 	// AppendTrustLog carries the trust-log entry the caller should append
@@ -196,6 +205,20 @@ type PendingEntry struct {
 	NewSHA string    `json:"new_sha"`
 	OldSHA string    `json:"old_sha"`
 }
+
+// Posture describes the trust posture the caller wants Decide to apply for
+// this invocation.
+type Posture int
+
+const (
+	// PostureDefault preserves today's pinned-and-gated behavior.
+	PostureDefault Posture = iota
+
+	// PostureAllowNewSHAs opts this decision into the allow-new-shas auto
+	// path. Decide only honors it for a manifest-pin drift when the caller
+	// also proves the new SHA is a fast-forward from the current pin.
+	PostureAllowNewSHAs
+)
 
 // IsZero reports whether the entry has any meaningful content.
 func (e PendingEntry) IsZero() bool {
