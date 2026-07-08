@@ -1,0 +1,23 @@
+Now that we're on 0.7.0, are we auto-syncing manifests from the source repo?
+
+---
+
+<task-notification>
+<task-id>b7bg3xh2c</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/50424f8e-94af-46f3-8bdf-dae509804849/tasks/b7bg3xh2c.output</output-file>
+<status>failed</status>
+<summary>Background command "Poll until real CI checks settle" failed with exit code 8</summary>
+</task-notification>
+
+---
+
+We need to get auto-sync fonr and working
+
+---
+
+sure, looks good
+
+---
+
+yes

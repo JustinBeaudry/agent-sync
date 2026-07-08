@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "b74a54415bd7",
+  "strategy": "manual-commit",
+  "branch": "feat/inline-auto-update",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "docs/brainstorms/2026-07-08-inline-auto-update-requirements.md",
+    "docs/plans/2026-07-08-001-feat-inline-auto-update-plan.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b7/4a54415bd7/0/metadata.json",
+      "transcript": "/b7/4a54415bd7/0/full.jsonl",
+      "content_hash": "/b7/4a54415bd7/0/content_hash.txt",
+      "prompt": "/b7/4a54415bd7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 43261,
+    "cache_creation_tokens": 432224,
+    "cache_read_tokens": 1678456,
+    "output_tokens": 37884,
+    "api_call_count": 19
+  }
+}
