@@ -152,9 +152,21 @@ func serveCanonicalRepo(t *testing.T, worktree string) *servedURLRepo {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("start git daemon: %v", err)
 	}
-	pidBytes, err := os.ReadFile(pidFile)
-	if err != nil {
-		t.Fatalf("read git daemon pid: %v", err)
+	// `git daemon --detach` returns from Run() before the detached process has
+	// written its --pid-file (the write is async in the child). Poll for it
+	// rather than reading immediately, which races and loses under slower /
+	// instrumented CI runs. Give it up to ~4s.
+	var pidBytes []byte
+	var err error
+	for range 200 {
+		pidBytes, err = os.ReadFile(pidFile)
+		if err == nil && len(strings.TrimSpace(string(pidBytes))) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil || len(strings.TrimSpace(string(pidBytes))) == 0 {
+		t.Fatalf("read git daemon pid: %v (stderr: %s)", err, stderr.String())
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
 	if err != nil {
@@ -424,6 +436,57 @@ func TestSync_NoAdapterStartedBannerOnStderr(t *testing.T) {
 	}
 	if strings.Contains(string(captured), "started") {
 		t.Fatalf("bundled adapter session banner leaked to stderr:\n%s", captured)
+	}
+}
+
+func TestSync_LocalPathAutoAdvanceEndToEnd(t *testing.T) {
+	requireGit(t)
+	setTestXDG(t)
+
+	// local_path source: no git daemon, offline by nature. Exercises the
+	// local branch of prepareAutoAdvanceScope + resolveLocalAdvanceTarget.
+	canonical, _, head := makeUpdateRepo(t)
+	ws := writeUpdateWS(t, canonical, head, "main")
+
+	if _, errOut, err := runSync(t, ws); err != nil {
+		t.Fatalf("initial sync: %v\nstderr: %s", err, errOut)
+	}
+
+	newSHA := commitFile(t, canonical, "rules/local-new.md", "Local new.\n", "second local rule")
+
+	if _, errOut, err := runSync(t, ws); err != nil {
+		t.Fatalf("auto-advance sync: %v\nstderr: %s", err, errOut)
+	}
+	man := string(readManifest(t, ws))
+	if !strings.Contains(man, "commit: "+newSHA) {
+		t.Fatalf("local_path commit not re-pinned to %s:\n%s", newSHA, man)
+	}
+	if !strings.Contains(man, "trusted_sha: "+newSHA) {
+		t.Fatalf("local_path trusted_sha not re-pinned to %s:\n%s", newSHA, man)
+	}
+	if _, statErr := os.Stat(filepath.Join(ws, ".claude", "rules", "agent-sync", "local-new.md")); statErr != nil {
+		t.Fatalf("expected synced rule from auto-advanced local_path commit: %v", statErr)
+	}
+}
+
+func TestSync_LocalPathFrozenSkipsAutoAdvance(t *testing.T) {
+	requireGit(t)
+	setTestXDG(t)
+
+	canonical, _, head := makeUpdateRepo(t)
+	ws := writeUpdateWS(t, canonical, head, "main")
+
+	if _, errOut, err := runSync(t, ws); err != nil {
+		t.Fatalf("initial sync: %v\nstderr: %s", err, errOut)
+	}
+	_ = commitFile(t, canonical, "rules/local-new.md", "Local new.\n", "second local rule")
+
+	if _, errOut, err := runSync(t, ws, "--frozen"); err != nil {
+		t.Fatalf("frozen sync: %v\nstderr: %s", err, errOut)
+	}
+	man := string(readManifest(t, ws))
+	if !strings.Contains(man, "commit: "+head) {
+		t.Fatalf("--frozen must keep the original pin %s:\n%s", head, man)
 	}
 }
 
