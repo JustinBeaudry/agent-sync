@@ -1,0 +1,120 @@
+<task-notification>
+<task-id>bu3qlurl6</task-id>
+<tool-use-id>toolu_016HG1EcecXz1zkqDFFwyhip</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/50424f8e-94af-46f3-8bdf-dae509804849/tasks/bu3qlurl6.output</output-file>
+<status>completed</status>
+<summary>Background command "Launch Codex on Batch 2 (U3, U4)" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>aa58e790258f6b4c4</task-id>
+<tool-use-id>toolu_011WPYja21gupNvK9nWjLbJP</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/50424f8e-94af-46f3-8bdf-dae509804849/tasks/aa58e790258f6b4c4.output</output-file>
+<status>completed</status>
+<summary>Agent "Adversarial review of trust auto-advance" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I have completed a thorough read of the diff, the trust engine, the git primitives, the update refactor, and all call sites. Here are my findings.
+
+The central reality that shapes every finding: **this branch ships the primitives (U1–U6) but does not wire auto-advance into `sync`.** I verified that `Canonical.Auto` has zero readers, `syncRequestFrom`/`--frozen` is never consumed, and no non-test caller sets `Posture: PostureAllowNewSHAs` or `git.Input.ResolveOrFallback`. So the "sync auto-advances by default" behavior described in the task is not live yet. Nothing in this diff is exploitable today — but the security guarantees are enforced *contingently*, and the seams where the future wiring will plug in contain concrete traps.
+
+```json
+{
+  "reviewer": "adversarial",
+  "findings": [
+    {
+      "title": "Latent: auto-advance revoke defense is caller-contingent; the only existing Decide caller passes a zero State (no revocation loaded)",
+      "severity": "high",
+      "confidence": 65,
+      "location": "internal/trust/policy.go:110-132; internal/cli/materialize.go:139-144",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "evidence": [
+        "Decide() checks `if in.State.Revoked` FIRST (policy.go:110) and returns KindRevokedBlock before ever reaching the PostureAllowNewSHAs branch (policy.go:121). At the engine level the guarantee holds: there is no path to KindProceedAutoAdvance with State.Revoked==true. I confirmed this by tracing every return.",
+        "BUT State.Revoked is only ever populated by Store.Fold() (store.go:377-391). The ONLY existing production caller of trust.Decide -- materializeURL at internal/cli/materialize.go:139 -- constructs DecideInput with just URL/ResolvedSHA/ManifestTrustedSHA/Now and leaves State at its zero value (Revoked==false). It never calls Fold().",
+        "Constructed failure for the pending wiring unit: sync auto-advance is added by copying the materializeURL pattern (the nearest sibling) and adding `Posture: PostureAllowNewSHAs` + `FastForward: true`. Because State stays zero, State.Revoked is false, the revoke early-return at policy.go:110 is skipped, and Decide returns KindProceedAutoAdvance -- silently advancing the canonical pin across a revoked trust anchor. The supply-chain kill-switch (`trust revoke`) is defeated for exactly the new auto path.",
+        "This is safe in the CURRENT pinned path only because that path requires ManifestTrustedSHA == ResolvedSHA (pin-equality gate) -- it cannot materialize anything but the exact pin, so a missing revoke check is inert. The PostureAllowNewSHAs branch removes that pin-equality backstop, which is precisely what makes the missing State load load-bearing."
+      ],
+      "scenario": "revoke URL X -&gt; upstream advances X to a new fast-forward SHA -&gt; sync (once auto-advance is wired via the materializeURL pattern) resolves the new SHA, computes FastForward=true, calls Decide with zero State -&gt; KindProceedAutoAdvance -&gt; pin advances onto attacker commit despite active revoke.",
+      "recommendation": "When wiring auto-advance, require Store.Fold()-derived State on every Decide call that passes PostureAllowNewSHAs, and add a policy-level assertion/test that PostureAllowNewSHAs with an unpopulated State is rejected (fail-closed) rather than trusted. Consider making Decide refuse the posture unless State was explicitly loaded, so the guarantee is structural rather than caller-dependent."
+    },
+    {
+      "title": "Latent: fast-forward proof baseline (Canonical.Commit) diverges from the trust anchor Decide gates on (ManifestTrustedSHA)",
+      "severity": "medium",
+      "confidence": 60,
+      "location": "internal/cli/advance.go:32-41; internal/trust/policy.go:116-132",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "evidence": [
+        "resolveAdvance computes fastForward from `git.IsAncestor(ctx, mirror, oldPin, newSHA)` where oldPin = m.Canonical.Commit (advance.go:33-35). Decide's auto-advance branch instead gates on ManifestTrustedSHA (policy.go:116/121), which is sourced from m.TrustedSHA. These are two distinct manifest fields.",
+        "advance.go:32 defaults res.fastForward = true and only overwrites it when `oldPin != \"\" &amp;&amp; mirrorPath != \"\"`. If Canonical.Commit is empty (a manifest carrying trusted_sha but no commit pin), fastForward stays true with NO ancestry computation performed at all.",
+        "Constructed failure (once wired): manifest has trusted_sha=A but canonical.commit empty (or commit=B where B is an ancestor of newSHA while trusted_sha=A is on a rewritten/divergent line). resolveAdvance reports FastForward=true (proven against commit or defaulted), the wiring passes ManifestTrustedSHA=A + FastForward=true into Decide, and Decide auto-advances the trust anchor A onto newSHA even though A-&gt;newSHA is NOT a fast-forward. The 'fast-forward-only' rail is bypassed because the proof was computed against the wrong baseline.",
+        "For the shipped `update` path this is benign: update always writes commit and trusted_sha together (repinManifest, advance.go:107) so they stay equal, and update still requires an interactive confirm or --accept-update, so the defaulted-true ff never bypasses a human gate. The risk materializes only for the non-interactive auto path."
+      ],
+      "scenario": "Hand-edited or drifted manifest where canonical.commit != trusted_sha (or commit empty) -&gt; resolveAdvance proves ff against commit -&gt; Decide advances trusted_sha non-fast-forward.",
+      "recommendation": "Compute the ff proof against the SAME SHA Decide treats as the anchor (trusted_sha / ManifestTrustedSHA), and treat an empty baseline as fastForward=false (fail-safe) rather than the current default-true, for any caller that will feed FastForward into the auto posture."
+    },
+    {
+      "title": "`--frozen` opt-out is parsed into context but never read; no code consumes syncRequestFrom",
+      "severity": "low",
+      "confidence": 90,
+      "location": "internal/cli/cmd_sync.go:42 (syncRequestFrom), :70 (SetContext with Frozen)",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "evidence": [
+        "cmd_sync stores syncRequest{Frozen} in the context (cmd_sync.go:70) but grep confirms syncRequestFrom has zero callers -- the frozen bit is a dead read.",
+        "No divergence exists TODAY (auto-advance is unwired, so frozen and non-frozen both sync at the pin). It becomes a real footgun the moment auto-advance is wired but a code path forgets to consult syncRequestFrom: a user passing --frozen expecting pinned-only would silently get auto-advance.",
+        "Same class of 'declared but unread' opt-out as Canonical.Auto: `auto: false` in a manifest is unmarshalled (schema.go:73) but has zero readers, so the documented opt-out is currently a no-op."
+      ],
+      "scenario": "User adds `--frozen` (or `canonical.auto: false`) to prevent auto-advance -&gt; future wiring omits the check -&gt; pin advances anyway despite explicit opt-out.",
+      "recommendation": "Land the frozen/auto reads in the same unit that wires auto-advance, with a test that --frozen and auto:false each force the pinned-only path; do not merge the auto path without both opt-outs being live."
+    }
+  ],
+  "residual_risks": [
+    "Default-ON posture: canonical.auto nil == enabled (schema.go:71-73) means every existing pinned manifest silently becomes auto-advancing on upgrade, once wired. For agent-sync's ONLY supply-chain defense (trusted_sha), flipping a pin-advancing behavior to opt-out rather than opt-in is a deliberate posture change worth an explicit security sign-off and a loud release note.",
+    "Decide's revoke/ff guarantees are pure-function correct but entirely caller-contingent: both State.Revoked and FastForward are caller-supplied booleans with no structural link to their evidence (Store.Fold and git.IsAncestor). A future caller that hardcodes FastForward=true or skips Fold() defeats the rail with no compile-time signal. Recommend an integration test that exercises the real sync-&gt;Decide path with (a) an active revoke and (b) a genuine non-fast-forward, asserting refusal.",
+    "TOCTOU between resolveAdvance's ff-check and syncAfterRepin's re-materialize: the workspace run lock (cmd_update.go:137-144) is local-only; the remote can move between the ff proof and the re-sync. For update this is caught because re-materialize pins to newSHA and re-runs the reachability check. Any future auto-advance path must keep that re-verification under the same lock and must not trust resolveAdvance's ff result as still-valid at write time."
+  ],
+  "testing_gaps": [
+    "No test asserts that trust.Decide with Posture=PostureAllowNewSHAs + FastForward=true + State.Revoked=true still returns KindRevokedBlock (the revoke-beats-posture ordering). policy_test.go should pin this explicitly so a future reorder is caught.",
+    "No test covers the ManifestTrustedSHA-vs-Canonical.Commit divergence for the ff baseline (empty commit / commit != trusted_sha) feeding the auto posture.",
+    "materialize.go ResolveOrFallback is exercised in materialize_test.go, but there is no end-to-end test proving offline fallback CANNOT adopt a force-pushed head (I verified by reading fallbackToPinned that it only ever returns the cached pin, never a resolved head, and that the online path runs IsAncestor unconditionally at materialize.go:226 with an error treated as hard-fail -- this is correct and fail-safe, but untested at the integration seam)."
+  ]
+}
+```
+
+**Verified safe (no break found):**
+- Revoke ordering in `Decide` is correct — the `State.Revoked` early-return (policy.go:110) precedes the `PostureAllowNewSHAs` branch (policy.go:121); no path reaches `KindProceedAutoAdvance` with `Revoked==true` *given State is populated*.
+- `resolveAdvance` computes ff genuinely from `git.IsAncestor(oldPin, newSHA)` and treats an `IsAncestor` error as `fastForward=false` (advance.go:36-40) — fail-safe, identical to the pre-refactor update code.
+- `fallbackToPinned` (materialize.go:263-277) returns the cached pin only after `cacheHasSha` confirms presence; otherwise hard-errors. It never returns a resolved/force-pushed head, so offline fallback cannot adopt a rewritten history — it can only stay at the trusted pin.
+- Online `ResolveOrFallback` runs the `IsAncestor(pin, target)` reachability check unconditionally (materialize.go:225-232, guarded by input validation requiring both PinnedSHA and Ref) — the check cannot be skipped, and an error is a hard fail.
+- Existing guarantees intact: `materializeURL` still passes `PostureDefault` (zero), so CI non-auto pin-mismatch still fails closed (policy.go:137). The `update` refactor is a faithful extraction (behavior byte-identical). `manifest.WriteFile` (write.go:112-118) still routes through `fsroot.OpenWorkspaceRoot` + `StagedWrite`, honoring the AGENTS.md fs invariant. The `Auto *bool` schema addition is additive.
+
+Relevant files: `/Users/justinbeaudry/Projects/agent-sync/internal/trust/policy.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/cli/materialize.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/cli/advance.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/git/materialize.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/cli/cmd_sync.go`, `/Users/justinbeaudry/Projects/agent-sync/internal/manifest/schema.go`.</result>
+<usage><subagent_tokens>75374</subagent_tokens><tool_uses>23</tool_uses><duration_ms>325159</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bzuhf5m6b</task-id>
+<tool-use-id>toolu_01JYC8UbU7FgisnH58tQA8YV</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/50424f8e-94af-46f3-8bdf-dae509804849/tasks/bzuhf5m6b.output</output-file>
+<status>completed</status>
+<summary>Background command "Launch Codex on Batch 3 (U5, U7)" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+continue
+
+---
+
+<task-notification>
+<task-id>b0ru6g8gf</task-id>
+<tool-use-id>toolu_01FGRxiDw1tKzzgZwUtKDkxp</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-justinbeaudry-Projects-agent-sync/50424f8e-94af-46f3-8bdf-dae509804849/tasks/b0ru6g8gf.output</output-file>
+<status>completed</status>
+<summary>Background command "Full independent build+vet+race test suite" completed (exit code 0)</summary>
+</task-notification>
