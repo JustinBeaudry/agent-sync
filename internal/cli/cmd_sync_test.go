@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -125,6 +126,13 @@ func writeURLWorkspace(t *testing.T, canonicalURL, sha, ref string, auto *bool) 
 
 func serveCanonicalRepo(t *testing.T, worktree string) *servedURLRepo {
 	t.Helper()
+	// `git daemon` (git:// transport) is not reliably available on Git for
+	// Windows — it exits non-zero under the CI runner. URL-source auto-advance
+	// behavior is exercised on Linux/macOS here and, transport-independently, by
+	// the local_path auto-advance tests on every platform.
+	if runtime.GOOS == "windows" {
+		t.Skip("git daemon (git:// transport) is unavailable on Windows; covered on unix + via local_path tests")
+	}
 	base := t.TempDir()
 	bare := filepath.Join(base, "origin.git")
 	mustGit(t, base, "clone", "--bare", "--quiet", worktree, bare)
