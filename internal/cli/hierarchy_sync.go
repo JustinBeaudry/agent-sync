@@ -42,6 +42,7 @@ type scopeOutcome struct {
 type hierarchySyncOptions struct {
 	IncludeUser bool
 	Frozen      bool
+	PostMerge   bool
 	EngineOpts  engine.Options // mode, adopt, target filter, expect-deletions, logger, now
 	// OfferUser, when non-nil and IncludeUser is false, is invoked once when
 	// discovery finds a user-level manifest that would otherwise be skipped
@@ -115,7 +116,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 		// coverage.Analyze / engine.Sync.
 		out := func() scopeOutcome {
 			out := scopeOutcome{Scope: sc}
-			prep, perr := prepareScopeForSync(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now, syncPrepareOptions{Frozen: opts.Frozen})
+			prep, perr := prepareScopeForSync(ctx, rc, sc.Root, sc.ManifestPath, sc.Level.String(), now, syncPrepareOptions{Frozen: opts.Frozen, PostMerge: opts.PostMerge})
 			if perr != nil {
 				out.Err = perr
 				return out // continue-and-report

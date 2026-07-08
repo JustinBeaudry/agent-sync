@@ -53,3 +53,32 @@ func TestCanonicalSourceAuto_RoundTripTrue(t *testing.T) {
 		t.Fatalf("auto = %#v, want non-nil true", loaded.Canonical.Auto)
 	}
 }
+
+func TestCanonicalSourceAuto_RoundTripFalse(t *testing.T) {
+	// A non-nil false is the opt-out value; omitempty on *bool must NOT drop
+	// it, or a manifest rewrite (WriteResolvedSHA/WriteFile) would silently
+	// flip the user back to auto-on.
+	m := manifest.Manifest{
+		Version: 1,
+		Canonical: manifest.CanonicalSource{
+			URL:  "https://example.com/agents.git",
+			Auto: boolPtr(false),
+		},
+	}
+
+	out, err := yaml.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if got := string(out); !strings.Contains(got, "auto: false") {
+		t.Fatalf("marshal missing auto: false:\n%s", got)
+	}
+
+	loaded, err := manifest.LoadBytes(out, manifest.LoadOptions{})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded.Canonical.Auto == nil || *loaded.Canonical.Auto {
+		t.Fatalf("auto = %#v, want non-nil false", loaded.Canonical.Auto)
+	}
+}

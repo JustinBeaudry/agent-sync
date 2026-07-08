@@ -204,9 +204,7 @@ func readAuditTail(dir, name, canonical string) ([]byte, error) {
 	}
 	firstNL := bytes.IndexByte(data, '\n')
 	if firstNL < 0 {
-		if string(data) != canonical {
-			return nil, nil
-		}
+		// Single line, no trailing newline: header only, no appended tail.
 		return nil, nil
 	}
 	if string(data[:firstNL]) != canonical {

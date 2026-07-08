@@ -53,6 +53,13 @@ type prepared struct {
 
 type syncPrepareOptions struct {
 	Frozen bool
+	// PostMerge disables auto-advance for the git-hook path. A `git pull`
+	// post-merge sync must stay fast and must yield gracefully to an
+	// in-progress sync (engine.Sync self-locks with a short timeout and
+	// reports blocked); acquiring the CLI run lock here to auto-advance would
+	// hard-fail on contention and break `git pull`. Post-merge therefore
+	// syncs at the current pin.
+	PostMerge bool
 }
 
 type autoAdvanceScopeResult struct {
@@ -118,7 +125,7 @@ func prepareScopeForSync(ctx context.Context, rc *runtimeContext, scopeRoot, man
 	}
 	closeRoot := func() { _ = root.Close() }
 
-	if !shouldAutoAdvanceSync(m, opts.Frozen, rc.Flags.Offline) {
+	if !shouldAutoAdvanceSync(m, opts.Frozen || opts.PostMerge, rc.Flags.Offline) {
 		mat, err := materialize(ctx, m, materializeOptions{Offline: rc.Flags.Offline, Now: now, Root: root})
 		if err != nil {
 			closeRoot()

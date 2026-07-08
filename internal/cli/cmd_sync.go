@@ -96,7 +96,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("sync: %w", err)
 			}
-			hOpts := hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts, Frozen: frozen}
+			hOpts := hierarchySyncOptions{IncludeUser: userScope, EngineOpts: opts, Frozen: frozen, PostMerge: postMerge}
 			// Interactive runs offer to include a discovered user manifest
 			// instead of silently skipping it (plan R16). Never on the
 			// git-hook path — a `git pull` must not block on a prompt — and
@@ -157,7 +157,7 @@ func runSingleScopeSync(cmd *cobra.Command, rc *runtimeContext, opts engine.Opti
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
-	prep, err := prepareScopeForSync(cmd.Context(), rc, ws.Root, ws.ManifestPath, "project", now, syncPrepareOptions{Frozen: frozen})
+	prep, err := prepareScopeForSync(cmd.Context(), rc, ws.Root, ws.ManifestPath, "project", now, syncPrepareOptions{Frozen: frozen, PostMerge: postMerge})
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
