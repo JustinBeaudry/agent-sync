@@ -69,6 +69,11 @@ type CanonicalSource struct {
 	// Commit is the pinned git commit SHA (40 hex). Pinning is the default for
 	// the git-backed sources (URL/LocalPath). Not valid for LocalDir.
 	Commit string `yaml:"commit,omitempty"`
+
+	// Auto controls sync-time auto-advance for git-backed canonical sources.
+	// Nil means "enabled" (the default); a non-nil false opts the manifest
+	// out back to pinned-only sync behavior.
+	Auto *bool `yaml:"auto,omitempty"`
 }
 
 type CacheConfig struct {

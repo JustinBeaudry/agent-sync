@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +29,21 @@ const hookSkippedMarker = ".agent-sync/state/hook-skipped"
 // wait.
 const postMergeRunLockTimeout = 3 * time.Second
 
+type syncRequest struct {
+	Frozen bool
+}
+
+type syncRequestKey struct{}
+
+func withSyncRequest(ctx context.Context, req syncRequest) context.Context {
+	return context.WithValue(ctx, syncRequestKey{}, req)
+}
+
+func syncRequestFrom(ctx context.Context) syncRequest {
+	req, _ := ctx.Value(syncRequestKey{}).(syncRequest)
+	return req
+}
+
 func newSyncCommand(deps RootDeps) *cobra.Command {
 	var (
 		bestEffort      bool
@@ -36,6 +52,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 		expectDeletions int
 		postMerge       bool
 		userScope       bool
+		frozen          bool
 	)
 
 	cmd := &cobra.Command{
@@ -50,6 +67,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			cmd.SetContext(withSyncRequest(cmd.Context(), syncRequest{Frozen: frozen}))
 			now := deps.now()()
 
 			opts := engine.Options{
@@ -141,6 +159,7 @@ func newSyncCommand(deps RootDeps) *cobra.Command {
 	cmd.Flags().IntVar(&expectDeletions, "expect-deletions", 0, "abort unless exactly this many files would be deleted")
 	cmd.Flags().BoolVar(&postMerge, "post-merge", false, "git-hook mode: yield to an in-progress sync and exit 0")
 	cmd.Flags().BoolVar(&userScope, "user", false, "also sync the user-level (~) manifest")
+	cmd.Flags().BoolVar(&frozen, "frozen", false, "Disable auto-advance; sync at the pinned commit only")
 	return cmd
 }
 

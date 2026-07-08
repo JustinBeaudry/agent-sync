@@ -212,6 +212,94 @@ func TestMaterialize_FloatingResolvesRef(t *testing.T) {
 	}
 }
 
+func TestMaterialize_ResolveOrFallback_OnlineResolvesNewerRef(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	src := makeRepo(t)
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, src.Path)
+
+	res, err := Materialize(testCtx(t), Input{
+		CanonicalURL:      src.Path,
+		Cache:             loc,
+		PinnedSHA:         src.InitialSHA,
+		Ref:               src.HeadBranch,
+		ResolveOrFallback: true,
+	})
+	if err != nil {
+		t.Fatalf("Materialize resolve-or-fallback: %v", err)
+	}
+	if res.ResolvedSHA != src.SecondSHA {
+		t.Fatalf("ResolvedSHA = %q, want %q", res.ResolvedSHA, src.SecondSHA)
+	}
+	if res.FromCache {
+		t.Fatal("FromCache must be false on successful online resolution")
+	}
+	if res.FellBackToPinned {
+		t.Fatal("FellBackToPinned must be false on successful online resolution")
+	}
+}
+
+func TestMaterialize_ResolveOrFallback_RemoteUnreachableFallsBackToPin(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	src := makeRepo(t)
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, src.Path)
+
+	if _, err := Materialize(testCtx(t), Input{
+		CanonicalURL: src.Path,
+		Cache:        loc,
+		PinnedSHA:    src.InitialSHA,
+		Ref:          src.HeadBranch,
+	}); err != nil {
+		t.Fatalf("prime cache: %v", err)
+	}
+
+	res, err := Materialize(testCtx(t), Input{
+		CanonicalURL:      "https://offline.invalid/nope.git",
+		Cache:             loc,
+		PinnedSHA:         src.InitialSHA,
+		Ref:               src.HeadBranch,
+		ResolveOrFallback: true,
+	})
+	if err != nil {
+		t.Fatalf("Materialize fallback: %v", err)
+	}
+	if res.ResolvedSHA != src.InitialSHA {
+		t.Fatalf("ResolvedSHA = %q, want pinned fallback %q", res.ResolvedSHA, src.InitialSHA)
+	}
+	if !res.FromCache {
+		t.Fatal("FromCache must be true when falling back to the cached pin")
+	}
+	if !res.FellBackToPinned {
+		t.Fatal("FellBackToPinned must be true when remote resolution fails")
+	}
+}
+
+func TestMaterialize_ResolveOrFallback_RemoteUnreachableWithoutCacheErrors(t *testing.T) {
+	withDetectReset(t)
+
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, "https://offline.invalid/nope.git")
+
+	_, err := Materialize(testCtx(t), Input{
+		CanonicalURL:      "https://offline.invalid/nope.git",
+		Cache:             loc,
+		PinnedSHA:         "1234567890abcdef1234567890abcdef12345678",
+		Ref:               "main",
+		ResolveOrFallback: true,
+	})
+	if err == nil {
+		t.Fatal("expected error when remote is unreachable and no cached pin exists")
+	}
+	if !strings.Contains(err.Error(), "remote unreachable") || !strings.Contains(err.Error(), "not cached") {
+		t.Fatalf("error should explain unreachable remote + missing cached pin, got: %v", err)
+	}
+}
+
 func TestMaterialize_InvalidSHA(t *testing.T) {
 	withDetectReset(t)
 
@@ -298,6 +386,56 @@ func TestMaterialize_ReachabilityCheck_ForcePushedRef(t *testing.T) {
 	})
 	if !errors.Is(err, ErrReachabilityCheckFailed) {
 		t.Fatalf("expected ErrReachabilityCheckFailed after force-push, got %v", err)
+	}
+}
+
+func TestMaterialize_ResolveOrFallback_ReachabilityCheck_ForcePushedRef(t *testing.T) {
+	requireGit(t)
+	withDetectReset(t)
+
+	src := makeRepo(t)
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, src.Path)
+
+	if _, err := Materialize(testCtx(t), Input{
+		CanonicalURL: src.Path,
+		Cache:        loc,
+		PinnedSHA:    src.SecondSHA,
+		Ref:          src.HeadBranch,
+	}); err != nil {
+		t.Fatalf("prime cache: %v", err)
+	}
+
+	_ = src.forcePushDivergent(t)
+
+	_, err := Materialize(testCtx(t), Input{
+		CanonicalURL:      src.Path,
+		Cache:             loc,
+		PinnedSHA:         src.SecondSHA,
+		Ref:               src.HeadBranch,
+		ResolveOrFallback: true,
+	})
+	if !errors.Is(err, ErrReachabilityCheckFailed) {
+		t.Fatalf("expected ErrReachabilityCheckFailed after force-push, got %v", err)
+	}
+}
+
+func TestMaterialize_ResolveOrFallbackAndFloatingMutuallyExclusive(t *testing.T) {
+	withDetectReset(t)
+
+	cacheRoot := t.TempDir()
+	loc := buildCacheLocation(t, cacheRoot, "https://example.invalid/r.git")
+
+	_, err := Materialize(testCtx(t), Input{
+		CanonicalURL:      "https://example.invalid/r.git",
+		Cache:             loc,
+		PinnedSHA:         "1234567890abcdef1234567890abcdef12345678",
+		Ref:               "main",
+		Floating:          true,
+		ResolveOrFallback: true,
+	})
+	if err == nil {
+		t.Fatal("expected error: ResolveOrFallback and Floating are mutually exclusive")
 	}
 }
 

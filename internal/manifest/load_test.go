@@ -222,6 +222,67 @@ func TestLoad_InvalidTrustedWithoutCommit(t *testing.T) {
 	}
 }
 
+func TestLoad_ValidCanonicalAutoFalse(t *testing.T) {
+	src := []byte(
+		"version: 1\n" +
+			"canonical:\n" +
+			"  url: https://example.com/agents.git\n" +
+			"  ref: main\n" +
+			"  commit: 1111111111111111111111111111111111111111\n" +
+			"  auto: false\n" +
+			"trusted_sha: 1111111111111111111111111111111111111111\n",
+	)
+	m, err := manifest.LoadBytes(src, manifest.LoadOptions{NonInteractive: true})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if m.Canonical.Auto == nil {
+		t.Fatal("auto = nil, want non-nil false")
+	}
+	if *m.Canonical.Auto {
+		t.Fatal("auto = true, want false")
+	}
+}
+
+func TestLoad_ValidCanonicalAutoUnsetDefaultsNil(t *testing.T) {
+	src := []byte(
+		"version: 1\n" +
+			"canonical:\n" +
+			"  url: https://example.com/agents.git\n" +
+			"  ref: main\n" +
+			"  commit: 1111111111111111111111111111111111111111\n" +
+			"trusted_sha: 1111111111111111111111111111111111111111\n",
+	)
+	m, err := manifest.LoadBytes(src, manifest.LoadOptions{NonInteractive: true})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if m.Canonical.Auto != nil {
+		t.Fatalf("auto = %#v, want nil", m.Canonical.Auto)
+	}
+}
+
+func TestLoad_InvalidUnknownCanonicalSibling(t *testing.T) {
+	src := []byte(
+		"version: 1\n" +
+			"canonical:\n" +
+			"  url: https://example.com/agents.git\n" +
+			"  commit: 1111111111111111111111111111111111111111\n" +
+			"  autoz: false\n" +
+			"trusted_sha: 1111111111111111111111111111111111111111\n",
+	)
+	_, err := manifest.LoadBytes(src, manifest.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected error for unknown canonical sibling")
+	}
+	if !errors.Is(err, manifest.ErrInvalidManifest) {
+		t.Fatalf("error not classed as ErrInvalidManifest: %v", err)
+	}
+	if !strings.Contains(err.Error(), "autoz") {
+		t.Fatalf("error does not mention unknown field, got: %v", err)
+	}
+}
+
 func TestLoad_InvalidBadSHA(t *testing.T) {
 	_, err := loadFixture(t, "invalid-bad-sha.yaml", manifest.LoadOptions{})
 	if err == nil {

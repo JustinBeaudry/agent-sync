@@ -63,6 +63,13 @@ type Input struct {
 	// offline-pinned-cached exception does not apply.
 	Floating bool
 
+	// ResolveOrFallback resolves Ref online against the remote, but on a
+	// network-reachability failure falls back to PinnedSHA from the local
+	// cache instead of erroring. It is the auto-advance materialize mode:
+	// PinnedSHA remains the deterministic fallback, while the resolved ref is
+	// the preferred target when the network is reachable.
+	ResolveOrFallback bool
+
 	// Offline, if true, forbids any network operation. Materialize
 	// returns ErrUnresolvablePinOffline if it cannot satisfy the
 	// request from cache alone.
@@ -81,6 +88,9 @@ type Result struct {
 	ResolvedSHA string
 	LocalPath   string
 	FromCache   bool
+	// FellBackToPinned is true only for ResolveOrFallback requests that could
+	// not reach the remote and therefore returned the cached pin instead.
+	FellBackToPinned bool
 }
 
 // Materialize ensures the cache at in.Cache.Dir holds the commit
@@ -101,6 +111,15 @@ func Materialize(ctx context.Context, in Input) (*Result, error) {
 	}
 	if in.Floating && in.PinnedSHA != "" {
 		return nil, errors.New("git: materialize: Floating and PinnedSHA are mutually exclusive")
+	}
+	if in.ResolveOrFallback && in.Floating {
+		return nil, errors.New("git: materialize: ResolveOrFallback and Floating are mutually exclusive")
+	}
+	if in.ResolveOrFallback && in.PinnedSHA == "" {
+		return nil, errors.New("git: materialize: ResolveOrFallback requires a pinned SHA fallback")
+	}
+	if in.ResolveOrFallback && in.Offline {
+		return nil, errors.New("git: materialize: ResolveOrFallback cannot run in offline mode")
 	}
 	if in.Floating && in.Offline {
 		return nil, errors.New("git: materialize: floating manifests cannot satisfy offline mode")
@@ -143,6 +162,9 @@ func Materialize(ctx context.Context, in Input) (*Result, error) {
 	}
 	if !exists {
 		if err := cloneViaScratch(ctx, in); err != nil {
+			if in.ResolveOrFallback && errors.Is(err, ErrRemoteUnreachable) {
+				return fallbackToPinned(in, err)
+			}
 			return nil, err
 		}
 	} else {
@@ -151,13 +173,28 @@ func Materialize(ctx context.Context, in Input) (*Result, error) {
 		// from the pin's perspective but keeps the local mirror current
 		// for the reachability check that follows.
 		if err := Fetch(ctx, in.Cache.Dir); err != nil {
+			if in.ResolveOrFallback && errors.Is(err, ErrRemoteUnreachable) {
+				return fallbackToPinned(in, err)
+			}
 			return nil, err
 		}
 	}
 
 	// Determine the target SHA.
 	targetSHA := strings.ToLower(in.PinnedSHA)
-	if in.Floating || targetSHA == "" {
+	if in.ResolveOrFallback {
+		if strings.TrimSpace(in.Ref) == "" {
+			return nil, errors.New("git: materialize: Ref is required when ResolveOrFallback is set")
+		}
+		resolved, err := ResolveRef(ctx, in.CanonicalURL, in.Ref)
+		if err != nil {
+			if errors.Is(err, ErrRemoteUnreachable) {
+				return fallbackToPinned(in, err)
+			}
+			return nil, err
+		}
+		targetSHA = resolved
+	} else if in.Floating || targetSHA == "" {
 		// Resolve ref online. Floating callers always hit this branch;
 		// pre-resolve `--defer-resolve` manifests with neither pin nor
 		// floating flag also route here (the caller will then write the
@@ -185,7 +222,15 @@ func Materialize(ctx context.Context, in Input) (*Result, error) {
 	// pinned a SHA, confirm that the pin is reachable from the ref on
 	// the mirror. A force-push that rewrote the ref's history would
 	// leave the pin orphaned; this check catches that case.
-	if in.PinnedSHA != "" && strings.TrimSpace(in.Ref) != "" {
+	if in.ResolveOrFallback {
+		ok, err := IsAncestor(ctx, in.Cache.Dir, strings.ToLower(in.PinnedSHA), targetSHA)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, fmt.Errorf("%w: %s is not a descendant of pinned SHA %s on %s", ErrReachabilityCheckFailed, targetSHA, strings.ToLower(in.PinnedSHA), in.CanonicalURL)
+		}
+	} else if in.PinnedSHA != "" && strings.TrimSpace(in.Ref) != "" {
 		descriptor, err := resolveReachabilityRef(ctx, in.Cache.Dir, in.Ref)
 		if err != nil {
 			return nil, err
@@ -208,9 +253,26 @@ func Materialize(ctx context.Context, in Input) (*Result, error) {
 	}
 
 	return &Result{
-		ResolvedSHA: targetSHA,
-		LocalPath:   in.Cache.Dir,
-		FromCache:   false,
+		ResolvedSHA:      targetSHA,
+		LocalPath:        in.Cache.Dir,
+		FromCache:        false,
+		FellBackToPinned: false,
+	}, nil
+}
+
+func fallbackToPinned(in Input, cause error) (*Result, error) {
+	has, err := cacheHasSha(in.Cache.Dir, in.PinnedSHA)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, fmt.Errorf("git: materialize: remote unreachable and pinned SHA %s is not cached at %s: %w", strings.ToLower(in.PinnedSHA), in.Cache.Dir, cause)
+	}
+	return &Result{
+		ResolvedSHA:      strings.ToLower(in.PinnedSHA),
+		LocalPath:        in.Cache.Dir,
+		FromCache:        true,
+		FellBackToPinned: true,
 	}, nil
 }
 

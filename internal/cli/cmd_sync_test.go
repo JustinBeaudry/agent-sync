@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -208,5 +209,41 @@ func TestSync_NoAdapterStartedBannerOnStderr(t *testing.T) {
 	}
 	if strings.Contains(string(captured), "started") {
 		t.Fatalf("bundled adapter session banner leaked to stderr:\n%s", captured)
+	}
+}
+
+func TestSyncCommand_FrozenFlagRegistered(t *testing.T) {
+	cmd := newSyncCommand(RootDeps{})
+
+	flag := cmd.Flags().Lookup("frozen")
+	if flag == nil {
+		t.Fatal("--frozen flag not registered")
+	}
+	if flag.Usage != "Disable auto-advance; sync at the pinned commit only" {
+		t.Fatalf("unexpected help text: %q", flag.Usage)
+	}
+}
+
+func TestSyncCommand_FrozenFlagParsesWithOtherBoolFlags(t *testing.T) {
+	cmd := newSyncCommand(RootDeps{})
+	if err := cmd.ParseFlags([]string{"--frozen", "--best-effort", "--post-merge"}); err != nil {
+		t.Fatalf("ParseFlags: %v", err)
+	}
+
+	for _, name := range []string{"frozen", "best-effort", "post-merge"} {
+		got, err := cmd.Flags().GetBool(name)
+		if err != nil {
+			t.Fatalf("GetBool(%q): %v", name, err)
+		}
+		if !got {
+			t.Fatalf("--%s should parse as true", name)
+		}
+	}
+}
+
+func TestWithSyncRequest_ThreadsFrozenState(t *testing.T) {
+	ctx := withSyncRequest(context.Background(), syncRequest{Frozen: true})
+	if !syncRequestFrom(ctx).Frozen {
+		t.Fatal("frozen state was not preserved in context")
 	}
 }
