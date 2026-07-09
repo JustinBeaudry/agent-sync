@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "69f4231f0356",
+  "strategy": "manual-commit",
+  "branch": "fix/hierarchy-inheritance-followups",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/cli/hierarchy_sync.go",
+    "internal/cli/hierarchy_sync_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/69/f4231f0356/0/metadata.json",
+      "transcript": "/69/f4231f0356/0/full.jsonl",
+      "content_hash": "/69/f4231f0356/0/content_hash.txt",
+      "prompt": "/69/f4231f0356/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 39584,
+    "cache_creation_tokens": 469275,
+    "cache_read_tokens": 13586467,
+    "output_tokens": 102289,
+    "api_call_count": 76
+  }
+}

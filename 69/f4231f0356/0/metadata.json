@@ -1,0 +1,47 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "69f4231f0356",
+  "session_id": "0a5d8eda-4790-40c4-b6bb-ae3aceaa2fa4",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-09T02:25:57.251355Z",
+  "branch": "fix/hierarchy-inheritance-followups",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/cli/hierarchy_sync.go",
+    "internal/cli/hierarchy_sync_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "f6023863e01a",
+  "token_usage": {
+    "input_tokens": 39584,
+    "cache_creation_tokens": 469275,
+    "cache_read_tokens": 13586467,
+    "output_tokens": 102289,
+    "api_call_count": 76
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-09T02:25:57.230602Z",
+    "agent_lines": 113,
+    "agent_removed": 4,
+    "human_added": 59,
+    "human_modified": 41,
+    "human_removed": 0,
+    "total_committed": 213,
+    "total_lines_changed": 217,
+    "agent_percentage": 53.91705069124424,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 141,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "docs/handoffs/2026-07-08-001-inline-auto-update-handoff.md": 141
+      }
+    }
+  ]
+}
