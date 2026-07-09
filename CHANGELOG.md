@@ -11,6 +11,19 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hierarchy sync no longer silently deletes inherited content when an ancestor
+  layer can't be materialized.** When a read-only ancestor scope failed to
+  materialize this run (malformed manifest, or a git-backed pin absent from the
+  offline-forced ancestor cache), its contribution silently dropped out of the
+  write scope's resolved set and the engine deleted the previously-inherited
+  paths (exit 0). The write scope now dry-runs first and **refuses** — preserving
+  the inherited files and surfacing a non-zero, explanatory error — whenever
+  proceeding would delete already-managed content or the plan can't be computed.
+  A fresh scope, or an ancestor that never actually contributed, still syncs its
+  own content unaffected. (#43 inheritance follow-up.)
+
 ### Changed
 
 - **BREAKING (semver-major): `agent-sync sync` auto-advances the canonical pin by

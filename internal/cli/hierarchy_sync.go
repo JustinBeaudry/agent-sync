@@ -74,9 +74,19 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 	scopes = selectWriteScopes(scopes, opts.IncludeUser)
 
 	preparedLayers := make([]preparedLayer, 0, len(scopes))
+	// failedLayers records the ancestors that could NOT be materialized this
+	// run (malformed manifest, or a git-backed pin absent from the
+	// offline-forced ancestor cache). A dropped ancestor is not merely a lost
+	// warning: the write scope inherits from every ancestor, so its resolved
+	// node set would silently omit that ancestor's contribution and the engine
+	// would treat previously-inherited paths as orphan deletions. The emit loop
+	// consults this to refuse rather than silently under-emit — see the
+	// zero-deletion guard below.
+	failedLayers := make(map[string]error)
 	for _, sc := range scopes {
 		pl, lerr := materializeLayerReadOnly(ctx, rc, sc, now)
 		if lerr != nil {
+			failedLayers[sc.ManifestPath] = lerr
 			if rc != nil && rc.Logger != nil {
 				rc.Logger.Warn("harness: cannot materialize scope", "path", sc.ManifestPath, "err", lerr)
 			}
@@ -114,6 +124,7 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			req.Options = opts.EngineOpts
 			req.Options.RunLockHeld = prep.RunLockHeld
 			applyResolvedLayers(&req, sc, scopes, preparedLayers)
+			failedAncestorPath, failedAncestorErr := firstFailedAncestor(sc, scopes, failedLayers)
 			// Fold the user-scope Cursor rule layer into this project scope's node
 			// set (plan U4/D1/D2), via the shared entry point also used by the
 			// single-scope path.
@@ -123,6 +134,32 @@ func runHierarchySync(ctx context.Context, rc *runtimeContext, cwd, home string,
 			// level. Computed after a successful prepare (nodes exist);
 			// independent of the sync outcome.
 			out.Warnings = coverage.Analyze(sc.Level, kindsOf(req.Nodes), req.Targets)
+			// Data-loss guard (#43 inheritance follow-up): if an ancestor layer
+			// this scope inherits from failed to materialize this run (malformed
+			// manifest, or a pin absent from the offline-forced ancestor cache),
+			// the resolved node set is missing that ancestor's contribution.
+			// Emitting anyway would let the engine delete the previously-inherited
+			// paths that dropped out. Dry-run first: if nothing would be deleted
+			// (a fresh scope, or an ancestor that never actually contributed),
+			// proceed normally; otherwise refuse BEFORE any mutation so the
+			// inherited content is preserved and the operator sees the real cause.
+			// The ledger records no per-path source, so a would-be deletion cannot
+			// be attributed to the dropped ancestor specifically — this errs
+			// toward refusing over silently dropping inherited content.
+			if failedAncestorPath != "" {
+				if refusal := refuseIfWouldDelete(ctx, req, sc, failedAncestorPath, failedAncestorErr); refusal != nil {
+					// A refusal after this scope auto-advanced its own pin must
+					// still surface that the manifest moved (matching the
+					// sync-error path below), so the operator knows the pin is
+					// ahead of what was emitted.
+					if prep.PinMovedTo != "" {
+						out.Err = pinMovedSyncError(prep.PinMovedTo, refusal)
+					} else {
+						out.Err = refusal
+					}
+					return out
+				}
+			}
 			summary, serr := engine.Sync(ctx, req)
 			if serr != nil {
 				if prep.PinMovedTo != "" {
@@ -239,6 +276,70 @@ func layersForScope(sc hierarchy.Scope, scopes []hierarchy.Scope, preparedLayers
 		}
 	}
 	return out
+}
+
+// firstFailedAncestor reports the manifest path and error of the first ancestor
+// (read-only) layer of sc that failed to materialize this run, or "" if every
+// ancestor materialized. Ancestors are the scopes discovered before sc; this
+// mirrors layersForScope's traversal (stop at sc's own manifest) so the notion
+// of "which layers this scope inherits from" stays identical between resolution
+// and the data-loss guard. sc's own manifest and any scope after it are not
+// ancestors and are ignored.
+func firstFailedAncestor(sc hierarchy.Scope, scopes []hierarchy.Scope, failed map[string]error) (string, error) {
+	for _, discovered := range scopes {
+		if discovered.ManifestPath == sc.ManifestPath {
+			return "", nil
+		}
+		if err, ok := failed[discovered.ManifestPath]; ok {
+			return discovered.ManifestPath, err
+		}
+	}
+	return "", nil
+}
+
+// refuseIfWouldDelete dry-runs req and returns a data-loss refusal error when
+// emitting would delete any already-managed path, given that ancestorPath (an
+// inherited layer) failed to materialize this run. It returns nil ONLY when the
+// plan is fully computed AND deletes nothing, so a fresh scope or a
+// never-contributing ancestor still syncs its own content.
+//
+// A plan that cannot be computed is itself a refusal. engine.Plan records a
+// per-target failure in TargetChange.Error and still returns a nil top-level
+// error, and several of those failures (ledger load, adapter run, dry-merge,
+// the out-of-band readHash) return BEFORE planTarget's deletion loop — leaving
+// WouldDelete empty. Trusting a zero count from such a plan would let the very
+// deletion this guard exists to prevent slip through, so any per-target error
+// is treated as "cannot prove it is safe" and refuses.
+//
+// Scope: this protects already-managed (ledger-tracked) content, which the plan
+// counts identically to sync. Under --adopt, sync also deletes newly-adopted,
+// previously-UNMANAGED files that the plan does not model — but that is ordinary
+// --adopt churn, never inherited content, so the plan can only OVER-count, never
+// under-count, the deletions this guard cares about.
+func refuseIfWouldDelete(ctx context.Context, req engine.Request, sc hierarchy.Scope, ancestorPath string, ancestorErr error) error {
+	plan, perr := engine.Plan(ctx, req)
+	if perr != nil {
+		return fmt.Errorf(
+			"refusing to sync %s: inherited layer %s could not be materialized this run (%s) and the resulting plan could not be computed: %w",
+			sc.Level, ancestorPath, ancestorErr.Error(), perr)
+	}
+	var wouldDelete int
+	for _, ch := range plan.Targets {
+		if ch.Error != "" {
+			return fmt.Errorf(
+				"refusing to sync %s: inherited layer %s could not be materialized this run (%s), and the plan for target %q could not be computed (%s), so it cannot be proven safe; restore or re-fetch that source (e.g. sync its scope online once), then re-run",
+				sc.Level, ancestorPath, ancestorErr.Error(), ch.Target, ch.Error)
+		}
+		wouldDelete += len(ch.WouldDelete)
+	}
+	if wouldDelete == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"refusing to sync %s: inherited layer %s could not be materialized this run (%v), "+
+			"and proceeding would delete %d already-managed file(s) that may be inherited content; "+
+			"restore or re-fetch that source (e.g. sync its scope online once), then re-run",
+		sc.Level, ancestorPath, ancestorErr, wouldDelete)
 }
 
 func layerFromPrepared(pl preparedLayer) harness.Layer {

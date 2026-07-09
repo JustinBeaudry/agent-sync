@@ -516,7 +516,19 @@ func TestApplyResolvedLayersKeepsCurrentScopeWhenReadOnlyLayerMissing(t *testing
 	}
 }
 
-func TestRunHierarchySync_ContinuesWhenInheritedWorkspaceLayerFails(t *testing.T) {
+// TestRunHierarchySync_RefusesToDeleteInheritedContentWhenAncestorFails is the
+// #43 inheritance follow-up (bug #1): when an ancestor (read-only) layer the
+// write scope inherits from cannot be materialized this run, the resolved node
+// set is missing that ancestor's contribution. Emitting anyway would let the
+// engine treat previously-inherited paths as orphan deletions and silently drop
+// inherited content (exit 0). The write scope must instead REFUSE — a
+// zero-deletion guard aborts before any mutation, preserving the inherited
+// files and surfacing a non-zero, explanatory error.
+//
+// Here the initial sync inherits a workspace skill into the project scope, then
+// the workspace's local_dir source is removed so its layer can no longer
+// materialize. The re-sync must keep the inherited skill and report the refusal.
+func TestRunHierarchySync_RefusesToDeleteInheritedContentWhenAncestorFails(t *testing.T) {
 	home := t.TempDir()
 	workspaceRoot := filepath.Join(home, "ActualReality")
 	repo := filepath.Join(workspaceRoot, "repo")
@@ -565,10 +577,106 @@ func TestRunHierarchySync_ContinuesWhenInheritedWorkspaceLayerFails(t *testing.T
 	if len(outcomes) != 1 {
 		t.Fatalf("outcomes = %d, want 1", len(outcomes))
 	}
-	if outcomes[0].Err != nil {
-		t.Fatalf("selected scope should continue when inherited workspace layer cannot materialize: %v", outcomes[0].Err)
+	if outcomes[0].Err == nil {
+		t.Fatal("write scope must refuse (error) when a failed ancestor layer would cause inherited content to be deleted")
 	}
-	mustNotExist(t, inherited)
+	// The refusal names the unreadable inherited layer, not just a bare
+	// deletion-count mismatch, so the operator can see the root cause.
+	if !strings.Contains(outcomes[0].Err.Error(), "inherited") {
+		t.Fatalf("refusal error should explain the unreadable inherited layer, got: %v", outcomes[0].Err)
+	}
+	if got := hierarchyExitCode(outcomes); got == 0 {
+		t.Fatal("aggregate exit code must be non-zero when the write scope refuses")
+	}
+	// The inherited content is preserved: the abort happens before any mutation.
+	mustExist(t, inherited)
+}
+
+// TestRunHierarchySync_RefusesWhenPlanCannotBeComputedForFailedAncestor is the
+// finding-#1 regression fence: the data-loss guard dry-runs with engine.Plan,
+// but engine.Plan records a per-target failure in TargetChange.Error and STILL
+// returns a nil top-level error, and several of those failures return before
+// planTarget's deletion loop (leaving WouldDelete empty). If the guard trusted
+// a zero count from such a plan it would proceed and let engine.Sync delete the
+// inherited content anyway — the exact silent-drop bug via a different trigger.
+//
+// Here a project-owned skill and an inherited workspace skill are synced, then
+// (a) the workspace source is removed so its layer fails to materialize (the
+// inherited skill becomes an orphan the plan's deletion loop would report) and
+// (b) the project skill's already-managed SKILL.md is replaced by a directory,
+// so planTarget's out-of-band readHash — a plan-only code path with no Sync
+// equivalent for ledger-clean paths — errors and returns before that loop. The
+// guard must refuse on the per-target plan error and preserve the inherited
+// skill rather than proceed on a deceptively empty deletion count.
+func TestRunHierarchySync_RefusesWhenPlanCannotBeComputedForFailedAncestor(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "ActualReality")
+	repo := filepath.Join(workspaceRoot, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workspaceManifest := "version: 1\n" +
+		"scope: " + manifest.ScopeWorkspace + "\n" +
+		"activation_root: true\n" +
+		"canonical:\n" +
+		"  local_dir: .agents\n" +
+		"targets:\n" +
+		"  - claude\n"
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".agent-sync.yaml"), []byte(workspaceManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, workspaceRoot, ".agents/skills/ws-skill/SKILL.md", "workspace skill\n")
+	if err := os.WriteFile(filepath.Join(repo, ".agent-sync.yaml"), []byte(hierarchyLocalDirManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWS(t, repo, ".agents/skills/proj-skill/SKILL.md", "project skill\n")
+
+	rc := newTestRuntime()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	if _, _, err := runHierarchySync(
+		context.Background(), rc, repo, home,
+		hierarchySyncOptions{EngineOpts: hierarchyEngineOpts(rc, now)},
+		now,
+	); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	inherited := filepath.Join(repo, ".claude", "skills", "agent-sync-ws-skill", "SKILL.md")
+	projSkill := filepath.Join(repo, ".claude", "skills", "agent-sync-proj-skill", "SKILL.md")
+	mustExist(t, inherited)
+	mustExist(t, projSkill)
+
+	// Fail the ancestor layer (its inherited skill becomes an orphan)...
+	if err := os.RemoveAll(filepath.Join(workspaceRoot, ".agents")); err != nil {
+		t.Fatal(err)
+	}
+	// ...and make a ledger-clean desired file unreadable-as-a-file so
+	// planTarget's out-of-band readHash errors before the deletion loop.
+	if err := os.Remove(projSkill); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(projSkill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	outcomes, _, err := runHierarchySync(
+		context.Background(), rc, repo, home,
+		hierarchySyncOptions{EngineOpts: hierarchyEngineOpts(rc, now)},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("second sync returned top-level error: %v", err)
+	}
+	if len(outcomes) != 1 {
+		t.Fatalf("outcomes = %d, want 1", len(outcomes))
+	}
+	if outcomes[0].Err == nil {
+		t.Fatal("write scope must refuse when the failed-ancestor plan cannot be computed (per-target plan error), not proceed on an empty deletion count")
+	}
+	if got := hierarchyExitCode(outcomes); got == 0 {
+		t.Fatal("aggregate exit code must be non-zero when the write scope refuses")
+	}
+	// The inherited content survives: the guard refused before engine.Sync ran.
+	mustExist(t, inherited)
 }
 
 // TestHierarchySyncEmitsCoverageWarning checks that a directory-level scope
