@@ -11,6 +11,8 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-09
+
 ### Fixed
 
 - **Hierarchy sync no longer silently deletes inherited content when an ancestor
@@ -26,7 +28,7 @@ compatibility policy documented in `docs/spec/adapter-protocol-v1.md`.
 
 ### Changed
 
-- **BREAKING (semver-major): `agent-sync sync` auto-advances the canonical pin by
+- **BREAKING: `agent-sync sync` auto-advances the canonical pin by
   default.** Previously `sync` materialized the pinned `commit` and never moved it;
   advancing required the explicit, gated `agent-sync update`. Now `sync` resolves
   the newest upstream commit on the manifest's `ref`, and — for git-backed sources
