@@ -679,6 +679,52 @@ func TestRunHierarchySync_RefusesWhenPlanCannotBeComputedForFailedAncestor(t *te
 	mustExist(t, inherited)
 }
 
+// TestRunHierarchySync_RevokedAncestorStillEmitsPinnedInheritedContent is the
+// #43 inheritance follow-up (bug #2): it documents the trust contract that a
+// REVOKED anchor gates ADVANCEMENT / trust-on-first-use, NOT emission of
+// already-pinned content. An ancestor (read-only) layer whose canonical source
+// has a revoked anchor but an on-disk pin still delivers its pinned content into
+// the descendant write scope through inheritance. This mirrors the write-scope
+// pinned-emission path, which has never consulted the revocation log either.
+func TestRunHierarchySync_RevokedAncestorStillEmitsPinnedInheritedContent(t *testing.T) {
+	requireGit(t)
+	setTestXDG(t)
+
+	projectWT, _, _ := makeUpdateRepo(t)
+	// A project-only rule (distinct from makeUpdateRepo's shared no-fri.md) so
+	// its presence in the descendant proves inheritance rather than the write
+	// scope's own copy winning the last-write-wins merge.
+	projectHead := commitFile(t, projectWT, "rules/project-only.md", "Project only.\n", "project rule")
+	projectSrv := serveCanonicalRepo(t, projectWT)
+	dirWT, _, dirHead := makeUpdateRepo(t)
+	dirSrv := serveCanonicalRepo(t, dirWT)
+
+	// Freeze both scopes: this test isolates the pinned-emission path, not
+	// auto-advance (advancement's revoke gating is covered elsewhere).
+	autoFalse := false
+	home, repo, nested := hierarchyURLTree(t, projectSrv.URL, projectHead, &autoFalse, dirSrv.URL, dirHead, &autoFalse)
+
+	// Warm the project ancestor's cache by syncing the project scope online
+	// first: descendant runs materialize ancestor layers offline (cache-only),
+	// so without this the project pin is never fetched and never contributes.
+	if _, errOut, err := runSyncHierarchy(t, repo, home); err != nil {
+		t.Fatalf("warm-up project sync: %v\nstderr: %s", err, errOut)
+	}
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("initial hierarchy sync: %v\nstderr: %s", err, errOut)
+	}
+	inherited := filepath.Join(nested, ".claude", "rules", "agent-sync", "project-only.md")
+	mustExist(t, inherited)
+
+	// Revoke the ANCESTOR (project) trust anchor, then re-sync the descendant.
+	revokeTrustURL(t, projectSrv.URL, time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC))
+
+	if _, errOut, err := runSyncHierarchy(t, nested, home); err != nil {
+		t.Fatalf("re-sync failed on a revoked ANCESTOR anchor (revoke must gate advancement, not pinned emission): %v\nstderr: %s", err, errOut)
+	}
+	mustExist(t, inherited)
+}
+
 // TestHierarchySyncEmitsCoverageWarning checks that a directory-level scope
 // emitting a skill for target claude carries a coverage warning (claude does
 // not read nested skills natively).
