@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.7.7",
+  "checkpoint_id": "a6d20b30bf88",
+  "session_id": "0a5d8eda-4790-40c4-b6bb-ae3aceaa2fa4",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-09T02:26:25.46979Z",
+  "branch": "fix/hierarchy-inheritance-followups",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "internal/cli/hierarchy_sync_test.go"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "f6023863e01a",
+  "checkpoint_transcript_start": 351,
+  "transcript_lines_at_start": 351,
+  "token_usage": {
+    "input_tokens": 4,
+    "cache_creation_tokens": 2309,
+    "cache_read_tokens": 515349,
+    "output_tokens": 1811,
+    "api_call_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-09T02:26:25.451762Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 46,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 46,
+    "total_lines_changed": 46,
+    "agent_percentage": 0,
+    "metric_version": 2
+  }
+}
